@@ -223,3 +223,27 @@ describe("cancelling", () => {
     expect(invoked).toEqual([]);
   });
 });
+
+describe("what the glasses show before a browser pairs", () => {
+  it("stays silent, so the Display keeps its own pairing frame", () => {
+    // The Display renders "Open Dusky and enter <code>" until the relay sends
+    // a frame. Sending the empty menu here would replace that with "this
+    // source declared no usable tools", which is a different and untrue
+    // statement about a site nobody has connected to yet.
+    const a = new SessionActor("ABC123", "Verdant Market");
+    const display = new FakeSocket();
+    a.attachDisplay(display as unknown as Sock);
+    expect(display.sent).toEqual([]);
+  });
+
+  it("paints the moment a browser does pair", async () => {
+    const { a, consoleSock } = actor();
+    const display = new FakeSocket();
+    a.attachDisplay(display as unknown as Sock);
+    expect(display.sent).toEqual([]);
+
+    await a.attachConsole(consoleSock as unknown as Sock, ["https://shop.test"]);
+    const frames = display.sent.map((s) => JSON.parse(s) as { t: string });
+    expect(frames.some((f) => f.t === "frame")).toBe(true);
+  });
+});

@@ -172,8 +172,18 @@ export class SessionActor {
   attachDisplay(sock: WebSocket): void {
     this.display?.close();
     this.display = sock;
-    // Replay rather than restart: the wearer keeps their place.
-    this.pushFrame();
+    // Say NOTHING until a browser has paired.
+    //
+    // The Display shows its own pairing frame, with the code on it, until the
+    // relay sends something. Pushing the empty menu here replaced that with
+    // "No actions available here / This source declared no usable tools",
+    // which tells the wearer the site has nothing to offer when the truth is
+    // that nothing has connected yet. Two different situations, and the
+    // wrong one was the first thing anyone saw.
+    //
+    // Once a console is attached this is a replay rather than a restart, so
+    // the wearer keeps their place across a dropped socket.
+    if (this.consoleSock?.readyState === 1) this.pushFrame();
   }
 
   detachDisplay(sock: WebSocket): void {
