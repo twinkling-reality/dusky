@@ -8,31 +8,26 @@ import styles from "./Derivation.module.css";
 import { CONTRAST, PRESETS, type Preset, type Side } from "./presets.js";
 
 /**
- * The proof: a demonstration, and then a sandbox.
+ * The figures for the read on /proof.
  *
- * The panel is the same `FrameView` the glasses run, driven by the same
+ * Each one is the same `FrameView` the glasses run, driven by the same
  * `Session` state machine, over the same `@dusky/frames` compiler and the same
  * `@dusky/policy` gate. The only thing missing is the transport, because a tool
  * runner that answers from a text box needs no network. That substitution is
- * what makes the box editable, and the editable box is the argument: a
- * hardcoded interface cannot answer an edit.
+ * what makes the last one editable, and an editable declaration is the whole
+ * argument: a hardcoded interface cannot answer an edit.
  *
- * The demonstration exists because the argument was INERT. The page asked a
- * visitor to hand-edit JSON before anything moved, so a reader who did not type
- * saw three static boxes and concluded, reasonably, that the black square was a
- * mockup somebody had drawn next to some code. Two panels compiled from two
- * declarations that differ by one property need nothing from anybody: the claim
- * is read rather than performed.
+ * They are figures rather than a layout. Four rebuilds of this page put the
+ * demonstrations in a grid, a matrix, three columns, two columns, and every
+ * time the labels needed to explain the grid became the thing nobody could
+ * read. A figure needs no labels because the sentence above it introduced it.
+ * The page that arranges them is Proof.tsx; this file only makes them.
  *
- * The sandbox below is what answers the obvious objection, that we authored
- * both sides of the comparison.
- *
- * `useCompiled` is a hook because three panels on this page need the same
- * machine. This file was once split into a hook and two views for a different
- * reason, to let the panel sit on the front page while the boxes lived in a
- * drawer under it, and that split was a mistake because it let the two halves
- * of one argument drift apart. Three instances of one machine on one page is
- * not that.
+ * `useCompiled` is a hook because the page holds several of these at once. This
+ * file was once split into a hook and two views for a different reason, to let
+ * a panel sit on the front page while the boxes lived in a drawer under it, and
+ * that split was a mistake because it let the two halves of one argument drift
+ * apart. Several instances of one machine on one page is not that.
  */
 
 /** A runner that answers from a text box. No network, no browser API, no site. */
@@ -184,29 +179,28 @@ function Lens({
 }
 
 /**
- * One column of the comparison: a property, and the screen it produced.
+ * A figure showing what a site published.
  *
- * Two cells placed into the matrix rather than one stacked block, so the row
- * labels in the gutter line up with what they name.
+ * Read-only, and only the part the sentence above it is talking about. Printing
+ * the whole declaration here would bury the four lines that are the point.
  */
-function Variant({ side, col, head }: { side: Side; col: string; head: string }) {
-  const c = useCompiled(side.tool, CONTRAST.result, CONTRAST.origin, CONTRAST.site, true);
-  return (
-    <>
-      <span className={styles.colHead} data-col={col}>
-        {head}
-      </span>
-      <pre className={styles.snippet} data-col={col} data-row="1">
-        {side.code}
-      </pre>
-      <div className={styles.cell} data-col={col} data-row="2">
-        <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} />
-      </div>
-    </>
-  );
+export function Published({ code }: { code: string }) {
+  return <pre className={styles.published}>{code}</pre>;
 }
 
-export function Derivation() {
+/** A figure showing what that declaration became on the glasses. */
+export function Screen({ side }: { side: Side }) {
+  const c = useCompiled(side.tool, CONTRAST.result, CONTRAST.origin, CONTRAST.site, true);
+  return <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} />;
+}
+
+/**
+ * The last figure: a declaration you can change, and the screen answering.
+ *
+ * It answers the objection the other figures cannot, which is that we wrote
+ * both sides of every comparison on this page.
+ */
+export function Sandbox() {
   const [preset, setPreset] = useState<Preset>(PRESETS[0] as Preset);
   const [toolText, setToolText] = useState(preset.tool);
   const [resultText, setResultText] = useState(preset.result);
@@ -231,133 +225,79 @@ export function Derivation() {
   const facts = factsFromResult(resultText);
 
   return (
-    <div className={styles.wrap}>
-      {/*
-        No prose anywhere on this page.
+    <div className={styles.sandbox}>
+      <fieldset className={styles.segments}>
+        <legend className={styles.srOnly}>Example declarations</legend>
+        {PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={styles.preset}
+            data-on={p.id === preset.id}
+            aria-pressed={p.id === preset.id}
+            onClick={() => pick(p)}
+          >
+            {p.name}
+          </button>
+        ))}
+      </fieldset>
 
-        Every line of it used to state a fact and then add a clause explaining
-        why the fact mattered, over and over, which is a voice rather than an
-        argument. Two screens compiled from two declarations do not need to be
-        introduced; the labels are the small uppercase mono the console already
-        uses everywhere else, and they name things rather than describe them.
-      */}
-      <section className={styles.contrast}>
-        {/*
-          Both axes named.
-          
-          The labels here used to name only how the two columns differ, so a
-          reader was told "one property added" without ever being told what the
-          code was, what the black square was, or that the first produced the
-          second. The gutter is the half that was missing.
-        */}
-        <div className={styles.matrix}>
-          <span className={styles.gutter} data-row="1">
-            what the site publishes
-          </span>
-          <span className={styles.gutter} data-row="2">
-            what Dusky puts on the glasses
-          </span>
-          <Variant side={CONTRAST.before} col="a" head="as published" />
-          <Variant side={CONTRAST.after} col="b" head="one line added" />
-        </div>
-      </section>
-
-      <section className={styles.sandbox}>
-        <div className={styles.presets}>
-          <span className={styles.label}>The same, on three other sites</span>
-          <fieldset className={styles.segments}>
-            <legend className={styles.srOnly}>Example declarations</legend>
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={styles.preset}
-                data-on={p.id === preset.id}
-                aria-pressed={p.id === preset.id}
-                onClick={() => pick(p)}
-              >
-                {p.name}
-              </button>
-            ))}
-          </fieldset>
+      <div className={styles.pipe}>
+        <div className={styles.col}>
+          <textarea
+            className={styles.code}
+            value={toolText}
+            spellCheck={false}
+            rows={13}
+            onChange={(e) => setToolText(e.target.value)}
+            aria-label="Tool definition"
+          />
+          <textarea
+            className={styles.code}
+            value={resultText}
+            spellCheck={false}
+            rows={5}
+            onChange={(e) => setResultText(e.target.value)}
+            aria-label="Tool result"
+          />
         </div>
 
-        <div className={styles.pipe}>
-          <div className={styles.col}>
-            <label className={styles.sub} htmlFor="tool">
-              what the site publishes
-            </label>
-            <textarea
-              id="tool"
-              className={styles.code}
-              value={toolText}
-              spellCheck={false}
-              rows={12}
-              onChange={(e) => setToolText(e.target.value)}
-              aria-label="Tool definition"
-            />
-            <span className={styles.fine}>
-              <code>origin</code> comes from the browser, not the site. A site must name Dusky in{" "}
-              <code>exposedTo</code>.
-            </span>
+        <div className={styles.col}>
+          <Lens frame={frame} frameKey={frameKey} session={session} testId="sandbox-panel" />
 
-            <label className={styles.sub} htmlFor="result">
-              what it answers with
-            </label>
-            <textarea
-              id="result"
-              className={styles.code}
-              value={resultText}
-              spellCheck={false}
-              rows={5}
-              onChange={(e) => setResultText(e.target.value)}
-              aria-label="Tool result"
-            />
-          </div>
-
-          <div className={styles.col}>
-            <span className={styles.sub}>what Dusky puts on the glasses</span>
-            <Lens frame={frame} frameKey={frameKey} session={session} testId="sandbox-panel" />
-
-            {parsed.error ? (
-              <p className={styles.err}>{parsed.error}</p>
-            ) : (
-              <dl className={styles.readout}>
-                <Row k="called" v={tool ? label(tool) : ""} />
-                <Row k="consequence" v={g?.consequence ?? ""} />
-                <Row
-                  k="stops for a human"
-                  v={yesNo(g?.requiresConfirmation ?? false)}
-                  note={g?.reason}
-                />
-                <Row
-                  k="asks for"
-                  v={
-                    params.length === 0
-                      ? "nothing"
-                      : params.map((x) => `${x.name} (${becomes(x.kind, x.required)})`).join(", ")
-                  }
-                />
-                <Row
-                  k="reports"
-                  v={facts.length === 0 ? "raw text" : facts.map((f) => f.label).join(", ")}
-                  note={
-                    tool && !isOperable(tool)
-                      ? "not offered: a required parameter cannot be collected on six keys"
-                      : undefined
-                  }
-                />
-                <Row k="succeeded" v={yesNo(outcome.ok)} />
-              </dl>
-            )}
-
-            <span className={styles.fine}>
-              label &middot; gate &middot; parameters &middot; factsFromResult &middot;
-              outcomeFromResult &middot; isOperable, from @dusky/frames and @dusky/policy
-            </span>
-          </div>
+          {parsed.error ? (
+            <p className={styles.err}>{parsed.error}</p>
+          ) : (
+            <dl className={styles.readout}>
+              <Row k="called" v={tool ? label(tool) : ""} />
+              <Row k="consequence" v={g?.consequence ?? ""} />
+              <Row
+                k="stops for a human"
+                v={yesNo(g?.requiresConfirmation ?? false)}
+                note={g?.reason}
+              />
+              <Row
+                k="asks for"
+                v={
+                  params.length === 0
+                    ? "nothing"
+                    : params.map((x) => `${x.name} (${becomes(x.kind, x.required)})`).join(", ")
+                }
+                note={
+                  tool && !isOperable(tool)
+                    ? "not offered: a required parameter cannot be collected on six keys"
+                    : undefined
+                }
+              />
+              <Row
+                k="reports"
+                v={facts.length === 0 ? "raw text" : facts.map((f) => f.label).join(", ")}
+              />
+              <Row k="succeeded" v={yesNo(outcome.ok)} />
+            </dl>
+          )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }
