@@ -37,7 +37,13 @@ test("the checklist probes this browser and collapses when it is happy", async (
 
 test("one click opens a working demo, pre-paired, with no typing", async ({ page }) => {
   await page.goto(SITE);
-  await page.getByRole("link", { name: /Try it now/ }).click();
+  // Two routes to the demo on purpose: the hero, and a sticky bar that stays
+  // reachable after a long scroll through the derivation and the prose.
+  await expect(page.getByRole("link", { name: /Try it now/ })).toHaveCount(2);
+  await page
+    .getByRole("banner")
+    .getByRole("link", { name: /Try it now/ })
+    .click();
   await expect(page).toHaveURL(/\/demo$/);
 
   await page.getByRole("button", { name: /Try it now/ }).click();
@@ -57,6 +63,10 @@ test("one click opens a working demo, pre-paired, with no typing", async ({ page
   // And the thing a judge must not have to discover by closing the tab.
   await expect(page.getByText(/tools run/)).toBeVisible();
   await expect(page.getByText(/closing this tab ends the session/)).toBeVisible();
+
+  // The bar carries the live session state, and a way back to the argument.
+  await expect(page.getByRole("banner").getByText(/open/)).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "How it works" })).toBeVisible();
 });
 
 test("a gesture in the embedded panel changes the partner site in the same tab", async ({

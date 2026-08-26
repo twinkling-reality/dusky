@@ -136,3 +136,13 @@
   color: var(--dusky-ink-dim);
   font-size: 0.9rem;
 }
+
+/* A page that only makes sense inside something else should say so. */
+.origin {
+  margin: 0;
+  padding-top: var(--dusky-s3);
+  border-top: 1px solid var(--dusky-hair-soft);
+  font-size: 0.84rem;
+  color: var(--dusky-ink-faint);
+  max-width: 52ch;
+}

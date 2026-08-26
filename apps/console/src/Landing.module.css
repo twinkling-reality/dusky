@@ -1,7 +1,7 @@
 .page {
   max-width: 78rem;
   margin: 0 auto;
-  padding: var(--dusky-s6) var(--dusky-s5) var(--dusky-s7);
+  padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s7);
   display: flex;
   flex-direction: column;
   gap: var(--dusky-s6);
@@ -12,14 +12,6 @@
   flex-direction: column;
   gap: var(--dusky-s4);
   max-width: 72ch;
-}
-
-.wordmark {
-  font-family: var(--dusky-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: var(--dusky-accent);
 }
 
 .claim {
