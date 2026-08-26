@@ -1,5 +1,5 @@
 .page {
-  max-width: 78rem;
+  max-width: var(--dusky-page);
   margin: 0 auto;
   padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s7);
   display: flex;
@@ -7,24 +7,65 @@
   gap: var(--dusky-s5);
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-}
-
-.wordmark {
-  font-family: var(--dusky-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.42em;
-  text-transform: uppercase;
-  color: var(--dusky-accent);
-}
-
-.lede {
-  margin: 0;
+/*
+ * A disclosure, in the page's own voice.
+ *
+ * The marker is the project's own arrow rather than the browser's triangle,
+ * because a UA triangle is the one piece of default styling that announces a
+ * page was not designed.
+ */
+.aside {
+  font-size: 0.88rem;
   color: var(--dusky-ink-dim);
-  max-width: 58ch;
+}
+
+.asideSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+  width: fit-content;
+  padding: 0.35rem 0;
+  color: var(--dusky-ink);
+  cursor: pointer;
+  list-style: none;
+}
+.asideSummary::-webkit-details-marker {
+  display: none;
+}
+.asideSummary::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  border-right: 1.5px solid var(--dusky-accent);
+  border-bottom: 1.5px solid var(--dusky-accent);
+  transform: rotate(-45deg);
+  transition: transform var(--dusky-motion) var(--dusky-ease);
+}
+.aside[open] > .asideSummary::before {
+  transform: rotate(45deg);
+}
+.asideSummary:hover {
+  color: var(--dusky-ink-strong);
+}
+
+.asideBody {
+  margin: 0;
+  padding: 0 0 var(--dusky-s2) 1.1rem;
+  max-width: 62ch;
+  line-height: 1.6;
+  color: var(--dusky-ink-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asideSummary::before {
+    transition: none;
+  }
+}
+
+/* A titled disclosure that is open by default: the heading is the control. */
+.section {
+  min-width: 0;
 }
 
 .warn {
@@ -49,19 +90,18 @@
   }
 }
 
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s3);
-  min-width: 0;
-}
-
 .h2 {
   margin: var(--dusky-s3) 0 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--dusky-s3);
+  /* Wrapping, because the label and its note are two independent things and
+     the column they sit in is not always wide enough for both. Held together
+     they broke mid-phrase down both sides at once. */
+  flex-wrap: wrap;
+  gap: 0 var(--dusky-s3);
+  cursor: pointer;
+  list-style: none;
   font-family: var(--dusky-mono);
   font-weight: 400;
   font-size: 0.66rem;
@@ -71,28 +111,63 @@
   padding-bottom: var(--dusky-s2);
   border-bottom: 1px solid var(--dusky-hair);
 }
-
-.count {
+.h2::-webkit-details-marker {
+  display: none;
+}
+/* The same chevron the smaller disclosures use, so a heading that can be put
+   away looks like one. */
+.h2::before {
+  content: "";
+  order: -1;
+  width: 0.36rem;
+  height: 0.36rem;
+  flex: none;
+  align-self: center;
+  margin-right: calc(var(--dusky-s2) * -0.5);
+  border-right: 1.5px solid var(--dusky-accent);
+  border-bottom: 1.5px solid var(--dusky-accent);
+  transform: rotate(-45deg);
+  transition: transform var(--dusky-motion) var(--dusky-ease);
+}
+.section[open] > .h2::before {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .h2::before {
+    transition: none;
+  }
+}
+.h2:hover {
   color: var(--dusky-ink-dim);
 }
 
-.kv {
-  display: grid;
-  grid-template-columns: 6rem 1fr;
-  gap: 0.35rem var(--dusky-s3);
-  margin: 0;
-  font-size: 0.9rem;
+/*
+ * A status line, read left to right.
+ *
+ * Four short facts set as a two-column table of uppercase labels took a block
+ * the height of the hero to say four words. Wrapping is fine and expected:
+ * these are independent facts, not rows of one thing.
+ */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dusky-s3) var(--dusky-s5);
+  align-items: baseline;
 }
-.kv dt {
+
+.fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--dusky-s2);
+  min-width: 0;
+}
+
+.factKey {
   font-family: var(--dusky-mono);
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--dusky-ink-faint);
-  padding-top: 0.2rem;
-}
-.kv dd {
-  margin: 0;
 }
 
 .mono {
@@ -131,7 +206,7 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   padding: 0.5rem 0.7rem;
-  background: var(--dusky-sunken);
+  background: none;
   color: var(--dusky-ink-strong);
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
@@ -143,7 +218,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 0.5rem 0.9rem;
-  background: var(--dusky-sunken);
+  background: none;
   color: var(--dusky-ink);
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
@@ -196,12 +271,6 @@
   font-size: 0.85rem;
   color: var(--dusky-ink-dim);
 }
-.toolOrigin {
-  font-family: var(--dusky-mono);
-  font-size: 0.68rem;
-  color: var(--dusky-ink-faint);
-  word-break: break-all;
-}
 
 .chip {
   font-family: var(--dusky-mono);
@@ -238,7 +307,7 @@
   height: 320px;
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
-  background: var(--dusky-raised);
+  background: var(--dusky-surface);
 }
 
 .log {
@@ -246,7 +315,7 @@
   font-family: var(--dusky-mono);
   font-size: 0.72rem;
   line-height: 1.7;
-  background: var(--dusky-sunken);
+  background: none;
   border: 1px solid var(--dusky-hair-soft);
   border-radius: var(--dusky-radius);
   padding: var(--dusky-s3);
@@ -263,14 +332,6 @@
  * The one sentence somebody must not have to discover by closing the tab.
  * It is a standing statement rather than a dismissible banner on purpose.
  */
-.standing {
-  margin: 0;
-  padding: var(--dusky-s3) var(--dusky-s4);
-  border-left: 2px solid var(--dusky-accent-soft);
-  font-size: 0.9rem;
-  color: var(--dusky-ink-dim);
-  max-width: 78ch;
-}
 .standing strong {
   color: var(--dusky-ink-strong);
   font-weight: 400;
@@ -284,7 +345,6 @@
   padding: var(--dusky-s5);
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
-  background: var(--dusky-sunken);
   max-width: 46rem;
 }
 
@@ -301,7 +361,7 @@
   border: 1px solid var(--dusky-accent);
   border-radius: var(--dusky-radius);
   background: var(--dusky-accent);
-  color: var(--dusky-ground);
+  color: var(--dusky-surface);
   font: inherit;
   font-size: 0.98rem;
   cursor: pointer;
@@ -319,7 +379,6 @@
   padding: var(--dusky-s3) var(--dusky-s4);
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
-  background: var(--dusky-sunken);
 }
 
 .sources {
@@ -350,7 +409,7 @@
 .sourceBtn[data-on="true"] {
   border-color: var(--dusky-accent);
   color: var(--dusky-ink-strong);
-  background: var(--dusky-raised);
+  box-shadow: inset 0 0 0 1px var(--dusky-accent);
 }
 
 .lensCol,

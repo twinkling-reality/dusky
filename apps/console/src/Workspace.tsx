@@ -28,11 +28,25 @@ export function Workspace() {
   const source = useMemo(() => sourceFromQuery(params.toString()), [params]);
   const origins = useMemo(() => [new URL(source.url).origin], [source]);
 
-  // A code in the URL means somebody already started a session, which is what
-  // "try it now" does: mint one, put it in the link, pair with no typing.
+  /*
+   * A code in the URL means somebody already started a session. `?start=1`
+   * means they have not, and want to: it is what the front door's one button
+   * links to, so a visitor lands on a running Dusky rather than on a page with
+   * another button in the middle of it.
+   *
+   * Minted in the initialiser rather than in an effect. An effect that mints
+   * runs twice under StrictMode and the second code silently replaces the
+   * first, which is a session nobody is connected to. The initialiser settles
+   * on one value for the mounted component and the effect below only ever
+   * copies it into the URL.
+   */
   const fromUrl = params.get("session");
-  const [session, setSession] = useState<string | null>(
-    fromUrl && isCode(fromUrl) ? fromUrl.toUpperCase() : null,
+  const [session, setSession] = useState<string | null>(() =>
+    fromUrl && isCode(fromUrl)
+      ? fromUrl.toUpperCase()
+      : params.get("start") === "1"
+        ? mintCode()
+        : null,
   );
   // `?mode=glasses` says the code came off a lens, so no panel is embedded.
   const [mode, setMode] = useState<PairMode>(
@@ -47,17 +61,40 @@ export function Workspace() {
   const lens = useRef<HTMLIFrameElement | null>(null);
   useEffect(() => {
     if (mode !== "embedded" || !session) return;
-    const t = setTimeout(() => lens.current?.focus(), 600);
+    const t = setTimeout(() => {
+      /*
+       * Not if the panel already has it. Focus inside a frame makes the frame
+       * itself the active element out here, so focusing it again is a no-op
+       * for the page and a BLUR for whatever is focused within it. With the
+       * session starting on arrival rather than on a click, this timer now
+       * fires 600ms after load, which is comfortably inside the time it takes
+       * to open the composer and start typing: it committed a half-typed value
+       * and advanced the frame out from under the wearer.
+       */
+      if (document.activeElement === lens.current) return;
+      lens.current?.focus();
+    }, 600);
     return () => clearTimeout(t);
   }, [mode, session]);
 
-  const start = () => {
-    const code = mintCode();
-    setMode("embedded");
-    setSession(code);
+  /*
+   * One place that writes the session into the URL, whatever started it: the
+   * button, a pasted code, or `?start=1`. Three call sites each building their
+   * own query string is how `start=1` would have survived into the shareable
+   * link and re-minted a second session for whoever opened it.
+   */
+  useEffect(() => {
+    if (!session) return;
+    if (params.get("session") === session && !params.has("start")) return;
     const next = new URLSearchParams(params);
-    next.set("session", code);
+    next.set("session", session);
+    next.delete("start");
     setParams(next, { replace: true });
+  }, [session, params, setParams]);
+
+  const start = () => {
+    setMode("embedded");
+    setSession(mintCode());
   };
 
   const pairGlasses = (code: string) => {
@@ -65,9 +102,6 @@ export function Workspace() {
     // session, so a second one would close the wearer's.
     setMode("glasses");
     setSession(code.toUpperCase());
-    const next = new URLSearchParams(params);
-    next.set("session", code.toUpperCase());
-    setParams(next, { replace: true });
   };
 
   const switchSource = (id: string) => {
@@ -90,13 +124,25 @@ export function Workspace() {
       </SiteHeader>
 
       <div className={styles.page}>
-        <section className={styles.head}>
-          <p className={styles.standing}>
-            The tools run <strong>in this tab</strong>, inside {source.name}&rsquo;s own document,
-            in your own session. Dusky never holds the site&rsquo;s credentials, and closing this
-            tab ends the session. That is the security model, not a bug.
+        {/*
+          One line, and the rest behind it.
+          
+          The paragraph was correct and nobody read it, because a visitor who
+          has just arrived to try something is not there to be briefed. The
+          summary states the two facts a person has to leave with; the reason
+          they are facts is one click away for anyone who wants it.
+        */}
+        <details className={styles.aside}>
+          <summary className={styles.asideSummary}>
+            Tools run in this tab, and closing this tab ends the session.
+          </summary>
+          <p className={styles.asideBody}>
+            They run inside {source.name}&rsquo;s own document, in your own session, which is why
+            Dusky never holds the site&rsquo;s credentials and never sees a login. Nothing is
+            proxied through a server of ours. That is the security model, not a limitation: the tab
+            staying open is the same thing as the permission being yours to withdraw.
           </p>
-        </section>
+        </details>
 
         {!link.webmcp && <p className={styles.warn}>{ENABLE_HINT}</p>}
 
@@ -139,24 +185,40 @@ export function Workspace() {
           </section>
         ) : (
           <>
+            {/*
+              One strip, not a definition list.
+              
+              These are four short facts and they were set as a two-column
+              table of uppercase labels, which took a block the height of the
+              hero to say four words. Read left to right they are a status
+              line, which is what they are.
+            */}
             <div className={styles.bar}>
-              <dl className={styles.kv}>
-                <dt>Session</dt>
-                <dd className={styles.mono}>{session}</dd>
-                <dt>Relay</dt>
-                <dd className={styles.mono} data-state={link.link}>
-                  {link.link}
-                </dd>
-                <dt>Actions found</dt>
-                <dd className={styles.mono}>{link.tools.length}</dd>
+              <div className={styles.facts}>
+                <span className={styles.fact}>
+                  <span className={styles.factKey}>session</span>
+                  <span className={styles.mono}>{session}</span>
+                </span>
+                <span className={styles.fact}>
+                  <span className={styles.factKey}>relay</span>
+                  <span className={styles.mono} data-state={link.link}>
+                    {link.link}
+                  </span>
+                </span>
+                <span className={styles.fact}>
+                  <span className={styles.factKey}>actions found</span>
+                  <span className={styles.mono}>{link.tools.length}</span>
+                </span>
                 {/* Dusky consumes other sites' tools everywhere else. Here it is
                     also a provider, so an agent in this browser can drive the
                     glasses through the same protocol. */}
-                <dt>Dusky&rsquo;s own tools</dt>
-                <dd className={styles.mono} data-state={link.provides ? "open" : "offline"}>
-                  {link.provides ? "registered for this browser agent" : "not registered"}
-                </dd>
-              </dl>
+                <span className={styles.fact}>
+                  <span className={styles.factKey}>Dusky&rsquo;s own tools</span>
+                  <span className={styles.mono} data-state={link.provides ? "open" : "offline"}>
+                    {link.provides ? "registered for this browser agent" : "not registered"}
+                  </span>
+                </span>
+              </div>
               <div className={styles.sources}>
                 <span className={styles.sourcesLabel}>Point Dusky at</span>
                 {SOURCES.map((s) => (
@@ -189,11 +251,15 @@ export function Workspace() {
                         src={`${DISPLAY_URL}/?session=${session}`}
                       />
                     </div>
-                    <p className={styles.hint}>
-                      Click the panel to give it the arrow keys, or click a choice directly. On the
-                      glasses these are Neural Band pinches and temple swipes, which the OS turns
-                      into exactly these six keys.
-                    </p>
+                    <details className={styles.aside}>
+                      <summary className={styles.asideSummary}>How to drive it</summary>
+                      <p className={styles.asideBody}>
+                        Click the panel to give it the arrow keys, or click a choice directly. On
+                        the glasses these are Neural Band pinches and temple swipes, which the OS
+                        turns into exactly these six keys. There is no cursor and there is nothing
+                        else to learn.
+                      </p>
+                    </details>
                   </>
                 ) : (
                   <p className={styles.hint}>
@@ -202,42 +268,52 @@ export function Workspace() {
                   </p>
                 )}
 
-                <h2 className={styles.h2}>
-                  Actions this source declared
-                  <span className={styles.note}>from getTools, nothing written by hand</span>
-                </h2>
-                {/* A stable hook. Tests used to find this list by filtering for
-                    an origin string that happened to be printed in every row,
-                    which broke the moment the rows stopped printing it. */}
-                <ul className={styles.tools} data-testid="actions">
-                  {link.tools.map((t, i) => {
-                    const g = gate(t);
-                    return (
-                      <li key={`${t.origin}/${t.name}`} className={styles.tool}>
-                        <span className={styles.idx}>{String(i + 1).padStart(2, "0")}</span>
-                        <span className={styles.toolBody}>
-                          <span className={styles.toolName}>{t.title ?? t.name}</span>
-                          <span className={styles.toolDesc}>{t.description}</span>
-                        </span>
-                        <span
-                          className={styles.chip}
-                          data-consequence={g.consequence}
-                          title={g.reason}
-                        >
-                          {g.requiresConfirmation ? "gated" : "read"}
-                        </span>
+                {/*
+                  Open, and collapsible.
+
+                  Open because this list IS the argument: it is what the site
+                  declared, and every screen on the lens came out of it.
+                  Collapsible because somebody who has read it once should be
+                  able to put it away and watch the panel instead.
+                */}
+                <details className={styles.section} open>
+                  <summary className={styles.h2}>
+                    Actions this source declared
+                    <span className={styles.note}>from getTools, nothing written by hand</span>
+                  </summary>
+                  {/* A stable hook. Tests used to find this list by filtering for
+                      an origin string that happened to be printed in every row,
+                      which broke the moment the rows stopped printing it. */}
+                  <ul className={styles.tools} data-testid="actions">
+                    {link.tools.map((t, i) => {
+                      const g = gate(t);
+                      return (
+                        <li key={`${t.origin}/${t.name}`} className={styles.tool}>
+                          <span className={styles.idx}>{String(i + 1).padStart(2, "0")}</span>
+                          <span className={styles.toolBody}>
+                            <span className={styles.toolName}>{t.title ?? t.name}</span>
+                            <span className={styles.toolDesc}>{t.description}</span>
+                          </span>
+                          <span
+                            className={styles.chip}
+                            data-consequence={g.consequence}
+                            title={g.reason}
+                          >
+                            {g.requiresConfirmation ? "gated" : "read"}
+                          </span>
+                        </li>
+                      );
+                    })}
+                    {link.tools.length === 0 && (
+                      <li className={styles.empty}>
+                        No tools. A site has to name this exact origin in <code>exposedTo</code>{" "}
+                        before the browser will show Dusky anything, so an empty list here usually
+                        means that grant is missing or does not match, rather than that WebMCP is
+                        broken.
                       </li>
-                    );
-                  })}
-                  {link.tools.length === 0 && (
-                    <li className={styles.empty}>
-                      No tools. A site has to name this exact origin in <code>exposedTo</code>{" "}
-                      before the browser will show Dusky anything, so an empty list here usually
-                      means that grant is missing or does not match, rather than that WebMCP is
-                      broken.
-                    </li>
-                  )}
-                </ul>
+                    )}
+                  </ul>
+                </details>
               </section>
 
               <section className={styles.siteCol}>
@@ -258,13 +334,15 @@ export function Workspace() {
                   allow="tools"
                 />
 
-                <h2 className={styles.h2}>
-                  Protocol activity
-                  <span className={styles.note}>every call, as it happens</span>
-                </h2>
-                <pre className={styles.log}>
-                  {link.activity.length ? link.activity.join("\n") : "no calls yet"}
-                </pre>
+                <details className={styles.section} open>
+                  <summary className={styles.h2}>
+                    Protocol activity
+                    <span className={styles.note}>every call, as it happens</span>
+                  </summary>
+                  <pre className={styles.log}>
+                    {link.activity.length ? link.activity.join("\n") : "no calls yet"}
+                  </pre>
+                </details>
               </section>
             </div>
           </>
