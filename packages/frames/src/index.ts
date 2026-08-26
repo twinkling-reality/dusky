@@ -108,10 +108,14 @@ function humanizeParam(name: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function paginate(all: Choice[], page: number): { choices: Choice[]; pages: number } {
-  const pages = Math.max(1, Math.ceil(all.length / (MAX_CHOICES - 1)));
-  if (all.length <= MAX_CHOICES) return { choices: all, pages: 1 };
-  const size = MAX_CHOICES - 1;
+function paginate(
+  all: Choice[],
+  page: number,
+  budget = MAX_CHOICES,
+): { choices: Choice[]; pages: number } {
+  const pages = Math.max(1, Math.ceil(all.length / (budget - 1)));
+  if (all.length <= budget) return { choices: all, pages: 1 };
+  const size = budget - 1;
   const start = Math.min(page, pages - 1) * size;
   const slice = all.slice(start, start + size);
   slice.push({
@@ -124,21 +128,45 @@ function paginate(all: Choice[], page: number): { choices: Choice[]; pages: numb
 
 /* --------------------------------------------------------------- builders */
 
-/** The menu: everything this source can currently do. Fully tool-derived. */
-export function idleFrame(source: string, tools: ToolDescriptor[], page = 0): DisplayFrame {
+/**
+ * The menu: everything this source can currently do. Fully tool-derived.
+ *
+ * `canSpeak` adds the affordance for saying what you want rather than picking
+ * from the list, and it is passed rather than assumed because a session
+ * without a planner cannot interpret a spoken request. Offering the composer
+ * anyway would be the worst kind of dead control: one that looks like it
+ * works, accepts what you say, and silently does nothing with it.
+ */
+export function idleFrame(
+  source: string,
+  tools: ToolDescriptor[],
+  page = 0,
+  canSpeak = false,
+): DisplayFrame {
   const operable = tools.filter(isOperable);
   const all: Choice[] = operable.map((t, i) => ({
     id: t.name,
     label: label(t),
     meta: String(i + 1).padStart(2, "0"),
   }));
-  const { choices } = paginate(all, page);
+
+  // Speaking never occupies a paginated slot. Having to page through actions
+  // to reach the affordance the whole product is built around would be
+  // absurd, so it costs one slot from the tool list and is always present.
+  // It sits LAST so a new menu focuses an action: focus lands on choice zero,
+  // and opening a text field in someone's eye every time they return to the
+  // menu is not what anyone wants.
+  const { choices } = paginate(all, page, canSpeak ? MAX_CHOICES - 1 : MAX_CHOICES);
+  if (canSpeak) choices.push({ id: "__compose", label: "Say what you want", meta: "tap" });
+
   return {
     kind: "idle",
     source,
     title: operable.length ? "What do you want to do?" : "No actions available here",
     note: operable.length
-      ? "Tap to speak, or choose an action"
+      ? canSpeak
+        ? "Tap to speak, or choose an action"
+        : "Choose an action"
       : "This source declared no usable tools",
     choices,
   };

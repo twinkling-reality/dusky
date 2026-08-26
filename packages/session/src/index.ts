@@ -172,6 +172,14 @@ export class Session {
     return this.tools.find((t) => t.name === name);
   }
 
+  /**
+   * Whether a spoken request can go anywhere. False without a planner, and the
+   * menu must not offer the composer when it is.
+   */
+  private canSpeak(): boolean {
+    return this.o.planner !== undefined;
+  }
+
   private readOnly(): ToolDescriptor[] {
     return this.tools.filter((t) => gate(t).consequence === "read");
   }
@@ -183,7 +191,7 @@ export class Session {
       this.toolsChangedAt = this.now();
       this.audit({ kind: "discover", detail: { count: this.tools.length } });
       this.page = 0;
-      this.show(idleFrame(this.o.source, this.tools, 0));
+      this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     } catch (err) {
       this.show(errorFrame(this.o.source, "Cannot reach this source", msg(err), true));
     }
@@ -211,7 +219,7 @@ export class Session {
     }
 
     // A planner that is unsure must produce a question, never a guess.
-    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0));
+    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
 
     const tool = this.byName(pick.name);
     if (!tool) {
@@ -221,7 +229,7 @@ export class Session {
         toolName: pick.name,
         detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
       });
-      return this.show(idleFrame(this.o.source, this.tools, 0));
+      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     }
 
     const args = declaredArgs(tool, pick.args ?? {});
@@ -245,7 +253,7 @@ export class Session {
         this.audit({ kind: "cancel", toolName: this.pending?.tool.name });
       this.pending = null;
       this.page = 0;
-      return this.show(idleFrame(this.o.source, this.tools, 0));
+      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     }
     if (choiceId === "__retry") {
       if (!this.pending) return this.frame;
@@ -279,7 +287,7 @@ export class Session {
 
   private repaint(): DisplayFrame {
     if (this.pending?.awaiting) return this.frame;
-    return this.show(idleFrame(this.o.source, this.tools, this.page));
+    return this.show(idleFrame(this.o.source, this.tools, this.page, this.canSpeak()));
   }
 
   private async beginTool(

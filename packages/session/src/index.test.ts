@@ -472,3 +472,52 @@ describe("reporting what the site actually said", () => {
     expect(f.detail).toBe("done and dusted");
   });
 });
+
+/**
+ * The menu said "Tap to speak" long before there was anything to tap.
+ *
+ * `__compose` was only ever produced by the parameter-collection frame, so
+ * `submitIntent`, and with it the whole planner, was unreachable from the
+ * glasses. It could only be driven by an agent through send_task_to_display.
+ */
+describe("speaking from the glasses", () => {
+  const planner: Planner = {
+    pickTool: async (intent) =>
+      intent.includes("oat") ? { name: "add_to_cart", args: { product_id: "oat-1" } } : null,
+    planResolver: async () => null,
+  };
+
+  it("offers a way to speak when a planner is attached", async () => {
+    const s = new Session({ source: "Shop", runner: fakeRunner(), planner });
+    const f = await s.start();
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices.map((c) => c.id)).toContain("__compose");
+  });
+
+  it("offers none when nothing could interpret it", async () => {
+    const s = new Session({ source: "Shop", runner: fakeRunner() });
+    const f = await s.start();
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices.map((c) => c.id)).not.toContain("__compose");
+  });
+
+  it("routes what the wearer says to the planner, not to a parameter", async () => {
+    const runner = fakeRunner();
+    const s = new Session({ source: "Shop", runner, planner });
+    await s.start();
+    const f = await s.submitText("add the organic oat milk");
+    // Chosen by the planner and still stopped at the gate.
+    expect(f.kind).toBe("confirm");
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("returns to the menu when the planner cannot tell what was meant", async () => {
+    const s = new Session({ source: "Shop", runner: fakeRunner(), planner });
+    await s.start();
+    const f = await s.submitText("something completely unrelated");
+    expect(f.kind).toBe("idle");
+    if (f.kind !== "idle") throw new Error("unreachable");
+    // And the way to try again is still on screen.
+    expect(f.choices.map((c) => c.id)).toContain("__compose");
+  });
+});

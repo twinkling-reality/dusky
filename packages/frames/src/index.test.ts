@@ -247,3 +247,40 @@ describe("whether a result says it worked", () => {
     expect(outcomeFromResult(JSON.stringify({ ok: true })).ok).toBe(true);
   });
 });
+
+describe("saying what you want", () => {
+  const t = (name: string): ToolDescriptor => ({
+    name,
+    description: "",
+    origin: "https://shop.test",
+    inputSchema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  it("offers the composer when the session can interpret a request", () => {
+    const f = idleFrame("Shop", [t("a"), t("b")], 0, true);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    // Last, so a new menu focuses an action rather than opening a text field.
+    expect(f.choices.map((c) => c.id)).toEqual(["a", "b", "__compose"]);
+    expect(f.note).toContain("speak");
+  });
+
+  // A control that looks like it works, takes what you say and does nothing
+  // with it is worse than no control at all.
+  it("offers nothing to speak into when nothing could interpret it", () => {
+    const f = idleFrame("Shop", [t("a")], 0, false);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices.map((c) => c.id)).toEqual(["a"]);
+    expect(f.note).not.toContain("speak");
+  });
+
+  it("keeps the composer reachable on every page rather than paginating it away", () => {
+    const many = ["a", "b", "c", "d", "e", "f"].map(t);
+    for (const page of [0, 1, 2]) {
+      const f = idleFrame("Shop", many, page, true);
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.at(-1)?.id, `page ${page}`).toBe("__compose");
+      expect(f.choices.length, `page ${page} must fit 600x600`).toBeLessThanOrEqual(MAX_CHOICES);
+    }
+  });
+});
