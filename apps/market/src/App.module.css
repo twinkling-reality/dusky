@@ -1,0 +1,117 @@
+.page {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: var(--dusky-s6) var(--dusky-s5) var(--dusky-s7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s5);
+}
+
+.banner {
+  margin: 0;
+  align-self: flex-start;
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-warn);
+  border: 1px solid currentColor;
+  border-radius: var(--dusky-radius);
+  padding: 0.3em 0.6em;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s2);
+}
+
+.title {
+  margin: 0;
+  font-weight: 300;
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+  color: var(--dusky-ink-strong);
+}
+
+.sub {
+  margin: 0;
+  color: var(--dusky-ink-dim);
+  font-size: 0.9rem;
+  max-width: 52ch;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+}
+
+.h2 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dusky-s3);
+  font-family: var(--dusky-mono);
+  font-weight: 400;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.status {
+  color: var(--dusky-ink-faint);
+}
+.status[data-status="ready"] {
+  color: var(--dusky-ok);
+}
+.status[data-status="unavailable"] {
+  color: var(--dusky-stop);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dusky-s4);
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+
+.num {
+  font-family: var(--dusky-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--dusky-ink-dim);
+}
+
+.cart {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--dusky-ink-strong);
+}
+.cart strong {
+  font-weight: 500;
+}
+
+.log {
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.73rem;
+  line-height: 1.7;
+  background: var(--dusky-sunken);
+  border: 1px solid var(--dusky-hair-soft);
+  border-radius: var(--dusky-radius);
+  padding: var(--dusky-s3);
+  min-height: 4.5em;
+  max-height: 14em;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--dusky-ink-dim);
+}

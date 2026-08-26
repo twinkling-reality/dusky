@@ -1,0 +1,16 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  background: var(--dusky-ground);
+  color: var(--dusky-ink);
+  font-family: var(--dusky-sans);
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
