@@ -728,8 +728,11 @@ describe("walking away from an invocation", () => {
     await s.submitText("oat-1");
     const running = s.handle("__confirm");
 
-    // The wearer gives up and goes back.
-    const menu = await s.handle("__cancel");
+    // The wearer gives up and goes back. Leaving a working frame says so
+    // first, because the call is already with the site and cannot be recalled.
+    const notice = await s.handle("__cancel");
+    expect(notice.kind).toBe("error");
+    const menu = await s.handle("__home");
     expect(menu.kind).toBe("idle");
 
     // ...and picks something else. This must actually run.
@@ -976,5 +979,77 @@ describe("what a planner's arguments may become", () => {
       sent["shipping"],
       "the wearer approved an argument they were never shown",
     ).toBeUndefined();
+  });
+});
+
+describe("going back while something is already running", () => {
+  const hanging = () => {
+    let release: (v: string) => void = () => {};
+    const stuck = new Promise<string>((r) => {
+      release = r;
+    });
+    const calls: string[] = [];
+    const runner: ToolRunner = {
+      discover: async () => [SEARCH, ADD],
+      invoke: async (_o, name) => {
+        calls.push(name);
+        return stuck;
+      },
+    };
+    return { runner, calls, release: (v: string) => release(v) };
+  };
+
+  it("does not later yank the wearer onto a result they walked away from", async () => {
+    const { runner, release } = hanging();
+    const seen: DisplayFrame[] = [];
+    const s = new Session({
+      source: "Verdant Market",
+      runner,
+      onTransition: (f) => seen.push(f),
+    });
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.submitText("oat-1");
+    const running = s.handle("__confirm");
+
+    await s.handle("__cancel");
+    const afterCancel = seen.length;
+
+    // The site answers the call that was already on its way.
+    release(JSON.stringify({ ok: true, added: "Organic oat milk" }));
+    await running;
+
+    const pushedAfter = seen.slice(afterCancel);
+    expect(
+      pushedAfter.map((f) => f.kind),
+      "an abandoned call took over the wearer's screen",
+    ).not.toContain("result");
+  });
+
+  it("says the action may still finish rather than implying it stopped", async () => {
+    const { runner, release } = hanging();
+    const s = new Session({ source: "Verdant Market", runner });
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.submitText("oat-1");
+    const running = s.handle("__confirm");
+
+    const f = await s.handle("__cancel");
+    // Going back cannot unsend something. The timeout path already says so;
+    // this one silently showed the menu, which reads as "nothing happened".
+    expect(`${f.kind === "error" ? f.title : ""} ${f.kind === "error" ? f.detail : ""}`).toMatch(
+      /still/i,
+    );
+
+    release(JSON.stringify({ ok: true }));
+    await running;
+  });
+
+  it("still goes straight back when nothing is in flight", async () => {
+    const s = new Session({ source: "Verdant Market", runner: fakeRunner() });
+    await s.start();
+    await s.handle("add_to_cart");
+    const f = await s.handle("__cancel");
+    expect(f.kind, "an ordinary escape stopped being an escape").toBe("idle");
   });
 });

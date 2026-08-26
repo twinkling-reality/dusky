@@ -312,10 +312,35 @@ export class Session {
       return this.repaint();
     }
     if (choiceId === "__home" || choiceId === "__cancel") {
-      if (choiceId === "__cancel")
-        this.audit({ kind: "cancel", toolName: this.pending?.tool.name });
+      // Leaving a WORKING frame is not the same act as leaving a menu. The
+      // call is already with the site and nothing here can recall it, so
+      // showing the menu implied it had been stopped. This is the same
+      // "unknown, never did not happen" the timeout path already observes.
+      //
+      // Only on the way out of the working frame, so pressing Back on the
+      // notice itself reaches the menu rather than the notice again.
+      const inFlight = this.frame.kind === "working" ? this.executing : null;
+
+      if (choiceId === "__cancel") {
+        this.audit({
+          kind: "cancel",
+          toolName: this.pending?.tool.name,
+          ...(inFlight ? { detail: { inFlight: true } } : {}),
+        });
+      }
       this.pending = null;
       this.page = 0;
+
+      if (inFlight) {
+        return this.show(
+          errorFrame(
+            this.o.source,
+            "Already sent",
+            `${label(inFlight.tool)} was sent before you went back. It may still finish.`,
+            false,
+          ),
+        );
+      }
       return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     }
     if (choiceId === "__retry") {
@@ -564,8 +589,19 @@ export class Session {
         deadline,
       ]);
 
+      // The wearer walked away while this was in flight. It still ran, and it
+      // is still worth recording, but the screen belongs to whatever they are
+      // doing now: showing this result would yank them out of it, and clearing
+      // `pending` would destroy the task they started instead.
+      const abandoned = this.pending !== p;
+
       if (outcome.timedOut) {
-        this.audit({ kind: "error", toolName: p.tool.name, detail: { reason: "timeout" } });
+        this.audit({
+          kind: "error",
+          toolName: p.tool.name,
+          detail: { reason: "timeout", ...(abandoned ? { abandoned: true } : {}) },
+        });
+        if (abandoned) return this.frame;
         // The deadline does not stop the tool, so this is "unknown", never
         // "did not happen". Retrying a write here could double-charge.
         this.show(
@@ -585,8 +621,9 @@ export class Session {
           kind: "result",
           toolName: p.tool.name,
           origin: p.tool.origin,
-          detail: { ok: said.ok },
+          detail: { ok: said.ok, ...(abandoned ? { abandoned: true } : {}) },
         });
+        if (abandoned) return this.frame;
         this.show(
           resultFrame(this.o.source, `${label(p.tool)} ${said.ok ? "done" : "did not work"}`, {
             ok: said.ok,
@@ -597,8 +634,15 @@ export class Session {
         this.pending = null;
       }
     } catch (err) {
-      this.audit({ kind: "error", toolName: p.tool.name, detail: { message: msg(err) } });
-      this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
+      const abandoned = this.pending !== p;
+      this.audit({
+        kind: "error",
+        toolName: p.tool.name,
+        detail: { message: msg(err), ...(abandoned ? { abandoned: true } : {}) },
+      });
+      if (!abandoned) {
+        this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
+      }
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       // Released on every exit, including the timeout, because the error frame
