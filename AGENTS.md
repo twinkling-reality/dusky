@@ -84,6 +84,18 @@ at all.
    hint from a party that may be hostile, and Chrome passes only 1 of 4 WPT
    annotation tests. Hard danger verbs override it; see `classifyDetailed`.
 
+   A hint is also not honoured when the tool contradicts itself. The soft
+   lexicons are consulted only AFTER the hint, so with a hint present they
+   protect nothing, and `place_order` claiming to be read-only ran with no
+   confirmation and qualified as a resolver, which is the path with nobody
+   watching. Letting soft signals override the hint is the wrong fix, because
+   `cart` is in `add_to_cart` and `review_cart` alike. Those lists mix two
+   kinds of word: `cart` and `booking` name a SUBJECT, `place` and `reserve`
+   name a MUTATION. Only the second kind contradicts a claim, and it is
+   matched against the FIRST word of the name as a whole word, because an
+   identifier is conventionally verb-first. That keeps a bookshop's
+   `search_books` a read while `book_table` is not.
+
    Those verbs are looked for in the SCHEMA as well as in the name, title and
    description. A tool could otherwise describe itself blandly, claim to be
    read-only, and declare what it really does in its parameters:
