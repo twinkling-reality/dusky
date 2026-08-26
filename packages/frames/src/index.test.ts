@@ -522,3 +522,45 @@ describe("the result envelope the protocol itself defines", () => {
     expect(facts.map((f) => f.label)).toEqual(["Reservation id", "Party size"]);
   });
 });
+
+describe("failures a site spelled its own way", () => {
+  /**
+   * Rule 3 cuts both ways and the second edge is the subtle one: calling every
+   * return a success is also asserting from having called. `{"ok": false}` was
+   * read; `{"success": 0}` and `{"status": "error"}` were not, and rendered as
+   * "done" over a green verdict.
+   *
+   * These are explicit negatives wearing different clothes, not shapes nobody
+   * recognises, so reading them is not the guessing rule 3 forbids. The line
+   * stays where it was: a shape with no negative in it is still a success.
+   */
+  const verdict = (o: unknown) => outcomeFromResult(JSON.stringify(o)).ok;
+
+  it("reads a falsy ok or success, however it is spelled", () => {
+    expect(verdict({ ok: false })).toBe(false);
+    expect(verdict({ success: 0 })).toBe(false);
+    expect(verdict({ ok: "false" })).toBe(false);
+    expect(verdict({ success: "no" })).toBe(false);
+  });
+
+  it("reads a status that says it went wrong", () => {
+    expect(verdict({ status: "error" })).toBe(false);
+    expect(verdict({ status: "failed" })).toBe(false);
+    expect(verdict({ status: "ok" })).toBe(true);
+    expect(verdict({ status: "confirmed" })).toBe(true);
+  });
+
+  it("reads an error object that carries no message", () => {
+    expect(verdict({ error: { code: 7 } })).toBe(false);
+    // Nothing in it is not a report of anything.
+    expect(verdict({ error: {} })).toBe(true);
+    expect(verdict({ error: null })).toBe(true);
+    expect(verdict({ error: "" })).toBe(true);
+  });
+
+  it("still calls an unremarkable result a success", () => {
+    expect(verdict({ reservation_id: "RSV-9", party_size: 4 })).toBe(true);
+    expect(verdict({ ok: true, added: "Organic oat milk" })).toBe(true);
+    expect(verdict({ results: [] })).toBe(true);
+  });
+});

@@ -240,6 +240,14 @@ export function idleFrame(
   tools: ToolDescriptor[],
   page = 0,
   canSpeak = false,
+  /**
+   * Why the wearer is looking at this menu, when it is not simply where they
+   * are. A request that could not be interpreted returns them here, and
+   * without a word it is indistinguishable from a request that was carried
+   * out: same frame, same note, on a panel with no history to scroll back
+   * through.
+   */
+  note?: string,
 ): DisplayFrame {
   const operable = tools.filter(isOperable);
   const all: Choice[] = operable.map((t, i) => ({
@@ -262,9 +270,7 @@ export function idleFrame(
     source,
     title: operable.length ? "What do you want to do?" : "No actions available here",
     note: operable.length
-      ? canSpeak
-        ? "Tap to speak, or choose an action"
-        : "Choose an action"
+      ? (note ?? (canSpeak ? "Tap to speak, or choose an action" : "Choose an action"))
       : // What reached us, never what the site chose.
         //
         // This used to read "This source declared no usable tools", which is a
@@ -457,19 +463,44 @@ export function outcomeFromResult(raw: string): { ok: boolean; message?: string 
   const rec = asRecord(safeParse(raw));
   if (!rec) return { ok: true };
 
+  const said = (): string | undefined => {
+    const m = rec["message"];
+    return typeof m === "string" && m.trim() !== "" ? m.trim() : undefined;
+  };
+
   const err = rec["error"];
   if (typeof err === "string" && err.trim() !== "") return { ok: false, message: err.trim() };
   const errRec = asRecord(err);
-  if (errRec && typeof errRec["message"] === "string") {
-    return { ok: false, message: String(errRec["message"]) };
+  if (errRec) {
+    if (typeof errRec["message"] === "string") {
+      return { ok: false, message: String(errRec["message"]) };
+    }
+    // An error object with something in it is a report of a failure even when
+    // it does not carry prose. An empty one reports nothing.
+    if (Object.keys(errRec).length > 0) return { ok: false, message: said() };
   }
 
+  // A site says no in whichever way its own house style says no. These are
+  // explicit negatives, not shapes nobody recognises, so reading them is not
+  // the guessing rule 3 forbids. Anything not listed here is still a success.
   for (const key of ["ok", "success"]) {
-    if (rec[key] === false) {
-      const m = rec["message"];
-      return { ok: false, message: typeof m === "string" ? m : undefined };
-    }
+    const v = rec[key];
+    if (v === undefined) continue;
+    const no =
+      v === false ||
+      v === 0 ||
+      (typeof v === "string" && ["false", "no", "0"].includes(v.trim().toLowerCase()));
+    if (no) return { ok: false, message: said() };
   }
+
+  const status = rec["status"];
+  if (
+    typeof status === "string" &&
+    /^(error|failed|failure|denied|rejected)$/i.test(status.trim())
+  ) {
+    return { ok: false, message: said() };
+  }
+
   return { ok: true };
 }
 

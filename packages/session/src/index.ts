@@ -94,6 +94,9 @@ export interface SessionOptions {
   onTransition?: (frame: DisplayFrame) => void;
 }
 
+/** Shown on the menu when a spoken request did not turn into anything. */
+const UNHEARD = "Could not tell what that meant. Choose an action";
+
 /** A lookup that saves typing must not cost more than the typing would. */
 const RESOLVER_BUDGET_MS = 6_000;
 
@@ -285,8 +288,13 @@ export class Session {
       this.audit({ kind: "plan", detail: { path: "pickTool", failed: msg(err) } });
     }
 
+    // Every way of failing to help says the same thing, deliberately. The
+    // wearer cannot act on the difference between "the model was unsure",
+    // "it named something that is not here" and "it could not be reached",
+    // and the last two would be telling them about our plumbing.
+
     // A planner that is unsure must produce a question, never a guess.
-    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
+    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak(), UNHEARD));
 
     const tool = this.byName(pick.name);
     if (!tool) {
@@ -296,7 +304,7 @@ export class Session {
         toolName: pick.name,
         detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
       });
-      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
+      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak(), UNHEARD));
     }
 
     const args = declaredArgs(tool, pick.args ?? {});

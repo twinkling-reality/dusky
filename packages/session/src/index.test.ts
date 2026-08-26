@@ -1086,3 +1086,60 @@ describe("a lookup that never answers", () => {
     expect(f.kind).toBe("choose");
   });
 });
+
+describe("when the wearer speaks and nothing comes of it", () => {
+  /**
+   * All three ways a planner can fail to help landed on the same menu with
+   * the same note. The wearer says something, watches their own words echoed
+   * back on a busy frame, and then the menu appears exactly as it would have
+   * if the request had been carried out. Nothing separates "I did not
+   * understand you" from "I did something", on a panel with no history and no
+   * way to scroll back.
+   */
+  const speaking = (planner: Partial<Planner>) =>
+    new Session({
+      source: "Verdant Market",
+      runner: fakeRunner(),
+      planner: {
+        pickTool: async () => null,
+        planResolver: async () => null,
+        ...planner,
+      } as Planner,
+    });
+
+  it("says it did not understand, rather than just showing the menu", async () => {
+    const s = speaking({ pickTool: async () => null });
+    await s.start();
+    const f = await s.submitText("do the thing with the stuff");
+    expect(f.kind).toBe("idle");
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.note, "an unanswered request looked like a completed one").toMatch(/not|could/i);
+  });
+
+  it("says the same when the planner names something that is not here", async () => {
+    const s = speaking({ pickTool: async () => ({ name: "wire_money", args: {} }) });
+    await s.start();
+    const f = await s.submitText("send money");
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.note).toMatch(/not|could/i);
+  });
+
+  it("says the same when the planner throws", async () => {
+    const s = speaking({
+      pickTool: async () => {
+        throw new Error("model unreachable");
+      },
+    });
+    await s.start();
+    const f = await s.submitText("anything");
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.note).toMatch(/not|could/i);
+  });
+
+  it("leaves the ordinary menu note alone", async () => {
+    const s = new Session({ source: "Verdant Market", runner: fakeRunner() });
+    const f = await s.start();
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.note).toBe("Choose an action");
+  });
+});
