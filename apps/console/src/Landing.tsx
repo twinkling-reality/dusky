@@ -1,109 +1,96 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Callout } from "./Callout.js";
 import { Checklist } from "./Checklist.js";
 import { DerivationControls, DerivationPanel, useDerivation } from "./Derivation.js";
 import styles from "./Landing.module.css";
-import { Schematic } from "./Schematic.js";
 import { SiteHeader } from "./SiteHeader.js";
+import header from "./SiteHeader.module.css";
 
 /**
- * The front door: one screen, one object, three annotations.
+ * The front door.
  *
- * It is laid out as a parts drawing because that is what Dusky is about. The
- * glasses are a schematic; the leader line runs off the display lens to a
- * callout; and what is inside that callout is not a picture of the interface,
- * it is the interface, running, driven by the schema in the callout below it.
+ * A sentence, the thing the sentence is about, and the two ways in. Everything
+ * sits in its own hairline cell, so the page reads as a sheet rather than as a
+ * column of blocks.
  *
- * That last part is the whole reason the page exists. An annotated diagram
- * with three paragraphs in it would be asking to be believed, which is the
- * thing two working demos already failed to avoid.
+ * The panel is live. That is the one decision here that is not taste: this
+ * page exists to stop asking a judge to take "nothing is hardcoded" on faith,
+ * and a picture of the interface would put the asking straight back.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
 
-type Panel = "why" | "schema" | null;
-
 export function Landing() {
-  const [open, setOpen] = useState<Panel>(null);
-  // One machine, shown in two places. The panel in the first callout and the
-  // boxes in the third are the same session; editing one moves the other.
+  const [examples, setExamples] = useState(false);
   const derivation = useDerivation();
-  const toggle = (p: Panel) => setOpen((cur) => (cur === p ? null : p));
 
   return (
     <>
-      <SiteHeader repo={REPO} />
+      <SiteHeader>
+        <button type="button" className={header.link} onClick={() => setExamples((v) => !v)}>
+          Examples
+        </button>
+        <a className={header.link} href={REPO} target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+      </SiteHeader>
 
       <main className={styles.page}>
-        <div className={styles.stage}>
-          <div className={styles.objectCol}>
+        <div className={styles.sheet}>
+          <section className={styles.saying}>
             <h1 className={styles.claim}>A browser for a web made of tools instead of pages.</h1>
             <p className={styles.lede}>
               Dusky reads the actions a site publishes over WebMCP and turns them into an interface
-              for Meta Ray-Ban Display. 600 by 600, six keys, no cursor, and no per-site integration
-              anywhere in it.
+              for Meta Ray-Ban Display: 600 by 600, six keys, no cursor. There is no per-site
+              integration anywhere in it.
             </p>
-            <Schematic />
-            <Checklist />
-          </div>
+          </section>
 
-          <div className={styles.calloutCol}>
-            <Callout label="The lens" pinned>
-              <DerivationPanel d={derivation} />
-              <p className={styles.caption}>
-                Live. The component the glasses run, driven by the same state machine over the same
-                compiler, answering the schema under &ldquo;How&rdquo;. Click through it.
-              </p>
-            </Callout>
+          <section className={styles.lens}>
+            <span className={styles.cellLabel}>On the glasses, live</span>
+            <DerivationPanel d={derivation} />
+          </section>
 
-            <Callout
-              label="Why"
-              teaser="Why the tab has to stay open"
-              expanded={open === "why"}
-              onToggle={() => toggle("why")}
-            >
-              <p className={styles.body}>
-                A tool does not run on Dusky&rsquo;s servers. It runs in your browser, inside the
-                partner site&rsquo;s own document, in your own logged-in session. Dusky moves intent
-                between the glasses and that tab and never moves a credential, which is why it never
-                needs one. The cost is the tab: close it and the session ends, because the
-                capability lived there and nowhere else.
-              </p>
-              <p className={styles.body}>
-                Whether an action stops for your approval is settled by code with no model, no
-                network and no DOM in it. A site&rsquo;s own <code>readOnlyHint</code> can lower
-                ceremony and never raise it, because the site making the claim may be the one you
-                need protecting from.
-              </p>
-            </Callout>
-
-            <Callout
-              label="How"
-              teaser="Point it at a schema it has never seen"
-              expanded={open === "schema"}
-              onToggle={() => toggle("schema")}
-            >
-              <p className={styles.body}>
-                Every box below is editable, and the lens above answers. Change a parameter from a
-                string to an enum and the composer becomes buttons while you watch. A hardcoded
-                interface cannot respond to an edit, which is the only version of this claim worth
-                anything.
-              </p>
-              <DerivationControls d={derivation} />
-            </Callout>
-          </div>
-        </div>
-
-        <div className={styles.actions}>
-          <Link className={styles.primary} to="/demo">
-            Open the demo
+          <Link className={styles.action} to="/demo">
+            <span className={styles.actionName}>Open the demo</span>
+            <span className={styles.actionNote}>
+              Pre-paired, no typing, no glasses. Needs Chrome 149+ with the WebMCP flag.
+            </span>
+            <span className={styles.arrow} aria-hidden="true">
+              →
+            </span>
           </Link>
-          <span className={styles.actionsNote}>
-            No glasses, no typing. Needs Chrome 149+ with the WebMCP flag, or the ChatGPT desktop
-            browser.
-          </span>
+
+          <button type="button" className={styles.action} onClick={() => setExamples((v) => !v)}>
+            <span className={styles.actionName}>{examples ? "Hide examples" : "See examples"}</span>
+            <span className={styles.actionNote}>
+              Four schemas, editable. Change one and the panel above answers.
+            </span>
+            <span className={styles.arrow} aria-hidden="true">
+              {examples ? "↑" : "↓"}
+            </span>
+          </button>
+
+          <a className={styles.action} href={REPO} target="_blank" rel="noreferrer">
+            <span className={styles.actionName}>Read the source</span>
+            <span className={styles.actionNote}>
+              Every claim on this page has a test behind it in the repository.
+            </span>
+            <span className={styles.arrow} aria-hidden="true">
+              ↗
+            </span>
+          </a>
         </div>
+
+        <div className={styles.status}>
+          <Checklist />
+        </div>
+
+        {examples && (
+          <section className={styles.examples}>
+            <DerivationControls d={derivation} />
+          </section>
+        )}
       </main>
     </>
   );

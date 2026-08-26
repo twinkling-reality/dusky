@@ -19,12 +19,12 @@ const CONSOLE = "http://localhost:7803";
 /**
  * Open the front door and expand the annotation holding the schema boxes.
  *
- * The panel is pinned open and always visible; the boxes that drive it sit
- * under "How", which is collapsed by default because the page is one screen.
+ * The panel is always visible in its own cell; the boxes that drive it are
+ * behind "See examples", collapsed by default so the page stays one screen.
  */
 async function openSchema(page: Page) {
   await page.goto(CONSOLE);
-  await page.getByRole("button", { name: /Point it at a schema/ }).click();
+  await page.getByRole("button", { name: /See examples/ }).click();
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 }
 

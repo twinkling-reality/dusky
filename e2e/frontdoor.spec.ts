@@ -19,49 +19,18 @@ test("the front door states the browser requirement before anything breaks", asy
   await expect(page.getByRole("heading", { level: 1 })).toContainText("web made of tools");
   // Stated where somebody decides to click, rather than discovered on failure.
   await expect(page.getByText(/Chrome 149\+ with the WebMCP flag/)).toBeVisible();
-  // The object, and a live panel annotated off its display lens. No WebMCP
-  // needed for any of it.
-  await expect(page.getByRole("img", { name: /front elevation/ })).toBeVisible();
+  // A live panel, not a picture of one, and it needs no WebMCP to run.
   await expect(page.locator("div[data-kind]")).toBeVisible();
 });
 
-test("the theme can be chosen rather than inherited from the machine", async ({ page }) => {
+test("the examples open by keyboard as well as by mouse", async ({ page }) => {
   await page.goto(SITE);
-  const root = page.locator("html");
-
-  // Nothing set: the palette follows the operating system, which is what
-  // prefers-color-scheme is for.
-  await expect(root).not.toHaveAttribute("data-theme", /.+/);
-
-  await page.getByRole("button", { name: "Light" }).click();
-  await expect(root).toHaveAttribute("data-theme", "light");
-
-  await page.getByRole("button", { name: "Dark" }).click();
-  await expect(root).toHaveAttribute("data-theme", "dark");
-
-  // And it survives a reload, applied before first paint so there is no frame
-  // of the wrong palette on the way in.
-  await page.reload();
-  await expect(root).toHaveAttribute("data-theme", "dark");
-
-  await page.getByRole("button", { name: "Match the system" }).click();
-  await expect(root).not.toHaveAttribute("data-theme", /.+/);
-});
-
-test("the annotations open and close, by keyboard as well as by mouse", async ({ page }) => {
-  await page.goto(SITE);
-
-  const why = page.getByRole("button", { name: /Why the tab has to stay open/ });
-  await expect(why).toHaveAttribute("aria-expanded", "false");
-  await why.click();
-  await expect(why).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByText(/never moves a credential/)).toBeVisible();
+  await expect(page.getByLabel("Tool definition")).toHaveCount(0);
 
   // A page arguing that six keys are enough cannot need a mouse at its door.
-  const how = page.getByRole("button", { name: /Point it at a schema/ });
-  await how.focus();
+  const open = page.getByRole("button", { name: /See examples/ });
+  await open.focus();
   await page.keyboard.press("Enter");
-  await expect(how).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 });
 
@@ -70,9 +39,9 @@ test("the schema and the lens are one machine, not two", async ({ page }) => {
   const panel = page.locator("div[data-kind]");
   await expect(panel.getByRole("button", { name: /Add to cart/ })).toBeVisible();
 
-  // The boxes live in a different callout from the panel. Editing one has to
+  // The boxes live in a different cell from the panel. Editing one has to
   // move the other, or they are two independent sessions wearing one layout.
-  await page.getByRole("button", { name: /Point it at a schema/ }).click();
+  await page.getByRole("button", { name: /See examples/ }).click();
   await page.getByRole("button", { name: /A restaurant/ }).click();
   await expect(panel.getByRole("button", { name: /Book table/ })).toBeVisible();
 });

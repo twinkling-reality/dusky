@@ -9,6 +9,10 @@
  */
 
 :root {
+  /* Tell the browser this surface is light, so form controls and scrollbars
+     are drawn to match rather than inverted underneath us. */
+  color-scheme: light;
+
   /* Console, light. A warm paper grey rather than a white: this surface is
      read next to a black waveguide, and a cold white next to emitted light
      makes the panel look grey rather than lit. */
@@ -63,40 +67,4 @@
   --dusky-s6: 2rem;
   --dusky-s7: 3rem;
   --dusky-radius: 3px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --dusky-ground: #1a1a17;
-    --dusky-raised: #23231f;
-    --dusky-sunken: #131310;
-    --dusky-hair: #34342d;
-    --dusky-hair-soft: #262622;
-    --dusky-ink: #d5d3ca;
-    --dusky-ink-strong: #f1efe8;
-    --dusky-ink-dim: #8b8a80;
-    --dusky-ink-faint: #5e5d55;
-    --dusky-accent: #6fd6d2;
-    --dusky-accent-soft: #35514f;
-    --dusky-ok: #7fcfa0;
-    --dusky-warn: #d8b471;
-    --dusky-stop: #db8c80;
-  }
-}
-
-:root[data-theme="dark"] {
-  --dusky-ground: #1a1a17;
-  --dusky-raised: #23231f;
-  --dusky-sunken: #131310;
-  --dusky-hair: #34342d;
-  --dusky-hair-soft: #262622;
-  --dusky-ink: #d5d3ca;
-  --dusky-ink-strong: #f1efe8;
-  --dusky-ink-dim: #8b8a80;
-  --dusky-ink-faint: #5e5d55;
-  --dusky-accent: #6fd6d2;
-  --dusky-accent-soft: #35514f;
-  --dusky-ok: #7fcfa0;
-  --dusky-warn: #d8b471;
-  --dusky-stop: #db8c80;
 }

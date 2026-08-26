@@ -10,17 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@200;300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <script>
-      // Before paint. React setting this in an effect would show one frame of
-      // the wrong palette, which looks like a rendering bug, not a preference.
-      let stored = null;
-      try {
-        stored = localStorage.getItem("dusky.theme");
-      } catch {}
-      if (stored === "light" || stored === "dark") {
-        document.documentElement.dataset.theme = stored;
-      }
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
