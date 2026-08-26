@@ -1,0 +1,225 @@
+import type { AgentRequest, ToolDescriptor } from "@dusky/contracts";
+import { describe, expect, it } from "vitest";
+import { SessionActor } from "./hub.js";
+
+/**
+ * Dusky's own WebMCP tools, tested where the rules actually live.
+ *
+ * The console that registers those tools is a transport. Every constraint that
+ * matters is enforced here, in the actor that owns the task state, because a
+ * rule enforced in the browser is a rule enforced in the layer an attacker is
+ * already standing in.
+ *
+ * Note what these tests cannot even express: reaching a session other than the
+ * actor's own. `AgentRequest` carries no session identifier, so targeting
+ * somebody else's glasses is not a case that can be written, let alone pass.
+ */
+
+const TOOLS: ToolDescriptor[] = [
+  {
+    name: "search_products",
+    title: "Search catalog",
+    description: "Search the product catalog by free text.",
+    origin: "https://shop.test",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  },
+  {
+    name: "add_to_cart",
+    title: "Add to cart",
+    description: "Add a product to the shopping cart by product id.",
+    origin: "https://shop.test",
+    inputSchema: {
+      type: "object",
+      properties: { product_id: { type: "string", description: "Which product?" } },
+      required: ["product_id"],
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+];
+
+/** Enough of a socket for the actor: it only checks readyState and sends. */
+class FakeSocket {
+  readyState = 1;
+  readonly sent: string[] = [];
+  send(s: string) {
+    this.sent.push(s);
+  }
+  close() {
+    this.readyState = 3;
+  }
+}
+
+type Sock = Parameters<SessionActor["attachDisplay"]>[0];
+
+/**
+ * An actor wired to a console that answers discover and invoke inline, so a
+ * whole task can run without a relay, a browser or a network.
+ */
+function actor(opts: { planner?: boolean } = {}) {
+  const invoked: string[] = [];
+  const make = opts.planner
+    ? () => ({
+        pickTool: async (_intent: string, tools: ToolDescriptor[]) => {
+          const t = tools.find((x) => x.name === "add_to_cart");
+          return t ? { name: t.name, args: { product_id: "oat-1" } } : null;
+        },
+        planResolver: async () => null,
+      })
+    : undefined;
+
+  const a = new SessionActor("ABC123", "Verdant Market", make);
+  const consoleSock = new FakeSocket();
+  const raw = consoleSock.send.bind(consoleSock);
+  consoleSock.send = (text: string) => {
+    raw(text);
+    const msg = JSON.parse(text) as { t: string; requestId?: string; toolName?: string };
+    queueMicrotask(() => {
+      if (msg.t === "discover" && msg.requestId) {
+        void a.onConsoleMessage({ t: "tools", requestId: msg.requestId, tools: TOOLS });
+      } else if (msg.t === "invoke" && msg.requestId) {
+        invoked.push(msg.toolName ?? "");
+        void a.onConsoleMessage({
+          t: "invoked",
+          requestId: msg.requestId,
+          ok: true,
+          value: JSON.stringify({ ok: true, added: "Organic oat milk" }),
+        });
+      }
+    });
+  };
+  return { a, consoleSock, invoked };
+}
+
+async function paired(opts: { planner?: boolean; withDisplay?: boolean } = {}) {
+  const built = actor(opts);
+  await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+  if (opts.withDisplay !== false) built.a.attachDisplay(new FakeSocket() as unknown as Sock);
+  return built;
+}
+
+const ask = (a: SessionActor, request: AgentRequest) => a.onAgentRequest(request);
+
+describe("what an outside agent can see", () => {
+  it("reports the session, the display and what is on it", async () => {
+    const { a } = await paired();
+    const r = await ask(a, { op: "status" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("unreachable");
+    expect(r.value).toMatchObject({
+      session: "ABC123",
+      source: "Verdant Market",
+      display_connected: true,
+      state: "idle",
+      accepting_tasks: true,
+    });
+  });
+
+  it("lists actions with the ceremony code will enforce, not the site's claim", async () => {
+    const { a } = await paired();
+    const r = await ask(a, { op: "actions" });
+    if (!r.ok) throw new Error("unreachable");
+    expect(r.value["actions"]).toEqual([
+      {
+        name: "search_products",
+        title: "Search catalog",
+        origin: "https://shop.test",
+        consequence: "read",
+        needsApproval: false,
+      },
+      {
+        name: "add_to_cart",
+        title: "Add to cart",
+        origin: "https://shop.test",
+        consequence: "financial",
+        needsApproval: true,
+      },
+    ]);
+  });
+});
+
+describe("sending a task", () => {
+  it("refuses when no glasses are connected, and says how to connect them", async () => {
+    const { a } = await paired({ planner: true, withDisplay: false });
+    const r = await ask(a, { op: "task", text: "add oat milk" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.error).toContain("ABC123");
+  });
+
+  it("refuses when the relay cannot interpret a request at all", async () => {
+    const { a } = await paired({ planner: false });
+    const r = await ask(a, { op: "task", text: "add oat milk" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.error).toContain("no planner");
+  });
+
+  /**
+   * The constraint this whole design exists for.
+   *
+   * If an inbound task could replace a pending confirmation, an agent could
+   * swap what is about to be approved while the wearer's attention is on the
+   * old target and their gesture is already under way.
+   */
+  it("refuses to interrupt a pending confirmation", async () => {
+    const { a, invoked } = await paired({ planner: true });
+
+    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
+    await a.onDisplayMessage({ t: "text", frameId: "2", value: "oat-1" });
+
+    const status = await ask(a, { op: "status" });
+    if (!status.ok) throw new Error("unreachable");
+    expect(status.value["state"]).toBe("confirm_required");
+    expect(status.value["accepting_tasks"]).toBe(false);
+
+    const r = await ask(a, { op: "task", text: "empty my cart instead" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.error).toContain("approve an action");
+
+    // The wearer is still looking at exactly what they were looking at, and
+    // nothing ran while the agent was trying.
+    expect(a.current().kind).toBe("confirm");
+    expect(invoked).toEqual([]);
+  });
+
+  it("refuses to interrupt a wearer being asked for something", async () => {
+    const { a } = await paired({ planner: false });
+    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
+    expect(a.current().kind).toBe("choose");
+    expect((await ask(a, { op: "task", text: "do something else" })).ok).toBe(false);
+  });
+
+  it("puts an accepted task on the glasses and still stops at the gate", async () => {
+    const { a, invoked } = await paired({ planner: true });
+    const r = await ask(a, { op: "task", text: "add the organic oat milk" });
+    expect(r.ok).toBe(true);
+    // An agent asked; the wearer has not answered, so nothing has run.
+    expect(a.current().kind).toBe("confirm");
+    expect(invoked).toEqual([]);
+  });
+
+  it("declines an empty task rather than putting a blank frame on someone's face", async () => {
+    const { a } = await paired({ planner: true });
+    expect((await ask(a, { op: "task", text: "   " })).ok).toBe(false);
+  });
+});
+
+describe("cancelling", () => {
+  it("is allowed even mid-confirmation, because it can only reduce what happens", async () => {
+    const { a, invoked } = await paired({ planner: true });
+    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
+    await a.onDisplayMessage({ t: "text", frameId: "2", value: "oat-1" });
+    expect(a.current().kind).toBe("confirm");
+
+    const r = await ask(a, { op: "cancel" });
+    expect(r.ok).toBe(true);
+    expect(a.current().kind).toBe("idle");
+    expect(invoked).toEqual([]);
+  });
+});

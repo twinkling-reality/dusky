@@ -117,6 +117,14 @@ export class WebMcpBridge {
     this.live.clear();
     const out: ToolDescriptor[] = [];
     for (const t of raw) {
+      // Chrome 151 returns THIS DOCUMENT's own registered tools even when
+      // fromOrigins names only other origins, verified 2026-08-26 against
+      // 151.0.7922.174. Once Dusky registered tools of its own, an unfiltered
+      // getTools put "Send task to display" on the wearer's menu as though
+      // the shop had offered it. We asked for specific origins, so we accept
+      // answers only from those origins. Re-check when Chrome fixes this;
+      // the filter is correct either way and should stay.
+      if (!this.origins.includes(t.origin)) continue;
       this.live.set(this.key(t.origin, t.name), t);
       out.push(toDescriptor(t));
     }

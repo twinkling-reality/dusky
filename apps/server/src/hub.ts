@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AgentReply,
+  AgentRequest,
   AuditEntry,
   ConsoleToServer,
+  DisplayFrame,
   DisplayToServer,
   ServerToConsole,
   ServerToDisplay,
@@ -107,6 +110,8 @@ export class SessionActor {
   private session: Session;
   private frameId = "0";
   private seq = 0;
+  private readonly hasPlanner: boolean;
+  private readonly record: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
   readonly audit: AuditEntry[] = [];
 
   constructor(
@@ -118,6 +123,8 @@ export class SessionActor {
       this.audit.push({ ...e, at: new Date().toISOString(), sessionId: this.id });
       if (this.audit.length > 500) this.audit.shift();
     };
+    this.record = record;
+    this.hasPlanner = makePlanner !== undefined;
     this.runner = new RemoteToolRunner((msg) => this.toConsole(msg));
     this.session = new Session({
       source: this.source,
@@ -132,6 +139,11 @@ export class SessionActor {
       // work is still running.
       onTransition: () => this.pushFrame(),
     });
+  }
+
+  /** The frame the wearer is looking at. Read-only, for diagnostics and tests. */
+  current(): DisplayFrame {
+    return this.session.current();
   }
 
   private toConsole(msg: ServerToConsole): boolean {
@@ -200,6 +212,118 @@ export class SessionActor {
     }
   }
 
+  /* ------------------------------------------- requests from an outside agent */
+
+  /**
+   * Whether the wearer is in the middle of something a task must not disturb.
+   *
+   * `confirm` is the one that matters. If an inbound task could replace a
+   * pending confirmation, an agent could swap what is about to be approved
+   * while the wearer's attention is on the old target and their finger is
+   * already moving. That is the same attack `isConfirmationFresh` defends
+   * against when a site changes its tools, arriving through a different door.
+   *
+   * `choose` and `working` are refused for a plainer reason: the wearer is
+   * mid-decision, and yanking the frame out from under them is rude even when
+   * it is safe. Both states are derived from the frame rather than tracked
+   * separately, so they cannot drift out of step with what is on the lens.
+   */
+  private busyWith(): string | null {
+    switch (this.session.current().kind) {
+      case "confirm":
+        return "the wearer is being asked to approve an action";
+      case "choose":
+        return "the wearer is being asked for something";
+      case "working":
+        return "an action is already running";
+      default:
+        return null;
+    }
+  }
+
+  private statusValue(): Record<string, unknown> {
+    const frame = this.session.current();
+    const busy = this.busyWith();
+    return {
+      session: this.id,
+      source: this.source,
+      display_connected: this.display?.readyState === 1,
+      state: stateFor(frame.kind),
+      showing: {
+        kind: frame.kind,
+        title: "title" in frame ? frame.title : undefined,
+        target: frame.kind === "confirm" ? frame.target : undefined,
+      },
+      can_interpret_requests: this.hasPlanner,
+      accepting_tasks: busy === null && this.display?.readyState === 1,
+      not_accepting_because: busy ?? undefined,
+    };
+  }
+
+  /**
+   * Handle one request from an agent in the console's browser.
+   *
+   * The console is a transport, not an authority: every rule below is applied
+   * here because this is where the task state actually lives. An agent can ask
+   * for things; it cannot approve anything, and nothing it sends skips the
+   * gate, because a task goes through the same `Session` a gesture does.
+   */
+  async onAgentRequest(request: AgentRequest): Promise<AgentReply> {
+    switch (request.op) {
+      case "status":
+        return { ok: true, value: this.statusValue() };
+
+      case "actions":
+        return { ok: true, value: { source: this.source, actions: this.session.actions() } };
+
+      case "task": {
+        const text = request.text?.trim() ?? "";
+        if (!text) return { ok: false, error: "A task needs something to act on." };
+        if (this.display?.readyState !== 1) {
+          return {
+            ok: false,
+            error: `No display is connected to session ${this.id}. Ask the wearer to open Dusky on their glasses and enter ${this.id}.`,
+          };
+        }
+        // Order matters. Whether the wearer is mid-decision is checked BEFORE
+        // whether this relay can interpret anything, because not interrupting
+        // someone is an invariant and must not depend on how a deployment
+        // happens to be configured.
+        const busy = this.busyWith();
+        if (busy) {
+          return {
+            ok: false,
+            error: `Not sent: ${busy}. Interrupting would change what they are deciding about. Try again once they have finished.`,
+          };
+        }
+        if (!this.hasPlanner) {
+          return {
+            ok: false,
+            error:
+              "This Dusky relay has no planner enabled, so it cannot turn a request into an action. The wearer can still choose from the menu on their glasses.",
+          };
+        }
+        this.record({ kind: "plan", detail: { path: "agentTask", text } });
+        await this.session.submitIntent(text);
+        return {
+          ok: true,
+          value: {
+            sent: text,
+            ...this.statusValue(),
+            note: "The wearer decides. Anything consequential stops for their approval.",
+          },
+        };
+      }
+
+      case "cancel": {
+        // Always allowed. Cancelling can only ever reduce what happens, so
+        // there is no state in which refusing it would protect the wearer.
+        await this.session.handle("__cancel");
+        return { ok: true, value: this.statusValue() };
+      }
+    }
+  }
+
   async onConsoleMessage(msg: ConsoleToServer): Promise<void> {
     switch (msg.t) {
       case "hello":
@@ -216,6 +340,11 @@ export class SessionActor {
         // never selects something that has since disappeared.
         await this.session.start();
         return;
+      case "agent": {
+        const reply = await this.onAgentRequest(msg.request);
+        this.toConsole({ t: "agentReply", requestId: msg.requestId, reply });
+        return;
+      }
     }
   }
 }

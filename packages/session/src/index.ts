@@ -11,7 +11,13 @@
  * deterministic and lives in @dusky/policy. The planner may only PROPOSE.
  */
 
-import type { AuditEntry, Choice, DisplayFrame, ToolDescriptor } from "@dusky/contracts";
+import type {
+  AgentAction,
+  AuditEntry,
+  Choice,
+  DisplayFrame,
+  ToolDescriptor,
+} from "@dusky/contracts";
 import {
   busyFrame,
   candidatesFromResult,
@@ -139,6 +145,27 @@ export class Session {
     this.frame = f;
     this.o.onTransition?.(f);
     return f;
+  }
+
+  /**
+   * What this source can currently do, as an agent OUTSIDE the glasses sees it.
+   *
+   * Every entry carries the ceremony @dusky/policy assigns, so an agent is
+   * told up front which actions will stop for the wearer. That is honesty
+   * rather than a courtesy: an agent that knows it cannot complete a purchase
+   * alone asks the wearer properly instead of trying and being refused.
+   */
+  actions(): AgentAction[] {
+    return this.tools.filter(isOperable).map((t) => {
+      const g = gate(t);
+      return {
+        name: t.name,
+        title: label(t),
+        origin: t.origin,
+        consequence: g.consequence,
+        needsApproval: g.requiresConfirmation,
+      };
+    });
   }
 
   private byName(name: string): ToolDescriptor | undefined {

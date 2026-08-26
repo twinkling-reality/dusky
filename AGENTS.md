@@ -147,6 +147,40 @@ because tests here run without credentials. Model choice, tier defaults and the
 `effort` setting are reasoned, not measured. Treat their latency and accuracy
 as unmeasured until evals exist.
 
+## Dusky as a provider
+
+Dusky consumes other sites' tools everywhere else. `apps/console/src/duskyTools.ts`
+is the other direction: four tools an agent in the same browser can call to
+drive a pair of glasses. Same protocol, both ends, one product. `e2e/provider.spec.ts`
+proves it through `document.modelContext.executeTool` with nothing mocked.
+
+The tools are `get_display_status`, `list_display_actions`,
+`send_task_to_display` and `cancel_active_task`. `exposedTo` is deliberately
+omitted, which is what makes them available to the browser's own agent, the
+ChatGPT desktop browser case.
+
+Two constraints are load-bearing and both are enforced in `SessionActor`,
+never in the console. The console is a transport; a rule enforced in the
+browser is enforced in the layer an attacker is already standing in.
+
+1. **No request carries a session identifier.** `AgentRequest` has no field for
+   one and no tool declares a parameter for one. The session is whichever one
+   this console page is paired to. A tool that accepted a session id would let
+   anyone reaching it drive any session whose pairing code they could guess,
+   and codes are six characters because a wearer reads them off a lens.
+2. **A task is refused while the wearer is mid-decision**, and the check runs
+   BEFORE the planner check, because not interrupting someone is an invariant
+   and must not depend on how a deployment is configured. Refusing during a
+   pending confirmation is the security case: otherwise an agent could swap
+   what is about to be approved while the wearer's attention is on the old
+   target. Cancelling, by contrast, is always allowed, because it can only ever
+   stop something from happening.
+
+An agent can ask. Only the wearer can approve. A task goes through the same
+`Session` a gesture does, so it meets `packages/policy` and the gate exactly
+as a gesture would, and `list_display_actions` tells an agent up front which
+actions will stop for a human.
+
 ## Browser reality, verified 2026-08-25 against Chrome 151.0.7922.174
 
 These are in `packages/webmcp`, the only file allowed to know them:
@@ -170,6 +204,13 @@ These are in `packages/webmcp`, the only file allowed to know them:
 - Flag: `--enable-features=WebMCPTesting`, matching
   `chrome://flags/#enable-webmcp-testing`.
 - Tool ordering from `getTools` is the browser's business. Never depend on it.
+- **`getTools({fromOrigins})` also returns THIS document's own registered tools**,
+  even when `fromOrigins` names only other origins. Verified 2026-08-26 against
+  151.0.7922.174, the day Dusky started registering tools of its own and
+  "Send task to display" appeared on the wearer's menu as though the shop had
+  offered it. `WebMcpBridge.discover` filters to the requested origins. Keep
+  the filter even after Chrome fixes this; accepting only what you asked for is
+  correct regardless.
 
 ## Meta Ray-Ban Display reality
 

@@ -1,6 +1,13 @@
-import type { ConsoleToServer, ServerToConsole, ToolDescriptor } from "@dusky/contracts";
-import { isWebMcpAvailable, WebMcpBridge } from "@dusky/webmcp";
+import type {
+  AgentReply,
+  AgentRequest,
+  ConsoleToServer,
+  ServerToConsole,
+  ToolDescriptor,
+} from "@dusky/contracts";
+import { isWebMcpAvailable, registerTools, WebMcpBridge } from "@dusky/webmcp";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { duskyTools } from "./duskyTools.js";
 
 /**
  * The console's half of the session.
@@ -18,9 +25,14 @@ export interface ConsoleLink {
   webmcp: boolean;
   tools: ToolDescriptor[];
   activity: string[];
+  /** Whether Dusky's own tools are registered for an agent in this browser. */
+  provides: boolean;
 }
 
 const RECONNECT_MS = [250, 500, 1000, 2000, 4000] as const;
+
+/** An agent request that never comes back must not hang a tool call forever. */
+const AGENT_REPLY_TIMEOUT_MS = 15_000;
 
 export function useConsoleLink(
   relayUrl: string,
@@ -33,8 +45,11 @@ export function useConsoleLink(
   const [activity, setActivity] = useState<string[]>([]);
   const webmcp = isWebMcpAvailable();
 
+  const [provides, setProvides] = useState(false);
   const bridge = useRef<WebMcpBridge | null>(null);
   const ws = useRef<WebSocket | null>(null);
+  /** Agent tool calls waiting on the relay, keyed by request id. */
+  const waiting = useRef(new Map<string, (r: AgentReply) => void>());
 
   const note = useCallback((line: string) => {
     setActivity((a) => [...a.slice(-60), line]);
@@ -44,6 +59,38 @@ export function useConsoleLink(
     bridge.current = new WebMcpBridge(partnerOrigins);
   }, [partnerOrigins]);
 
+  const send = useCallback((msg: ConsoleToServer) => {
+    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
+  }, []);
+
+  /**
+   * Forward an agent's request to the relay and wait for its answer.
+   *
+   * Note what is NOT sent: a session id. The relay answers for the session
+   * this socket said hello as, so a caller cannot reach a session other than
+   * the one this page is already paired to.
+   */
+  const ask = useCallback(
+    (request: AgentRequest): Promise<AgentReply> =>
+      new Promise((resolve) => {
+        if (ws.current?.readyState !== WebSocket.OPEN) {
+          resolve({ ok: false, error: "Dusky is not connected to its relay right now." });
+          return;
+        }
+        const requestId = crypto.randomUUID();
+        const timer = setTimeout(() => {
+          waiting.current.delete(requestId);
+          resolve({ ok: false, error: "Dusky did not answer in time." });
+        }, AGENT_REPLY_TIMEOUT_MS);
+        waiting.current.set(requestId, (r) => {
+          clearTimeout(timer);
+          resolve(r);
+        });
+        send({ t: "agent", requestId, request });
+      }),
+    [send],
+  );
+
   useEffect(() => {
     if (!ready || !sessionId) return;
     // Local to this effect invocation. A shared ref would be reset by the next
@@ -52,10 +99,6 @@ export function useConsoleLink(
     let disposed = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const send = (msg: ConsoleToServer) => {
-      if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
-    };
 
     const connect = () => {
       if (disposed) return;
@@ -78,6 +121,15 @@ export function useConsoleLink(
           } catch {
             return;
           }
+          if (msg.t === "agentReply") {
+            const settle = waiting.current.get(msg.requestId);
+            if (settle) {
+              waiting.current.delete(msg.requestId);
+              settle(msg.reply);
+            }
+            return;
+          }
+
           const b = bridge.current;
           if (!b) return;
 
@@ -136,9 +188,43 @@ export function useConsoleLink(
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, partnerOrigins, ready, note]);
+  }, [relayUrl, sessionId, partnerOrigins, ready, note, send]);
 
-  return { link, webmcp, tools, activity };
+  /**
+   * Register Dusky's own tools, so an agent in this browser can drive the
+   * glasses.
+   *
+   * `exposedTo` is deliberately omitted. Naming an origin is how a page grants
+   * a specific third party access, which is what Verdant Market does for
+   * Dusky. Omitting it is the correct default here: these tools are for the
+   * agent built into whatever browser the human opened this page in, which is
+   * exactly the ChatGPT desktop browser case.
+   *
+   * The AbortController is created SYNCHRONOUSLY, because registration is
+   * async and a disposer that only exists once the promise resolves leaves a
+   * window where StrictMode's second pass collides with the first. See the
+   * matching note in @dusky/webmcp.
+   */
+  useEffect(() => {
+    if (!ready || !isWebMcpAvailable()) return;
+    const lifetime = new AbortController();
+    registerTools(duskyTools({ ask, note }), { signal: lifetime.signal })
+      .then(() => {
+        if (lifetime.signal.aborted) return;
+        setProvides(true);
+        note("registered Dusky's own 4 tools for this browser's agent");
+      })
+      .catch((err: unknown) => {
+        if (lifetime.signal.aborted) return;
+        note(`could not register Dusky's tools: ${errText(err)}`);
+      });
+    return () => {
+      lifetime.abort();
+      setProvides(false);
+    };
+  }, [ready, ask, note]);
+
+  return { link, webmcp, tools, activity, provides };
 }
 
 function errText(e: unknown): string {

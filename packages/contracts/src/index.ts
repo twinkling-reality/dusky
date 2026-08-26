@@ -135,6 +135,8 @@ export type ServerToDisplay =
 export type ServerToConsole =
   | { t: "discover"; requestId: string; origins: string[] }
   | { t: "invoke"; requestId: string; origin: string; toolName: string; args: unknown }
+  /** Answer to an outside agent's request, routed back through the console. */
+  | { t: "agentReply"; requestId: string; reply: AgentReply }
   | { t: "bye"; reason: string };
 
 export type ConsoleToServer =
@@ -143,7 +145,47 @@ export type ConsoleToServer =
   | { t: "invoked"; requestId: string; ok: true; value: string }
   | { t: "invoked"; requestId: string; ok: false; error: string }
   /** Fired from ontoolchange so the Display can refresh without polling. */
-  | { t: "toolsChanged" };
+  | { t: "toolsChanged" }
+  /**
+   * An agent in the console's browser called one of Dusky's own tools.
+   *
+   * The console is a transport here, not an authority. The server owns the
+   * task state, so the server is what decides whether a request is allowed.
+   */
+  | { t: "agent"; requestId: string; request: AgentRequest };
+
+/* ------------------------------------------- an outside agent <-> a session */
+
+/**
+ * What an agent driving Dusky from the browser may ask of a session.
+ *
+ * NOTE WHAT IS ABSENT: there is no session identifier anywhere in this type,
+ * and there must never be one. These requests arrive through tools registered
+ * by a console page that is already paired to exactly one session, so the
+ * session is implied by which document the call arrived in. The moment a
+ * caller can NAME a session, anyone able to reach the tool can drive any
+ * session whose pairing code they can guess, and those codes are six
+ * characters long because a wearer has to read them off a lens.
+ */
+export type AgentRequest =
+  | { op: "status" }
+  | { op: "actions" }
+  | { op: "task"; text: string }
+  | { op: "cancel" };
+
+export type AgentReply =
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false; error: string };
+
+/** One thing the wearer's current source can do, as an outside agent sees it. */
+export interface AgentAction {
+  name: string;
+  title: string;
+  origin: string;
+  /** From @dusky/policy, so an agent is told the ceremony code will enforce. */
+  consequence: string;
+  needsApproval: boolean;
+}
 
 /* ------------------------------------------------------------------ audit */
 

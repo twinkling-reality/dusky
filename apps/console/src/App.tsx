@@ -50,6 +50,12 @@ export function App() {
               <dd>Verdant Market</dd>
               <dt>Origin</dt>
               <dd className={styles.mono}>{origins[0]}</dd>
+              {/* Dusky is a WebMCP consumer everywhere else. Here it is also a
+                  provider, so an agent in this browser can drive the glasses. */}
+              <dt>Dusky tools</dt>
+              <dd className={styles.mono} data-state={link.provides ? "open" : "offline"}>
+                {link.provides ? "registered for this browser agent" : "not registered"}
+              </dd>
             </dl>
           ) : (
             <form
