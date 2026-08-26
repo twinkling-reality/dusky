@@ -452,3 +452,55 @@ describe("a model client that does not honour its deadline", () => {
     expect(picked, "a planner that never returns is a planner nobody can use").toBeNull();
   });
 });
+
+describe("a model that cannot be reached at all", () => {
+  /**
+   * A wrong or expired credential does not fail once, it fails on every turn,
+   * and each turn spends the whole budget first. The wearer speaks, waits the
+   * ceiling, and gets the menu, over and over, with the composer still on
+   * offer because a planner does exist.
+   *
+   * Only hard failures count towards this. An abstention means the model
+   * answered and said it did not know, which is a healthy service giving the
+   * right answer, and treating that as an outage would degrade the product
+   * exactly when it is working.
+   */
+  const dead = () => {
+    let calls = 0;
+    const client: ModelClient = {
+      async decide() {
+        calls += 1;
+        throw new Error("401 unauthorized");
+      },
+    };
+    return { client, calls: () => calls };
+  };
+
+  it("stops spending the wearer's time once it is clearly not coming back", async () => {
+    const { client, calls } = dead();
+    const p = new ModelPlanner({ client });
+
+    for (let i = 0; i < 6; i += 1) await p.pickTool("find oat milk", ALL);
+    const spent = calls();
+
+    await p.pickTool("find oat milk", ALL);
+    expect(calls(), "still calling a model that has failed every time").toBe(spent);
+  });
+
+  it("keeps asking when the model answers but is unsure", async () => {
+    // Abstention is an answer. This must never trip the breaker.
+    let calls = 0;
+    const client: ModelClient = {
+      async decide() {
+        calls += 1;
+        return { tool: "", arguments: "{}", confidence: "low" };
+      },
+    };
+    const p = new ModelPlanner({ client });
+
+    for (let i = 0; i < 8; i += 1) await p.pickTool("find oat milk", ALL);
+    const before = calls;
+    await p.pickTool("find oat milk", ALL);
+    expect(calls, "an unsure model was mistaken for a broken one").toBeGreaterThan(before);
+  });
+});

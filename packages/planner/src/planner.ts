@@ -210,6 +210,11 @@ const RESOLVE_SYSTEM = [
  * a proposal the caller may act on or `null`, and `null` is always safe: the
  * session falls back to the menu the wearer can already drive.
  */
+/** Consecutive hard failures before the planner stops asking. */
+const MUTE_AFTER = 3;
+/** And how long it waits before trying again. Short enough to self-heal. */
+const MUTE_MS = 60_000;
+
 export class ModelPlanner {
   private readonly cache: CardCache;
 
@@ -242,6 +247,10 @@ export class ModelPlanner {
     tools: ToolDescriptor[],
   ): Promise<{ name: string; args: Record<string, unknown> } | null> {
     const started = this.now();
+    if (this.muted()) {
+      this.emit({ kind: "abstained", path: "pickTool", tier: "none", ms: 0 });
+      return null;
+    }
     // A tool the display cannot collect arguments for is not a candidate, no
     // matter how well it matches. Offering it would strand the wearer.
     const usable = tools.filter(isOperable);
@@ -302,6 +311,10 @@ export class ModelPlanner {
     intent: string,
   ): Promise<{ name: string; args: Record<string, unknown> } | null> {
     const started = this.now();
+    if (this.muted()) {
+      this.emit({ kind: "abstained", path: "planResolver", tier: "none", ms: 0 });
+      return null;
+    }
     const candidates = readOnlyTools.filter(
       (t) =>
         gate(t).consequence === "read" &&
@@ -424,6 +437,30 @@ export class ModelPlanner {
    * Rejecting lands in the caller's existing catch, which records a failure
    * and returns the wearer to the menu.
    */
+  /**
+   * Stop asking a model that is not there.
+   *
+   * A wrong or expired credential fails on every turn and spends the whole
+   * budget doing it, so a wearer speaks, waits the ceiling, and gets the menu,
+   * repeatedly. Muting turns that into an immediate menu, which is the same
+   * destination without the wait.
+   *
+   * ONLY hard failures count. An abstention means the model answered and said
+   * it did not know, which is a healthy service giving the correct answer, and
+   * counting it would degrade the product precisely when it is working. The
+   * mute expires on its own, so an outage that ends needs no intervention.
+   */
+  private failures = 0;
+  private mutedUntil = 0;
+
+  private muted(): boolean {
+    if (this.mutedUntil === 0) return false;
+    if (this.now() < this.mutedUntil) return true;
+    this.mutedUntil = 0;
+    this.failures = 0;
+    return false;
+  }
+
   private async decideWithin(req: ModelRequest): Promise<Decision> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_resolve, reject) => {
@@ -456,7 +493,12 @@ export class ModelPlanner {
     let decision: Decision;
     try {
       decision = await this.decideWithin({ tier, system, user, timeoutMs });
+      // It answered. Whatever it said, the service is there.
+      this.failures = 0;
+      this.mutedUntil = 0;
     } catch (err) {
+      this.failures += 1;
+      if (this.failures >= MUTE_AFTER) this.mutedUntil = this.now() + MUTE_MS;
       this.emit({
         kind: "failed",
         path,
