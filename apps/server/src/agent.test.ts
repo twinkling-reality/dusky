@@ -46,11 +46,14 @@ const TOOLS: ToolDescriptor[] = [
 class FakeSocket {
   readyState = 1;
   readonly sent: string[] = [];
+  /** How this socket was closed, so a test can tell a kick from a hang-up. */
+  closedWith: { code?: number; reason?: string } | null = null;
   send(s: string) {
     this.sent.push(s);
   }
-  close() {
+  close(code?: number, reason?: string) {
     this.readyState = 3;
+    this.closedWith = { code, reason };
   }
 }
 
@@ -395,5 +398,39 @@ describe("what the wearer is told when discovery fails", () => {
 
     expect(last?.kind, "a failure to look was reported as an empty shop").toBe("error");
     expect(JSON.stringify(last)).not.toContain("declared no usable tools");
+  });
+});
+
+describe("a second window on the same pairing code", () => {
+  /**
+   * One session holds one console and one display, and attaching a second
+   * closes the first. That is the intended rule. What was not intended is that
+   * the loser could not tell it had been replaced: it saw an ordinary close,
+   * reconnected a quarter of a second later, and evicted the winner in turn.
+   * Both sides reset their backoff on every successful open, so the exchange
+   * never slowed down, and every console attach re-runs discovery and pushes a
+   * frame, so the wearer's screen was rebuilt several times a second for as
+   * long as two tabs were open on one code.
+   */
+  it("tells the console it replaced that it was replaced", async () => {
+    const built = actor();
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+
+    // Not awaited: the eviction happens before this attach waits on discovery,
+    // and the second socket is a plain fake that would never answer one.
+    void built.a.attachConsole(new FakeSocket() as unknown as Sock, ["https://shop.test"]);
+
+    expect(built.consoleSock.closedWith?.code, "an eviction looked like an ordinary close").toBe(
+      4001,
+    );
+  });
+
+  it("tells the display it replaced that it was replaced", () => {
+    const a = new SessionActor("ABCDEF", "Verdant Market");
+    const first = new FakeSocket();
+    a.attachDisplay(first as unknown as Sock);
+    a.attachDisplay(new FakeSocket() as unknown as Sock);
+
+    expect(first.closedWith?.code).toBe(4001);
   });
 });

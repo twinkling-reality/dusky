@@ -11,6 +11,7 @@ import type {
   ServerToDisplay,
   ToolDescriptor,
 } from "@dusky/contracts";
+import { CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { Session, type ToolRunner } from "@dusky/session";
 import type { WebSocket } from "ws";
 import type { PlannerFactory } from "./planner.js";
@@ -206,7 +207,7 @@ export class SessionActor {
 
   attachDisplay(sock: WebSocket): void {
     this.touch();
-    this.display?.close();
+    this.display?.close(CLOSE_SUPERSEDED, "another display took this session");
     this.display = sock;
     // Say NOTHING until a browser has paired.
     //
@@ -241,7 +242,7 @@ export class SessionActor {
    * description is, since it ends up rendered on a lens.
    */
   async attachConsole(sock: WebSocket, origins: string[], source?: string): Promise<void> {
-    this.consoleSock?.close();
+    this.consoleSock?.close(CLOSE_SUPERSEDED, "another window took this session");
     this.consoleSock = sock;
     this.runner.origins = origins;
     const named = displayLabel(source);

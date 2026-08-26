@@ -246,6 +246,22 @@ export const SESSION_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 export const SESSION_CODE_LENGTH = 6;
 
 /**
+ * Why a socket was closed: something else took this session.
+ *
+ * One session holds one console and one display, and attaching a second closes
+ * the first. Without a way to say WHY, the loser saw an ordinary close and did
+ * the ordinary thing, which is reconnect a quarter of a second later and evict
+ * the winner in turn. Neither side backs off after a successful open, so the
+ * exchange never slowed down, and every console attach re-runs discovery and
+ * pushes a frame: two tabs on one pairing code rebuilt the wearer's screen
+ * several times a second, indefinitely.
+ *
+ * A code in the 4000-4999 range is the application's to define, and it is the
+ * only part of a close a browser client can read.
+ */
+export const CLOSE_SUPERSEDED = 4001;
+
+/**
  * Whether a string could have come off a lens.
  *
  * Here rather than in either surface because both have to ask and they must
