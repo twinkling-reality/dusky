@@ -2,6 +2,7 @@ import { gate } from "@dusky/policy";
 import { ENABLE_HINT } from "@dusky/webmcp";
 import { useMemo, useState } from "react";
 import styles from "./App.module.css";
+import { sourceFromQuery } from "./sources.js";
 import { useConsoleLink } from "./useConsoleLink.js";
 
 /**
@@ -14,13 +15,16 @@ import { useConsoleLink } from "./useConsoleLink.js";
  */
 
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/console";
-const MARKET_URL = import.meta.env["VITE_MARKET_URL"] ?? "http://localhost:7801";
 const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:7802";
 
 export function App() {
   const [code, setCode] = useState("");
   const [paired, setPaired] = useState<string | null>(null);
-  const origins = useMemo(() => [new URL(MARKET_URL).origin], []);
+  // Which partner site this console is holding. Two strings from a registry:
+  // a name to print and a URL to frame. Everything the wearer sees still comes
+  // from the tool schemas that site registers, not from which entry this is.
+  const source = useMemo(() => sourceFromQuery(location.search), []);
+  const origins = useMemo(() => [new URL(source.url).origin], [source]);
   const link = useConsoleLink(RELAY_URL, paired ?? "", origins, paired !== null);
 
   return (
@@ -47,7 +51,7 @@ export function App() {
                 {link.link}
               </dd>
               <dt>Source</dt>
-              <dd>Verdant Market</dd>
+              <dd>{source.name}</dd>
               <dt>Origin</dt>
               <dd className={styles.mono}>{origins[0]}</dd>
               {/* Dusky is a WebMCP consumer everywhere else. Here it is also a
@@ -130,8 +134,8 @@ export function App() {
           */}
           <iframe
             className={styles.frame}
-            title="Verdant Market"
-            src={`${MARKET_URL}?agent=${encodeURIComponent(location.origin)}`}
+            title={source.name}
+            src={`${source.url}?agent=${encodeURIComponent(location.origin)}`}
             allow="tools"
           />
 

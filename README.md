@@ -11,6 +11,12 @@ you one question at a time.
 There is no per-site integration anywhere in this repository. Point Dusky at a
 participating site and the interface is derived from that site's tool schemas.
 
+Two first-party services are included so that claim can be checked rather than
+believed. Verdant Market sells things; Amber & Oak holds tables. They declare a
+different number of tools, use different parameter types, and return completely
+different result shapes. The same Dusky drives both, and adding the second one
+changed nothing inside it.
+
 ## Try it without glasses
 
 The Display client is an ordinary web page. The glasses translate Neural Band
@@ -85,6 +91,7 @@ mediated by the browser.
 | `apps/console` | The operator console and WebMCP client. |
 | `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |
 | `apps/market` | A first-party WebMCP test service. Clearly labelled; nothing is sold. |
+| `apps/reservations` | A second test service with nothing in common with a shop. Nothing is reserved. |
 | `e2e` | The round trip, run against real Chrome with the real flag. |
 
 ## What Dusky does not claim

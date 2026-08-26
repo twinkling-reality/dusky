@@ -45,6 +45,15 @@ at all.
    fell through to truncated JSON while the menu still looked perfect.
    `factsFromResult` replaced it and knows no site. Do not reintroduce a key
    because it made the demo read nicely.
+
+   Two first-party sources exist to keep this honest. `apps/market` sells
+   things and `apps/reservations` holds tables, and they share no vocabulary:
+   one returns `cart_total`, the other `reservation_id` and `party_size`. The
+   second one also declares a string enum, an integer enum and a boolean, none
+   of which the market has, so three branches of `paramKind` are reachable at
+   all. `e2e/reservations.spec.ts` drives it end to end. Adding it required no
+   change inside Dusky, which is the only form this claim can take that is
+   worth anything.
 2. **The model proposes, code disposes.** Whether a human must confirm is
    decided in `packages/policy`, which has no model, no network and no DOM.
    A `Planner` may only suggest; `Session` enforces. A proposal is checked
@@ -251,7 +260,7 @@ Each of these cost real debugging time. Do not undo the fixes.
 ## Commands
 
 ```bash
-pnpm dev         # all four surfaces
+pnpm dev         # all five surfaces
 pnpm test        # unit
 pnpm test:e2e    # round trip in real Chrome with the flag
 pnpm typecheck

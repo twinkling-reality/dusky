@@ -7,6 +7,7 @@
 | Display, for the glasses | https://dusky-display.vercel.app |
 | Console | https://dusky-console.vercel.app |
 | Verdant Market | https://dusky-market.vercel.app |
+| Amber & Oak | https://dusky-reservations.vercel.app (not deployed yet) |
 | Relay | https://dusky-relay.onrender.com |
 
 Two things are deliberately still manual, because they are credentials:
@@ -19,14 +20,15 @@ Two things are deliberately still manual, because they are credentials:
   The console says so plainly when the API is missing.
 
 
-Four surfaces. Three are static and belong on any CDN. One holds WebSockets and
+Five surfaces. Four are static and belong on any CDN. One holds WebSockets and
 does not.
 
 | Surface | What it is | Where it runs | Host |
 | --- | --- | --- | --- |
 | `apps/display` | The 600x600 app the wearer sees | On the glasses | Vercel |
 | `apps/console` | Dusky's WebMCP client | A desktop browser | Vercel |
-| `apps/market` | Verdant Market, the test service | A desktop browser | Vercel |
+| `apps/market` | Verdant Market, a test service | A desktop browser | Vercel |
+| `apps/reservations` | Amber & Oak, a second test service | A desktop browser | Vercel |
 | `apps/server` | The session relay | A server | Render, Railway or Fly |
 
 **Only the Display runs on the glasses.** Tools execute inside the partner
@@ -36,17 +38,18 @@ AND the console open on a computer, in Chrome with the WebMCP flag or in the
 ChatGPT desktop browser. Glasses alone cannot do anything, and that separation
 is the architecture rather than a limitation.
 
-## Choose all four names before deploying anything
+## Choose all five names before deploying anything
 
-The console needs the market's URL, and the market needs the console's origin.
-That looks circular and is not, because a Vercel project's URL is derived from
-its name. Pick the names first and every value below is known before the first
-deploy.
+The console needs each partner site's URL, and each partner site needs the
+console's origin. That looks circular and is not, because a Vercel project's URL
+is derived from its name. Pick the names first and every value below is known
+before the first deploy.
 
 ```
 dusky-display.vercel.app
 dusky-console.vercel.app
 dusky-market.vercel.app
+dusky-reservations.vercel.app
 dusky-relay.onrender.com
 ```
 
@@ -81,7 +84,8 @@ will touch.
 
 Each is a separate Vercel project from the same repository.
 
-- **Root Directory**: `apps/display`, `apps/console`, `apps/market`
+- **Root Directory**: `apps/display`, `apps/console`, `apps/market`,
+  `apps/reservations`
 - **Enable "Include source files outside of the Root Directory"**. The workspace
   packages live in `packages/`, so the build fails without it.
 - Build command `pnpm build`, output `dist`. Vite is detected automatically.
@@ -102,16 +106,18 @@ would rather they were.
 | display | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/display` |
 | console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
 | console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |
+| console | `VITE_RESERVATIONS_URL` | `https://dusky-reservations.vercel.app` |
 | console | `VITE_DISPLAY_URL` | `https://dusky-display.vercel.app` |
 | market | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
+| reservations | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
 
 These are read at BUILD time by Vite, so changing one means redeploying that
 surface, not restarting it.
 
 ### The two failures worth knowing in advance
 
-**`VITE_DUSKY_ORIGIN` must be the console's exact origin.** It becomes the
-market's `exposedTo` grant, and the browser compares it to the console's real
+**`VITE_DUSKY_ORIGIN` must be the console's exact origin.** It becomes each
+partner site's `exposedTo` grant, and the browser compares it to the console's real
 origin character by character. A trailing slash, a path, `http` instead of
 `https`, or a preview URL instead of the production one, and Dusky discovers
 zero tools. That failure looks identical to "WebMCP is broken", so check it
