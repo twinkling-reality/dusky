@@ -115,6 +115,27 @@ export class WebMcpBridge {
   /** Keeps the live handles that executeTool needs, keyed by origin + name. */
   private live = new Map<string, RegisteredToolLike>();
 
+  /**
+   * Which argument shape this browser actually accepts.
+   *
+   * The spec takes an object; Chrome wants a JSON string. We find out by
+   * trying, but we find out ONCE. Retrying on every call was two bugs at
+   * the same time.
+   *
+   * The first is cost: the in-browser leg of every invocation was paid twice,
+   * because the spec-shaped attempt is guaranteed to fail on today's Chrome.
+   *
+   * The second is worse, and it broke rule 5. The retry fired on
+   * `message.includes("Failed to parse input")`, and that message is written
+   * by the SITE, on the failure path, after it has already run. A hostile
+   * `pay_now` could charge the card, throw "Failed to parse input arguments",
+   * and be invoked a second time by us. A tool that is not read-only must
+   * never be auto-retried, and this was auto-retrying everything.
+   *
+   * One probe per document settles it. After that no call ever repeats.
+   */
+  private argShape: "unknown" | "object" | "string" = "unknown";
+
   constructor(private readonly origins: string[]) {}
 
   private key(origin: string, name: string): string {
@@ -189,14 +210,27 @@ export class WebMcpBridge {
     if (!handle) throw new Error(`tool not currently exposed: ${name} from ${origin}`);
 
     const opts = signal ? { signal } : undefined;
-    try {
+
+    // Shape already settled: one call, no retry, whatever the site says.
+    if (this.argShape === "string") {
+      return await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
+    }
+    if (this.argShape === "object") {
       return await mc.executeTool(handle, args, opts);
+    }
+
+    // First invocation in this document. This is the only call that may be
+    // repeated, and it is repeated at most once, ever.
+    try {
+      const out = await mc.executeTool(handle, args, opts);
+      this.argShape = "object";
+      return out;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("Failed to parse input")) {
-        return await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
-      }
-      throw err;
+      if (!msg.includes("Failed to parse input")) throw err;
+      const out = await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
+      this.argShape = "string";
+      return out;
     }
   }
 }
