@@ -357,6 +357,17 @@ function factValue(key: string, value: unknown): string | null {
     return v.length > 48 ? `${v.slice(0, 47)}...` : v;
   }
   if (Array.isArray(value)) {
+    // A list of things a wearer could NAME is worth naming. Reporting "1 item"
+    // for a cart containing oat milk is technically true and useless: it reads
+    // as though the cart were empty, which is how this was found. The same
+    // reader that turns a search result into choices turns a list into words.
+    const named = candidatesFromResult(JSON.stringify(value), 4).map((c) => c.label);
+    if (named.length > 0) {
+      const rest = value.length - named.length;
+      const text = rest > 0 ? `${named.join(", ")} +${rest} more` : named.join(", ");
+      return text.length > 48 ? `${text.slice(0, 47)}...` : text;
+    }
+    // Nothing nameable in it, so the count is the most honest thing left.
     return value.length === 1 ? "1 item" : `${value.length} items`;
   }
   // An object cannot be read at a glance, and a wearer must never be shown

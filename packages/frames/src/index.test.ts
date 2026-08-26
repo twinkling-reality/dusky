@@ -195,10 +195,32 @@ describe("facts lifted from a result", () => {
     ]);
   });
 
-  it("counts a list rather than trying to show it", () => {
+  it("names what is in a list rather than counting it", () => {
+    // "1 item" for a cart holding oat milk reads as an empty cart, which is
+    // how this was found: on real glasses, after a real purchase.
+    const raw = JSON.stringify({
+      items: [{ id: "oat-1", name: "Organic oat milk" }],
+      total: 4.29,
+    });
+    expect(factsFromResult(raw)).toEqual([
+      { label: "Items", value: "Organic oat milk" },
+      { label: "Total", value: "$4.29" },
+    ]);
+  });
+
+  it("counts only when there is nothing nameable in the list", () => {
     expect(factsFromResult(JSON.stringify({ items: [1, 2, 3] }))).toEqual([
       { label: "Items", value: "3 items" },
     ]);
+  });
+
+  it("says how many it did not name rather than dropping them silently", () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({
+      id: `p${i}`,
+      name: `Product ${i}`,
+    }));
+    const shown = factsFromResult(JSON.stringify({ items: many }))[0]?.value ?? "";
+    expect(shown).toMatch(/\+3 more|\.\.\.$/);
   });
 
   it("shows nothing it cannot show honestly", () => {

@@ -108,3 +108,50 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
 
   await ctx.close();
 });
+
+/**
+ * Two invocations, one document.
+ *
+ * Dusky never holds a partner's state: `add_to_cart` and `review_cart` are
+ * separate calls into the same live page, and the second only sees the first
+ * because both ran inside that page's own React tree in the user's session.
+ * If this ever fails, either the console is reloading the partner frame
+ * between calls or the bridge has stopped reusing the live tool handles.
+ */
+test("a second tool call sees what the first one did", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const consolePage = await ctx.newPage();
+  const displayPage = await ctx.newPage();
+  const code = "E2E002";
+
+  await consolePage.goto(`http://localhost:7803/?session=${code}`);
+  await consolePage.getByLabel("Pairing code from your glasses").fill(code);
+  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await expect(consolePage.getByText("Add to cart")).toBeVisible();
+
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
+  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+
+  await focusChoice(displayPage, /Add to cart/);
+  await displayPage.keyboard.press("Enter");
+  const compose = displayPage.locator('input[type="text"]');
+  await expect(compose).toBeVisible();
+  await compose.fill("oat-1");
+  await compose.press("Enter");
+  await focusChoice(displayPage, /Confirm/);
+  await displayPage.keyboard.press("Enter");
+  await expect(displayPage.getByText("Cart total")).toBeVisible();
+
+  // Back to the menu, then ask the site what it thinks is in the cart.
+  await focusChoice(displayPage, /Do something else/);
+  await displayPage.keyboard.press("Enter");
+  await focusChoice(displayPage, /Review cart/);
+  await displayPage.keyboard.press("Enter");
+
+  // review_cart is read-only, so it runs with no gate and reports the item
+  // add_to_cart put there a moment ago.
+  await expect(displayPage.getByText("Organic oat milk")).toBeVisible();
+  await expect(displayPage.getByText("Total")).toBeVisible();
+
+  await ctx.close();
+});
