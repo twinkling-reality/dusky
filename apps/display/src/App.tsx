@@ -15,13 +15,33 @@ import { useRelay } from "./useRelay.js";
 
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/display";
 
+/**
+ * Letters only, and not all of them.
+ *
+ * The code is read by a human off a waveguide, in whatever light they happen
+ * to be standing in, and then typed somewhere else. Base36 put digits next to
+ * letters and produced JN4CB2, which was read back as 3N4CB2 and cost twenty
+ * minutes of debugging a system that was working perfectly. Dropping digits
+ * kills every digit-letter confusion at once: 0/O, 1/I, 5/S, 8/B, 2/Z, 3/J.
+ * I, L and O go too, because they are the letters that look like each other.
+ *
+ * 23 symbols over 6 places is about 148 million codes, which is far more than
+ * a relay holding a handful of live sessions will ever need.
+ */
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
+
+function mintCode(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
+
 function readSessionId(): string {
   const q = new URLSearchParams(location.search).get("session");
   if (q) return q.toUpperCase();
   const stored = localStorage.getItem("dusky.session");
   if (stored) return stored;
-  // A pairing code short enough to read off a screen in one glance.
-  const fresh = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const fresh = mintCode();
   localStorage.setItem("dusky.session", fresh);
   return fresh;
 }
@@ -81,11 +101,14 @@ function pairingFrame(sessionId: string, link: string): DisplayFrame {
       choices: [{ id: "__retry", label: "Try again", meta: "enter" }],
     };
   }
+  // The CODE is the content of this frame, so it gets the frame's largest and
+  // brightest slot. It used to sit inside the note, which is the smallest text
+  // on the panel, which is how one character got misread.
   return {
     kind: "idle",
     source: "Dusky",
-    title: "Ready to pair",
-    note: `Open Dusky and enter ${sessionId}`,
+    title: sessionId,
+    note: "Enter this code in Dusky in your browser",
     choices: [],
   };
 }
