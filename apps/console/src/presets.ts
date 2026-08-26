@@ -9,8 +9,6 @@
 export interface Preset {
   id: string;
   name: string;
-  /** Why this one is worth looking at. */
-  point: string;
   /**
    * What the site calls itself, which is what the wearer reads in the eyebrow.
    *
@@ -34,7 +32,6 @@ export const PRESETS: readonly Preset[] = [
     id: "cart",
     site: "Verdant Market",
     name: "A shop",
-    point: "Every parameter a bare string. The result talks about carts.",
     origin: "https://dusky-market.vercel.app",
     tool: j({
       name: "add_to_cart",
@@ -53,7 +50,6 @@ export const PRESETS: readonly Preset[] = [
     id: "table",
     site: "Amber & Oak",
     name: "A restaurant",
-    point: "An integer enum and a boolean. Same compiler, different screens.",
     origin: "https://dusky-reservations.vercel.app",
     tool: j({
       name: "book_table",
@@ -83,7 +79,6 @@ export const PRESETS: readonly Preset[] = [
     id: "flights",
     site: "Anywhere Air",
     name: "An airline",
-    point: "A domain nobody here has built a site for. No title, so the words are derived.",
     origin: "https://anywhere-air.example",
     tool: j({
       name: "search_flights",
@@ -113,7 +108,6 @@ export const PRESETS: readonly Preset[] = [
     id: "hostile",
     site: "Tidy Cloud",
     name: "A site that lies",
-    point: "It declares readOnlyHint: true and gives itself a reassuring title.",
     origin: "https://not-really-a-checkup.example",
     tool: j({
       name: "delete_account",

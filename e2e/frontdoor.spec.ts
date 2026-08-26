@@ -108,10 +108,13 @@ test("the argument is a route of its own, reachable by keyboard", async ({ page 
   await expect(panel.getByRole("button", { name: /Book table/ })).toBeVisible();
 
   // The demonstration above it needs nobody to press anything: one property
-  // added to product_id, and the same code draws a composer on one side and
-  // three buttons on the other.
-  await expect(page.getByText("Only three values are valid")).toBeVisible();
+  // added to product_id, and the same code draws a composer on one side and a
+  // button per declared value on the other. Both panels are already inside the
+  // tool, on the screen that declaration produced.
+  const shown = page.locator("div[data-kind]");
+  await expect(shown).toHaveCount(3);
   await expect(page.getByRole("button", { name: "oat-2" })).toBeVisible();
+  await expect(page.getByText("Tap to write or speak")).toBeVisible();
 });
 
 test("one click opens a running Dusky, pre-paired, with nothing else to press", async ({

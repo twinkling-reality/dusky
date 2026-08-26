@@ -183,15 +183,14 @@ function Lens({
   );
 }
 
-/** One half of the comparison: the property, the screen, and the reason. */
+/** One half of the comparison: the property, and the screen it produced. */
 function Half({ side, label }: { side: Side; label: string }) {
   const c = useCompiled(side.tool, CONTRAST.result, CONTRAST.origin, CONTRAST.site, true);
   return (
     <div className={styles.half}>
-      <span className={styles.halfLabel}>{label}</span>
+      <span className={styles.sub}>{label}</span>
       <pre className={styles.snippet}>{side.code}</pre>
       <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} />
-      <p className={styles.says}>{side.says}</p>
     </div>
   );
 }
@@ -223,30 +222,25 @@ export function Derivation() {
   return (
     <div className={styles.wrap}>
       {/*
-        The demonstration. No headline over it: the caption says what you are
-        looking at, and a headline above a caption is one of them too many.
+        No prose anywhere on this page.
+
+        Every line of it used to state a fact and then add a clause explaining
+        why the fact mattered, over and over, which is a voice rather than an
+        argument. Two screens compiled from two declarations do not need to be
+        introduced; the labels are the small uppercase mono the console already
+        uses everywhere else, and they name things rather than describe them.
       */}
       <section className={styles.contrast}>
-        <p className={styles.caption}>
-          One tool, declared twice. Everything else is identical, down to the code that draws these
-          two screens.
-        </p>
+        <span className={styles.label}>Same tool &middot; one property different</span>
         <div className={styles.halves}>
-          <Half side={CONTRAST.before} label="As Verdant Market declared it" />
-          <Half side={CONTRAST.after} label={`With one property added to ${CONTRAST.field}`} />
+          <Half side={CONTRAST.before} label="as declared" />
+          <Half side={CONTRAST.after} label="one property added" />
         </div>
       </section>
 
       <section className={styles.sandbox}>
-        <header className={styles.sandboxHead}>
-          <h2 className={styles.h2}>Try it on something else</h2>
-          <p className={styles.sub}>
-            Four declarations from four unrelated domains, and a box you can type your own into.
-            Nothing below is a special case; it is the same compiler answering whatever it is given.
-          </p>
-        </header>
-
         <div className={styles.presets}>
+          <span className={styles.label}>Another declaration</span>
           <fieldset className={styles.segments}>
             <legend className={styles.srOnly}>Example declarations</legend>
             {PRESETS.map((p) => (
@@ -262,127 +256,81 @@ export function Derivation() {
               </button>
             ))}
           </fieldset>
-          <p className={styles.presetPoint}>{preset.point}</p>
         </div>
 
         <div className={styles.pipe}>
           <div className={styles.col}>
-            <label className={styles.field} htmlFor="tool">
-              what {preset.site} declared
+            <label className={styles.sub} htmlFor="tool">
+              tool
             </label>
             <textarea
               id="tool"
               className={styles.code}
               value={toolText}
               spellCheck={false}
-              rows={15}
+              rows={12}
               onChange={(e) => setToolText(e.target.value)}
               aria-label="Tool definition"
             />
-            <p className={styles.foot}>
-              No <code>origin</code>: the browser supplies that, not the site, which is why it is
-              the one field on a tool that can be trusted. A site also has to name Dusky&rsquo;s
-              origin in <code>exposedTo</code> before the browser hands over anything at all.
-            </p>
+            <span className={styles.fine}>
+              <code>origin</code> comes from the browser, not the site. A site must name Dusky in{" "}
+              <code>exposedTo</code>.
+            </span>
 
-            <label className={styles.field} htmlFor="result">
-              what it answers with
+            <label className={styles.sub} htmlFor="result">
+              result
             </label>
             <textarea
               id="result"
               className={styles.code}
               value={resultText}
               spellCheck={false}
-              rows={6}
+              rows={5}
               onChange={(e) => setResultText(e.target.value)}
               aria-label="Tool result"
             />
-
-            <h3 className={styles.h3}>What Dusky worked out</h3>
-            {parsed.error ? (
-              <p className={styles.err}>{parsed.error}</p>
-            ) : (
-              <dl className={styles.facts}>
-                <Fact
-                  label="Called"
-                  fn="label(tool)"
-                  pkg="frames"
-                  value={tool ? label(tool) : ""}
-                />
-                <Fact
-                  label="Can be driven on six keys"
-                  fn="isOperable(tool)"
-                  pkg="frames"
-                  value={yesNo(tool ? isOperable(tool) : false)}
-                  note={
-                    tool && !isOperable(tool)
-                      ? "a required parameter cannot be collected on six keys, so it is left off the menu"
-                      : undefined
-                  }
-                />
-                <Fact
-                  label="Consequence"
-                  fn="gate(tool).consequence"
-                  pkg="policy"
-                  value={g?.consequence ?? ""}
-                />
-                <Fact
-                  label="Stops for a human"
-                  fn="gate(tool).requiresConfirmation"
-                  pkg="policy"
-                  value={yesNo(g?.requiresConfirmation ?? false)}
-                  note={g?.reason}
-                />
-                <Fact label="It will ask for" fn="parameters(tool)" pkg="frames">
-                  {params.length === 0 ? (
-                    <span className={styles.none}>nothing</span>
-                  ) : (
-                    <ul className={styles.rows}>
-                      {params.map((p) => (
-                        <li key={p.name} className={styles.row}>
-                          <code>{p.name}</code>
-                          <span className={styles.kind} data-kind={p.kind}>
-                            {p.kind}
-                          </span>
-                          <span className={styles.becomes}>{becomes(p.kind, p.required)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Fact>
-                <Fact label="It will report" fn="factsFromResult(raw)" pkg="frames">
-                  {facts.length === 0 ? (
-                    <span className={styles.none}>
-                      nothing readable, so the wearer is shown the raw text
-                    </span>
-                  ) : (
-                    <ul className={styles.rows}>
-                      {facts.map((f) => (
-                        <li key={f.label} className={styles.row}>
-                          <code>{f.label}</code>
-                          <span className={styles.becomes}>{f.value}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Fact>
-                <Fact
-                  label="Counted a success"
-                  fn="outcomeFromResult(raw).ok"
-                  pkg="frames"
-                  value={yesNo(outcome.ok)}
-                />
-              </dl>
-            )}
           </div>
 
           <div className={styles.col}>
-            <span className={styles.field}>what the wearer sees</span>
+            <span className={styles.sub}>{preset.site}, on the glasses</span>
             <Lens frame={frame} frameKey={frameKey} session={session} testId="sandbox-panel" />
-            <p className={styles.foot}>
-              The component the glasses run, over the same compiler and the same state machine.
-              Click a choice, or change the declaration and watch this answer.
-            </p>
+
+            {parsed.error ? (
+              <p className={styles.err}>{parsed.error}</p>
+            ) : (
+              <dl className={styles.readout}>
+                <Row k="called" v={tool ? label(tool) : ""} />
+                <Row k="consequence" v={g?.consequence ?? ""} />
+                <Row
+                  k="stops for a human"
+                  v={yesNo(g?.requiresConfirmation ?? false)}
+                  note={g?.reason}
+                />
+                <Row
+                  k="asks for"
+                  v={
+                    params.length === 0
+                      ? "nothing"
+                      : params.map((x) => `${x.name} (${becomes(x.kind, x.required)})`).join(", ")
+                  }
+                />
+                <Row
+                  k="reports"
+                  v={facts.length === 0 ? "raw text" : facts.map((f) => f.label).join(", ")}
+                  note={
+                    tool && !isOperable(tool)
+                      ? "not offered: a required parameter cannot be collected on six keys"
+                      : undefined
+                  }
+                />
+                <Row k="succeeded" v={yesNo(outcome.ok)} />
+              </dl>
+            )}
+
+            <span className={styles.fine}>
+              label &middot; gate &middot; parameters &middot; factsFromResult &middot;
+              outcomeFromResult &middot; isOperable, from @dusky/frames and @dusky/policy
+            </span>
           </div>
         </div>
       </section>
@@ -390,40 +338,14 @@ export function Derivation() {
   );
 }
 
-/**
- * One thing Dusky worked out, and the function that worked it out.
- *
- * The label a reader can use comes first and the function name sits under it in
- * mono. It used to be the other way round, which meant the page introduced
- * every one of its own answers with a symbol only somebody holding the source
- * could read.
- */
-function Fact({
-  label: name,
-  fn,
-  pkg,
-  value,
-  note,
-  children,
-}: {
-  label: string;
-  fn: string;
-  pkg: string;
-  value?: string;
-  note?: string;
-  children?: ReactNode;
-}) {
+/** One derived value. A key and a value, and a reason only when there is one. */
+function Row({ k, v, note }: { k: string; v: string; note?: string }) {
   return (
-    <div className={styles.fact}>
-      <dt className={styles.factKey}>
-        <span className={styles.factLabel}>{name}</span>
-        <code className={styles.factFn}>
-          {fn} <span className={styles.pkg}>@dusky/{pkg}</span>
-        </code>
-      </dt>
-      <dd className={styles.factVal}>
-        {children ?? value}
-        {note && <span className={styles.factNote}>{note}</span>}
+    <div className={styles.row}>
+      <dt className={styles.rowKey}>{k}</dt>
+      <dd className={styles.rowVal}>
+        <span>{v}</span>
+        {note && <span className={styles.rowNote}>{note}</span>}
       </dd>
     </div>
   );

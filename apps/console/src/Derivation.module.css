@@ -18,7 +18,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--dusky-s3) var(--dusky-s4);
+  gap: var(--dusky-s2) var(--dusky-s4);
 }
 
 /*
@@ -73,11 +73,6 @@
 }
 
 /* One line, about the choice actually made. */
-.presetPoint {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--dusky-ink-dim);
-}
 
 /* ------------------------------------------------------------ pipeline */
 
@@ -134,13 +129,40 @@
   gap: var(--dusky-s5);
 }
 
-.caption {
-  margin: 0;
-  max-width: 52ch;
-  font-size: 1.05rem;
+/*
+ * A label, not a sentence.
+ *
+ * The console names things in small uppercase mono everywhere else, and this
+ * page was the one place writing prose at them instead. Every line of it stated
+ * a fact and then explained why the fact mattered, which reads as a voice
+ * rather than as an argument.
+ */
+.label {
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+/* The same idiom one step quieter, for the thing directly under it. */
+.sub {
+  font-family: var(--dusky-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+/* Small print, and it stays small print. */
+.fine {
+  font-size: 0.72rem;
   line-height: 1.5;
-  color: var(--dusky-ink-strong);
-  text-wrap: balance;
+  color: var(--dusky-ink-faint);
+}
+.fine code {
+  font-family: var(--dusky-mono);
+  color: var(--dusky-accent);
 }
 
 .halves {
@@ -151,11 +173,11 @@
 @media (min-width: 900px) {
   .halves {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    /* Four rows, shared. The snippets are three lines on one side and four on
+    /* Three rows, shared. The snippets are three lines on one side and four on
        the other, and without a shared grid that one extra line pushed the right
        hand pair of glasses down the page: two screens meant to be compared,
        deliberately not on the same line as each other. */
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: auto auto auto;
     gap: var(--dusky-s5);
   }
 }
@@ -178,15 +200,10 @@
 @media (min-width: 900px) {
   .half {
     display: grid;
-    grid-row: span 4;
+    grid-row: span 3;
     grid-template-rows: subgrid;
     align-content: start;
   }
-}
-
-.halfLabel {
-  font-size: 0.88rem;
-  color: var(--dusky-ink-dim);
 }
 
 /* The one property that differs, and nothing else. Printing both whole
@@ -206,64 +223,19 @@
   align-self: start;
 }
 
-.says {
-  margin: 0;
-  max-width: 34ch;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--dusky-ink-dim);
-}
-
 /* ------------------------------------------------------------- sandbox */
 
 .sandbox {
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s5);
+  gap: var(--dusky-s4);
   padding-top: var(--dusky-s6);
   border-top: 1px solid var(--dusky-hair);
-}
-
-.sandboxHead {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-}
-
-.h2 {
-  margin: 0;
-  font-weight: 400;
-  font-size: 1.3rem;
-  letter-spacing: -0.02em;
-  color: var(--dusky-ink-strong);
-}
-
-.sub {
-  margin: 0;
-  max-width: 62ch;
-  font-size: 0.95rem;
-  line-height: 1.55;
-  color: var(--dusky-ink-dim);
-}
-
-.h3 {
-  margin: var(--dusky-s4) 0 0;
-  font-weight: 400;
-  font-size: 0.88rem;
-  color: var(--dusky-ink-dim);
 }
 
 /* ---------------------------------------------------------- declaration */
 
 /* The name of the thing in the box, in the box's own language. */
-.field {
-  font-family: var(--dusky-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
-  margin-top: var(--dusky-s2);
-}
 
 /*
  * A field, not a box. A hairline rectangle around a block of monospace inside a
@@ -293,17 +265,6 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dusky-accent) 14%, transparent);
 }
 
-.foot {
-  margin: var(--dusky-s1) 0 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: var(--dusky-ink-faint);
-}
-.foot code {
-  font-family: var(--dusky-mono);
-  color: var(--dusky-accent);
-}
-
 .err {
   margin: 0;
   padding: var(--dusky-s3) var(--dusky-s4);
@@ -314,121 +275,53 @@
   font-size: 0.78rem;
 }
 
-/* ------------------------------------------------------------ derived */
-
-.facts {
-  margin: 0;
+/*
+ * What the compiler worked out, as a short list rather than a table.
+ *
+ * This was seven rows of a label, a value and the name of the function that
+ * produced it, two lines each: the single largest block on the page and the
+ * least persuasive part of it to anybody not holding the source. The function
+ * names are named once, in small print, underneath the list.
+ */
+.readout {
+  margin: var(--dusky-s2) 0 0;
   display: flex;
   flex-direction: column;
 }
 
-/*
- * Label and value on one line, with the function that produced the value under
- * the label. The value spans both rows so a long list of parameters sits beside
- * the whole label rather than beside half of it.
- */
-/* The label track is the wider one. `gate(tool).requiresConfirmation` is the
-   longest string on this page and it has nowhere to break, so a narrow track
-   snapped it mid-word. */
-.fact {
+.row {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
   gap: 0 var(--dusky-s3);
-  padding: var(--dusky-s3) 0;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--dusky-hair-soft);
 }
-.facts > .fact:last-child {
+.readout > .row:last-child {
   border-bottom: 0;
 }
 
-.factKey {
-  grid-column: 1;
+.rowKey {
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+  padding-top: 0.25em;
+}
+
+.rowVal {
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   min-width: 0;
-}
-
-.factLabel {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   color: var(--dusky-ink-strong);
 }
 
-/* Kept, because it is what makes the value above it checkable. Demoted,
-   because it is not what anybody is reading. */
-.factFn {
-  font-family: var(--dusky-mono);
-  font-size: 0.62rem;
-  color: var(--dusky-ink-faint);
-  overflow-wrap: anywhere;
-}
-
-.pkg {
-  color: color-mix(in srgb, var(--dusky-ink-faint) 70%, transparent);
-}
-
-.factVal {
-  grid-column: 2;
-  grid-row: 1;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  font-size: 0.88rem;
-  color: var(--dusky-ink-strong);
-}
-
-.factNote {
-  font-size: 0.8rem;
+.rowNote {
+  font-size: 0.78rem;
   line-height: 1.45;
-  color: var(--dusky-ink-faint);
-}
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--dusky-s2);
-  min-width: 0;
-}
-.row code {
-  font-family: var(--dusky-mono);
-  font-size: 0.8rem;
-  color: var(--dusky-ink-strong);
-}
-
-.kind {
-  font-family: var(--dusky-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.1em 0.45em;
-  border: 1px solid var(--dusky-hair);
-  border-radius: 999px;
-  color: var(--dusky-accent);
-}
-.kind[data-kind="unsupported"] {
-  color: var(--dusky-warn);
-  border-color: var(--dusky-warn);
-}
-
-.becomes {
-  font-size: 0.84rem;
-  color: var(--dusky-ink-dim);
-}
-
-.none {
-  font-size: 0.84rem;
   color: var(--dusky-ink-faint);
 }
 
