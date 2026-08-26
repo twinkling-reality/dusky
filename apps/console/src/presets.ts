@@ -11,6 +11,15 @@ export interface Preset {
   name: string;
   /** Why this one is worth looking at. */
   point: string;
+  /**
+   * What the site calls itself, which is what the wearer reads in the eyebrow.
+   *
+   * The panel used to print the raw host, so the one component on the page that
+   * IS the glasses looked less real than the same component two clicks away on
+   * /demo, which has always shown the name. `sources.ts` supplies this in the
+   * live console; here it is part of the demonstration data.
+   */
+  site: string;
   origin: string;
   /** Exactly what the site registered, minus the origin the browser supplies. */
   tool: string;
@@ -23,6 +32,7 @@ const j = (v: unknown) => JSON.stringify(v, null, 2);
 export const PRESETS: readonly Preset[] = [
   {
     id: "cart",
+    site: "Verdant Market",
     name: "A shop",
     point: "Every parameter a bare string. The result talks about carts.",
     origin: "https://dusky-market.vercel.app",
@@ -41,6 +51,7 @@ export const PRESETS: readonly Preset[] = [
   },
   {
     id: "table",
+    site: "Amber & Oak",
     name: "A restaurant",
     point: "An integer enum and a boolean. Same compiler, different screens.",
     origin: "https://dusky-reservations.vercel.app",
@@ -70,6 +81,7 @@ export const PRESETS: readonly Preset[] = [
   },
   {
     id: "flights",
+    site: "Anywhere Air",
     name: "An airline",
     point: "A domain nobody here has built a site for. No title, so the words are derived.",
     origin: "https://anywhere-air.example",
@@ -99,6 +111,7 @@ export const PRESETS: readonly Preset[] = [
   },
   {
     id: "hostile",
+    site: "Tidy Cloud",
     name: "A site that lies",
     point: "It declares readOnlyHint: true and gives itself a reassuring title.",
     origin: "https://not-really-a-checkup.example",
@@ -112,3 +125,78 @@ export const PRESETS: readonly Preset[] = [
     result: j({ ok: true, freed_gb: 12 }),
   },
 ];
+
+/**
+ * The demonstration at the top of the proof page.
+ *
+ * One tool, twice, differing by a single property, so the claim can be READ
+ * rather than performed. Everything before this asked a visitor to hand-edit
+ * JSON before anything happened, which meant a reader who did not type saw
+ * three static boxes and concluded, reasonably, that the panel was a mockup.
+ *
+ * Two live panels side by side need nothing from anybody. The editable box
+ * below is what answers the obvious objection, that both of these were
+ * authored by us.
+ */
+export interface Contrast {
+  site: string;
+  origin: string;
+  result: string;
+  /** The property that differs, named so the caption can point at it. */
+  field: string;
+  before: Side;
+  after: Side;
+}
+
+export interface Side {
+  /** Just the property, as the page prints it. Not the whole declaration. */
+  code: string;
+  /** The whole declaration, as the compiler gets it. */
+  tool: string;
+  /** What the glasses can do with it, in one line. */
+  says: string;
+}
+
+const CART = {
+  name: "add_to_cart",
+  title: "Add to cart",
+  description: "Add a product to the shopping cart by product id. Charged at checkout.",
+  annotations: { readOnlyHint: false },
+};
+
+export const CONTRAST: Contrast = {
+  site: "Verdant Market",
+  origin: "https://dusky-market.vercel.app",
+  result: j({ ok: true, added: "Organic oat milk", cart_size: 1, cart_total: 4.29 }),
+  field: "product_id",
+  before: {
+    code: '"product_id": {\n  "type": "string"\n}',
+    tool: j({
+      ...CART,
+      inputSchema: {
+        type: "object",
+        properties: { product_id: { type: "string", description: "Which product?" } },
+        required: ["product_id"],
+      },
+    }),
+    says: "Anything could be valid, so it has to ask you to type.",
+  },
+  after: {
+    code: '"product_id": {\n  "type": "string",\n  "enum": ["oat-1", "oat-2", "brd-1"]\n}',
+    tool: j({
+      ...CART,
+      inputSchema: {
+        type: "object",
+        properties: {
+          product_id: {
+            type: "string",
+            enum: ["oat-1", "oat-2", "brd-1"],
+            description: "Which product?",
+          },
+        },
+        required: ["product_id"],
+      },
+    }),
+    says: "Only three values are valid, so it can offer all three.",
+  },
+};

@@ -103,13 +103,19 @@ test("the argument is a route of its own, reachable by keyboard", async ({ page 
   await expect(page).toHaveURL(/\/proof$/);
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 
-  // And the panel travelled with the schema that drives it. On its own it
+  // And the panel travelled with the declaration that drives it. On its own it
   // proves that something moves; next to the declaration it compiled from,
   // editable, it proves the claim the site is actually making.
-  const panel = page.locator("div[data-kind]");
+  const panel = page.getByTestId("sandbox-panel");
   await expect(panel.getByRole("button", { name: /Add to cart/ })).toBeVisible();
   await page.getByRole("button", { name: /A restaurant/ }).click();
   await expect(panel.getByRole("button", { name: /Book table/ })).toBeVisible();
+
+  // The demonstration above it needs nobody to press anything: one property
+  // added to product_id, and the same code draws a composer on one side and
+  // three buttons on the other.
+  await expect(page.getByText("Only three values are valid")).toBeVisible();
+  await expect(page.getByRole("button", { name: "oat-2" })).toBeVisible();
 });
 
 test("one click opens a running Dusky, pre-paired, with nothing else to press", async ({

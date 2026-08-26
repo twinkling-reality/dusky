@@ -28,9 +28,20 @@ async function openSchema(page: Page) {
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 }
 
+/**
+ * The panel that belongs to the editable box.
+ *
+ * There are three sets of glasses on this page now: two compiled from the
+ * demonstration's two declarations, and this one, compiled from whatever is in
+ * the box. Finding a panel by `div[data-kind]` alone matched all three.
+ */
+function sandbox(page: Page) {
+  return page.getByTestId("sandbox-panel");
+}
+
 test("the panel is driven by whichever schema is in the box", async ({ page }) => {
   await openSchema(page);
-  const panel = page.locator("div[data-kind]");
+  const panel = sandbox(page);
 
   // The shop's tool supplies a title, so the title is what the wearer reads.
   await expect(panel.getByRole("button", { name: /Add to cart/ })).toBeVisible();
@@ -56,7 +67,7 @@ test("a site's own annotation cannot lower the ceremony below what it earns", as
 test("each parameter kind turns into the frame the schema implies", async ({ page }) => {
   await openSchema(page);
   await page.getByRole("button", { name: /A restaurant/ }).click();
-  const panel = page.locator("div[data-kind]");
+  const panel = sandbox(page);
 
   await panel.getByRole("button", { name: /Book table/ }).click();
 
@@ -86,7 +97,7 @@ test("each parameter kind turns into the frame the schema implies", async ({ pag
  */
 test("editing the schema changes the screens", async ({ page }) => {
   await openSchema(page);
-  const panel = page.locator("div[data-kind]");
+  const panel = sandbox(page);
   const box = page.getByLabel("Tool definition");
 
   await panel.getByRole("button", { name: /Add to cart/ }).click();
