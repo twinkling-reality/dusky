@@ -11,6 +11,7 @@ export default defineConfig({
       "@dusky/policy": pkg("policy"),
       "@dusky/frames": pkg("frames"),
       "@dusky/webmcp": pkg("webmcp"),
+      "@dusky/planner": pkg("planner"),
       "@dusky/session": pkg("session"),
       "@dusky/tokens": pkg("tokens"),
     },
