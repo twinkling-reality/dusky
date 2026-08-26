@@ -17,14 +17,14 @@ import { expect, type Page, test } from "@playwright/test";
 const CONSOLE = "http://localhost:7803";
 
 /**
- * Open the front door and expand the annotation holding the schema boxes.
+ * Open the page the argument lives on.
  *
- * The panel is always visible in its own cell; the boxes that drive it are
- * behind "See examples", collapsed by default so the page stays one screen.
+ * A route of its own rather than a drawer under the hero. It was a drawer, and
+ * a drawer that unfolds a second screenful under a front door makes one page
+ * pretending to be two.
  */
 async function openSchema(page: Page) {
-  await page.goto(CONSOLE);
-  await page.getByRole("button", { name: /See examples/ }).click();
+  await page.goto(`${CONSOLE}/proof`);
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 }
 

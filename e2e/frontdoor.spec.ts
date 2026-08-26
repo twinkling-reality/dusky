@@ -10,64 +10,120 @@ import { expect, test } from "@playwright/test";
 
 const SITE = "http://localhost:7803";
 
-test("the front door states the browser requirement before anything breaks", async ({ page }) => {
+test("the front door states what it is, once, without an acronym in the headline", async ({
+  page,
+}) => {
   await page.goto(SITE);
 
-  // Exactly one h1, and it is the page's own: the panel inside the drawing
-  // drops to an h2 so it does not compete with the document around it.
+  // Exactly one h1, and it is the page's own: the panel in the examples drops
+  // to an h2 so it does not compete with the document around it.
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("web made of tools");
-  // Stated where somebody decides to click, rather than discovered on failure.
-  await expect(page.getByText(/Chrome 149\+ with the WebMCP flag/)).toBeVisible();
-  // A live panel, not a picture of one, and it needs no WebMCP to run.
-  await expect(page.locator("div[data-kind]")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("web actions");
+
+  // No acronym in the headline itself. The subtitle names the protocol once,
+  // which is where a judge scoring WebMCP leverage looks and where it costs a
+  // stranger one clause rather than the whole hero.
+  await expect(page.getByRole("heading", { level: 1 })).not.toContainText("WebMCP");
 });
 
-test("the examples open by keyboard as well as by mouse", async ({ page }) => {
+test("the requirements are one press away, and stated whether or not this browser meets them", async ({
+  page,
+}) => {
   await page.goto(SITE);
+
+  // Shut by default, because this suite runs the browser that meets them and a
+  // list telling a working browser that it works is a third of a front door
+  // spent on nothing.
+  await expect(page.getByText("This browser speaks WebMCP")).toHaveCount(0);
+
+  // The verdict is on screen the whole time even so, so nobody has to press
+  // anything to learn whether they are fine.
+  const button = page.getByRole("button", { name: /Requirements/ });
+  await expect(button).toHaveAttribute("data-state", "ok");
+  await expect(button).toHaveAccessibleName(/all met in this browser/);
+
+  await button.click();
+
+  // All three are stated, including the two that passed. A requirement that
+  // only appears once it is unmet is a requirement nobody read in time.
+  await expect(page.getByText("This browser speaks WebMCP")).toBeVisible();
+  await expect(page.getByText("Tools register and read back")).toBeVisible();
+  await expect(page.getByText("Dusky's relay answers")).toBeVisible();
+
+  // And they are probed, not decorative: Chrome with the flag is exactly what
+  // this suite runs, so all three have to come back met.
+  await expect(page.getByText("3/3", { exact: true })).toBeVisible();
+
+  // It closes the way everything closes.
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("This browser speaks WebMCP")).toHaveCount(0);
+});
+
+test("a browser that cannot run Dusky is told so without pressing anything", async ({ page }) => {
+  // The judge who has not set the flag is the one visitor who must not have to
+  // find the remedy, so the panel opens itself rather than waiting to be asked.
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", { get: () => undefined, configurable: true });
+  });
+  await page.goto(SITE);
+
+  await expect(page.getByRole("button", { name: /Requirements/ })).toHaveAttribute(
+    "data-state",
+    "bad",
+  );
+  await expect(page.getByText("This browser speaks WebMCP")).toBeVisible();
+
+  // The unmet one is open on arrival, so the remedy needs no second press.
+  await expect(page.getByText("chrome://flags/#enable-webmcp-testing")).toBeVisible();
+
+  // Untestable is not failed. With no API there is nothing to register against,
+  // and saying so beats inventing either answer.
+  await expect(
+    page.getByText("Nothing to test against until the line above passes."),
+  ).toBeVisible();
+});
+
+test("the argument is a route of its own, reachable by keyboard", async ({ page }) => {
+  await page.goto(SITE);
+
+  // The front door carries the claim and the product. It does not carry the
+  // proof: that was a drawer unfolding a second screenful underneath a hero,
+  // which made one page pretend to be two.
   await expect(page.getByLabel("Tool definition")).toHaveCount(0);
+  await expect(page.locator("div[data-kind]")).toHaveCount(0);
 
   // A page arguing that six keys are enough cannot need a mouse at its door.
-  const open = page.getByRole("button", { name: /See examples/ });
+  const open = page.getByRole("link", { name: "Proof" });
   await open.focus();
   await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/proof$/);
   await expect(page.getByLabel("Tool definition")).toBeVisible();
-});
 
-test("the schema and the lens are one machine, not two", async ({ page }) => {
-  await page.goto(SITE);
+  // And the panel travelled with the schema that drives it. On its own it
+  // proves that something moves; next to the declaration it compiled from,
+  // editable, it proves the claim the site is actually making.
   const panel = page.locator("div[data-kind]");
   await expect(panel.getByRole("button", { name: /Add to cart/ })).toBeVisible();
-
-  // The boxes live in a different cell from the panel. Editing one has to
-  // move the other, or they are two independent sessions wearing one layout.
-  await page.getByRole("button", { name: /See examples/ }).click();
   await page.getByRole("button", { name: /A restaurant/ }).click();
   await expect(panel.getByRole("button", { name: /Book table/ })).toBeVisible();
 });
 
-test("the checklist probes this browser and collapses when it is happy", async ({ page }) => {
+test("one click opens a running Dusky, pre-paired, with nothing else to press", async ({
+  page,
+}) => {
   await page.goto(SITE);
-  // Chrome with the flag is exactly what this suite runs, so every check
-  // should pass and the panel should reduce itself to one line.
-  await expect(page.getByText("Everything this needs is working in this browser")).toBeVisible();
+  await page.getByRole("link", { name: "Open Dusky" }).click();
+  await expect(page).toHaveURL(/\/demo/);
 
-  await page.getByRole("button", { name: "show the checks" }).click();
-  await expect(page.getByText("This browser speaks WebMCP")).toBeVisible();
-  await expect(page.getByText("Tools can be registered and read back")).toBeVisible();
-  await expect(page.getByText("Dusky's session relay is reachable")).toBeVisible();
-});
-
-test("one click opens a working demo, pre-paired, with no typing", async ({ page }) => {
-  await page.goto(SITE);
-  await page.getByRole("link", { name: "Open the demo" }).click();
-  await expect(page).toHaveURL(/\/demo$/);
-
-  await page.getByRole("button", { name: /Try it now/ }).click();
+  // No second button. The front door used to land on a page whose middle was
+  // another button, which is most of why its own label had to be "the demo".
+  await expect(page.getByRole("button", { name: /Try it now/ })).toHaveCount(0);
 
   // A code was minted and put in the URL, so the session is shareable and
-  // survives a reload.
+  // survives a reload. `start` is spent, not carried: a link with it still in
+  // would mint a second session for whoever opened it.
   await expect(page).toHaveURL(/session=[A-Z]{6}/);
+  await expect(page).not.toHaveURL(/start=/);
 
   // Everything in one tab: the glasses view, the partner site, the log.
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
@@ -77,8 +133,10 @@ test("one click opens a working demo, pre-paired, with no typing", async ({ page
   );
   await expect(page.getByText("getTools({fromOrigins})")).toBeVisible();
 
-  // And the thing a judge must not have to discover by closing the tab.
-  await expect(page.getByText(/tools run/)).toBeVisible();
+  // And the thing a judge must not have to discover by closing the tab. It is
+  // the first words of a sentence now rather than the middle of one, so the
+  // match cannot depend on the case of the T.
+  await expect(page.getByText(/tools run/i)).toBeVisible();
   await expect(page.getByText(/closing this tab ends the session/)).toBeVisible();
 
   // The bar carries the live session state, and a way back to the argument.
@@ -86,11 +144,23 @@ test("one click opens a working demo, pre-paired, with no typing", async ({ page
   await expect(page.getByRole("banner").getByRole("link", { name: "How it works" })).toBeVisible();
 });
 
+test("the start card still works for somebody who arrives at /demo directly", async ({ page }) => {
+  // `?start=1` is what the front door links to. The card behind it is the only
+  // way to pair real glasses, so it cannot quietly rot.
+  await page.goto(`${SITE}/demo`);
+  await page.getByRole("button", { name: /Try it now/ }).click();
+  await expect(page).toHaveURL(/session=[A-Z]{6}/);
+  await expect(
+    page.frameLocator('iframe[title="Dusky on the glasses"]').getByRole("button", {
+      name: /Add to cart/,
+    }),
+  ).toBeVisible();
+});
+
 test("a gesture in the embedded panel changes the partner site in the same tab", async ({
   page,
 }) => {
-  await page.goto(`${SITE}/demo`);
-  await page.getByRole("button", { name: /Try it now/ }).click();
+  await page.goto(`${SITE}/demo?start=1`);
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
   const cart = page.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
@@ -111,8 +181,7 @@ test("a gesture in the embedded panel changes the partner site in the same tab",
 });
 
 test("the same tab can be pointed at a completely different site", async ({ page }) => {
-  await page.goto(`${SITE}/demo`);
-  await page.getByRole("button", { name: /Try it now/ }).click();
+  await page.goto(`${SITE}/demo?start=1`);
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
   await expect(lens.getByRole("button", { name: /Add to cart/ })).toBeVisible();
