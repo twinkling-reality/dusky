@@ -168,9 +168,13 @@ Worth listing separately: these were all live in a passing test suite.
 
 Honest gaps, not oversights.
 
-- **WebSocket survival across display sleep and dim.** The reconnect logic
-  retries forever with backoff, and has never been tested against a real radio
-  going quiet.
+- **WebSocket survival across display sleep and dim.** Partially answered.
+  The glasses survived a full relay redeploy on 2026-08-26: Render restarted
+  the service, every socket dropped for roughly forty seconds, and the Display
+  reconnected on its own with no wearer action and no lost pairing. That covers
+  relay downtime while the panel is awake. What is still untested is the radio
+  going quiet because the DISPLAY slept, which suspends the page rather than
+  closing the socket, and is a different failure.
 - **The composer's focus-then-tap behaviour** on handwriting and dictation.
 - **How a wearer launches or exits a web app on the glasses.** Meta's own
   documentation covers deployment and the companion-app flow in detail and does
