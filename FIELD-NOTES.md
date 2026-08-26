@@ -202,6 +202,27 @@ Worth listing separately: these were all live in a passing test suite.
   `{"ok": false, "error": "out of stock"}` has returned a result, and that
   result is a failure. Asserting success from the fact that a call came back is
   the same mistake the rule against it was written to prevent.
+- **The same lie came back through a different door.** "No actions available
+  here / This source declared no usable tools" was fixed once, in the relay,
+  which now stays silent until a console pairs. It was still reachable three
+  other ways, and only one of the four was true. The console caught a thrown
+  `discover` and reported it to the relay as an empty tool list, so a browser
+  with no WebMCP produced a confident statement about a shop it had never
+  reached, while the actual reason went into the console's own activity log on
+  a screen the wearer is not looking at. The `tools` message now carries an
+  `error`, exactly as `invoked` always did, and the wearer gets "Cannot reach
+  this source" with the real reason and a retry that works.
+
+  The second half is subtler and worth keeping. Even when discovery SUCCEEDS,
+  zero tools does not mean the site declared none: it may have declared plenty
+  and not named this origin in `exposedTo`, or its page may not have registered
+  yet. None of that is distinguishable from here. The note now says the source
+  "has not offered any actions", which is a claim about what arrived rather
+  than about somebody else's page, and is true in all four cases.
+
+  The general lesson is that a message can be true when it is written and
+  become a lie when a new code path reaches it. The fix that matters is
+  wording that cannot be false, not another guard.
 - **"Tap to speak" had nothing to tap.** The composer was only ever produced by
   the parameter-collection frame, so the planner's entry point was unreachable
   from the glasses and could only be driven by an agent.
