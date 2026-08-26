@@ -12,17 +12,15 @@ import header from "./SiteHeader.module.css";
  * EDITABLE declaration does settle it, because a hardcoded interface cannot
  * answer an edit. So the machine IS the page, and nothing is stacked above it.
  *
- * There is no headline, and that is deliberate. The three columns are labelled
- * Declared, Derived and Displayed, in sequence, and a headline over them would
- * be a fourth thing saying what they already say. What a stranger cannot infer
- * is that the left box can be typed into and the right panel is real, and both
- * of those are said beside the thing they are true of rather than above the
- * whole page.
+ * It had no heading for a while, on the theory that labelled columns say what
+ * they are and a heading over them is a fourth thing saying it again. That was
+ * wrong, and it was wrong for a reason worth writing down: the labels named the
+ * wrong axis. They said how the two columns DIFFER, and never once said what
+ * the code is, what the black square is, or that the first produced the second.
+ * Somebody arriving cold had nothing at all.
  *
- * This page carried three summary cards and a closing paragraph as well. The
- * cards restated the chooser directly underneath them with different
- * membership, so the same taxonomy appeared twice and neither copy looked like
- * the one you could press.
+ * So there are three sentences here, and each of them carries something the
+ * page cannot show. Not a fourth restatement of the columns.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
@@ -40,8 +38,14 @@ export function Proof() {
       </SiteHeader>
 
       <main className={styles.page}>
-        {/* The document needs a name even where the page does not show one. */}
-        <h1 className={styles.srOnly}>How a declaration becomes a screen</h1>
+        <header className={styles.head}>
+          <h1 className={styles.title}>Where the screen comes from</h1>
+          <p className={styles.intro}>
+            A website can publish a machine-readable list of the things it can do. Dusky reads that
+            list and builds the screen on the glasses out of it. Nothing on that screen was written
+            for this shop, or for any other one.
+          </p>
+        </header>
         <Derivation />
       </main>
     </>

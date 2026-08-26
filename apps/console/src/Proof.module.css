@@ -8,20 +8,34 @@
 .page {
   max-width: var(--dusky-page);
   margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s6);
   padding-top: clamp(2rem, 6vh, 3.5rem);
   padding-bottom: var(--dusky-s7);
   padding-inline: var(--dusky-s5);
 }
 
-/* Named for anything that cannot see the columns, and not taking a line from
-   anything that can. */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+}
+
+.title {
+  margin: 0;
+  font-weight: 300;
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--dusky-ink-strong);
+}
+
+/* Three sentences, and each carries something the page cannot show. */
+.intro {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--dusky-ink-dim);
 }

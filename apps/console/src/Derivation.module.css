@@ -116,13 +116,6 @@
 
 /* -------------------------------------------------------- demonstration */
 
-/*
- * Two halves of one comparison, side by side.
- *
- * Side by side rather than one after the other, because the whole point is
- * seeing both at once: a reader should not have to hold the first screen in
- * their head while they scroll to the second.
- */
 .contrast {
   display: flex;
   flex-direction: column;
@@ -130,12 +123,143 @@
 }
 
 /*
- * A label, not a sentence.
+ * A matrix, because there are two axes and only one of them was ever named.
  *
+ * Across: the same list, published two ways. Down: what a site publishes, and
+ * what Dusky makes of it. Labelling only the columns told a reader how the two
+ * halves differed without ever telling them what either half WAS, which is how
+ * somebody can arrive at this page and have nothing to hold on to.
+ */
+.matrix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--dusky-s3);
+  align-items: start;
+}
+
+@media (min-width: 940px) {
+  .matrix {
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--dusky-s5);
+    row-gap: var(--dusky-s4);
+  }
+  .colHead {
+    grid-row: 1;
+  }
+  .colHead[data-col="a"] {
+    grid-column: 2;
+  }
+  .colHead[data-col="b"] {
+    grid-column: 3;
+  }
+  .gutter {
+    grid-column: 1;
+    padding-top: 0.4rem;
+  }
+  .gutter[data-row="1"] {
+    grid-row: 2;
+  }
+  .gutter[data-row="2"] {
+    grid-row: 3;
+  }
+  .snippet[data-col="a"],
+  .cell[data-col="a"] {
+    grid-column: 2;
+  }
+  .snippet[data-col="b"],
+  .cell[data-col="b"] {
+    grid-column: 3;
+  }
+  .snippet[data-row="1"] {
+    grid-row: 2;
+  }
+  .cell[data-row="2"] {
+    grid-row: 3;
+  }
+}
+
+/*
+ * Below the matrix width the gutter cannot sit beside anything, so the whole
+ * thing becomes one column and the labels are reordered to introduce the cells
+ * they name instead of standing beside them.
+ */
+@media (max-width: 939px) {
+  .matrix {
+    display: flex;
+    flex-direction: column;
+  }
+  .gutter[data-row="1"] {
+    order: 1;
+  }
+  .colHead[data-col="a"] {
+    order: 2;
+  }
+  .snippet[data-col="a"] {
+    order: 3;
+  }
+  .colHead[data-col="b"] {
+    order: 4;
+  }
+  .snippet[data-col="b"] {
+    order: 5;
+  }
+  .gutter[data-row="2"] {
+    order: 6;
+    margin-top: var(--dusky-s3);
+  }
+  .cell[data-col="a"] {
+    order: 7;
+  }
+  .cell[data-col="b"] {
+    order: 8;
+  }
+}
+
+/* What a site publishes, and what Dusky makes of it. The two things this page
+   is actually about, and until now the two it never named. */
+.gutter {
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: var(--dusky-ink-strong);
+  text-wrap: balance;
+}
+
+/* Which of the two lists this column is. Quieter than the gutter, because it
+   is the smaller of the two distinctions. */
+.colHead {
+  font-family: var(--dusky-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+  padding-bottom: var(--dusky-s2);
+  border-bottom: 1px solid var(--dusky-hair);
+}
+
+/* Just the property that differs, not the whole list. Printing both lists whole
+   would put eighty lines of near-identical JSON on the page and bury the one
+   line that is the point. */
+.snippet {
+  margin: 0;
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dusky-ink-strong) 4%, transparent);
+  font-family: var(--dusky-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--dusky-ink);
+  overflow-x: auto;
+  max-width: 100%;
+  align-self: start;
+}
+
+.cell {
+  min-width: 0;
+}
+
+/*
  * The console names things in small uppercase mono everywhere else, and this
- * page was the one place writing prose at them instead. Every line of it stated
- * a fact and then explained why the fact mattered, which reads as a voice
- * rather than as an argument.
+ * page was the one place writing prose at them instead.
  */
 .label {
   font-family: var(--dusky-mono);
@@ -163,64 +287,6 @@
 .fine code {
   font-family: var(--dusky-mono);
   color: var(--dusky-accent);
-}
-
-.halves {
-  display: grid;
-  gap: var(--dusky-s6);
-  grid-template-columns: minmax(0, 1fr);
-}
-@media (min-width: 900px) {
-  .halves {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    /* Three rows, shared. The snippets are three lines on one side and four on
-       the other, and without a shared grid that one extra line pushed the right
-       hand pair of glasses down the page: two screens meant to be compared,
-       deliberately not on the same line as each other. */
-    grid-template-rows: auto auto auto;
-    gap: var(--dusky-s5);
-  }
-}
-
-/* A hairline along the top, in the manner of a column rule rather than a box.
-   Two outlined rectangles inside a page that already has rules drawn down both
-   margins is two framing systems arguing. */
-.half {
-  display: flex;
-  flex-direction: column;
-  align-items: start;
-  justify-items: start;
-  gap: var(--dusky-s3);
-  padding-top: var(--dusky-s3);
-  border-top: 1px solid var(--dusky-hair);
-  min-width: 0;
-}
-/* After the base rule, not with the container's, because the two selectors have
-   the same specificity and source order is the only thing separating them. */
-@media (min-width: 900px) {
-  .half {
-    display: grid;
-    grid-row: span 3;
-    grid-template-rows: subgrid;
-    align-content: start;
-  }
-}
-
-/* The one property that differs, and nothing else. Printing both whole
-   declarations would have put eighty lines of near-identical JSON on the page
-   and buried the one line that is the point. */
-.snippet {
-  margin: 0;
-  padding: var(--dusky-s3) var(--dusky-s4);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--dusky-ink-strong) 4%, transparent);
-  font-family: var(--dusky-mono);
-  font-size: 0.76rem;
-  line-height: 1.6;
-  color: var(--dusky-ink);
-  overflow-x: auto;
-  max-width: 100%;
-  align-self: start;
 }
 
 /* ------------------------------------------------------------- sandbox */

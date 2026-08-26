@@ -183,15 +183,26 @@ function Lens({
   );
 }
 
-/** One half of the comparison: the property, and the screen it produced. */
-function Half({ side, label }: { side: Side; label: string }) {
+/**
+ * One column of the comparison: a property, and the screen it produced.
+ *
+ * Two cells placed into the matrix rather than one stacked block, so the row
+ * labels in the gutter line up with what they name.
+ */
+function Variant({ side, col, head }: { side: Side; col: string; head: string }) {
   const c = useCompiled(side.tool, CONTRAST.result, CONTRAST.origin, CONTRAST.site, true);
   return (
-    <div className={styles.half}>
-      <span className={styles.sub}>{label}</span>
-      <pre className={styles.snippet}>{side.code}</pre>
-      <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} />
-    </div>
+    <>
+      <span className={styles.colHead} data-col={col}>
+        {head}
+      </span>
+      <pre className={styles.snippet} data-col={col} data-row="1">
+        {side.code}
+      </pre>
+      <div className={styles.cell} data-col={col} data-row="2">
+        <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} />
+      </div>
+    </>
   );
 }
 
@@ -231,16 +242,29 @@ export function Derivation() {
         uses everywhere else, and they name things rather than describe them.
       */}
       <section className={styles.contrast}>
-        <span className={styles.label}>Same tool &middot; one property different</span>
-        <div className={styles.halves}>
-          <Half side={CONTRAST.before} label="as declared" />
-          <Half side={CONTRAST.after} label="one property added" />
+        {/*
+          Both axes named.
+          
+          The labels here used to name only how the two columns differ, so a
+          reader was told "one property added" without ever being told what the
+          code was, what the black square was, or that the first produced the
+          second. The gutter is the half that was missing.
+        */}
+        <div className={styles.matrix}>
+          <span className={styles.gutter} data-row="1">
+            what the site publishes
+          </span>
+          <span className={styles.gutter} data-row="2">
+            what Dusky puts on the glasses
+          </span>
+          <Variant side={CONTRAST.before} col="a" head="as published" />
+          <Variant side={CONTRAST.after} col="b" head="one line added" />
         </div>
       </section>
 
       <section className={styles.sandbox}>
         <div className={styles.presets}>
-          <span className={styles.label}>Another declaration</span>
+          <span className={styles.label}>The same, on three other sites</span>
           <fieldset className={styles.segments}>
             <legend className={styles.srOnly}>Example declarations</legend>
             {PRESETS.map((p) => (
@@ -261,7 +285,7 @@ export function Derivation() {
         <div className={styles.pipe}>
           <div className={styles.col}>
             <label className={styles.sub} htmlFor="tool">
-              tool
+              what the site publishes
             </label>
             <textarea
               id="tool"
@@ -278,7 +302,7 @@ export function Derivation() {
             </span>
 
             <label className={styles.sub} htmlFor="result">
-              result
+              what it answers with
             </label>
             <textarea
               id="result"
@@ -292,7 +316,7 @@ export function Derivation() {
           </div>
 
           <div className={styles.col}>
-            <span className={styles.sub}>{preset.site}, on the glasses</span>
+            <span className={styles.sub}>what Dusky puts on the glasses</span>
             <Lens frame={frame} frameKey={frameKey} session={session} testId="sandbox-panel" />
 
             {parsed.error ? (
