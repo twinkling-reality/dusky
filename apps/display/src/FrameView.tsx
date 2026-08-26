@@ -70,7 +70,22 @@ export function FrameView({ frame, frameKey, onChoose, onBack, onText }: Props) 
           </>
         )}
 
-        {frame.kind === "result" && frame.detail && <p className={styles.detail}>{frame.detail}</p>}
+        {frame.kind === "result" && frame.facts && frame.facts.length > 0 && (
+          <dl className={styles.facts}>
+            {frame.facts.map((f) => (
+              <div key={f.label} className={styles.fact}>
+                <dt className={styles.factLabel}>{f.label}</dt>
+                <dd className={styles.factValue}>{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
+        {/* Only when nothing could be structured, so the wearer still sees
+            what the site said rather than an empty frame. */}
+        {frame.kind === "result" && !frame.facts?.length && frame.detail && (
+          <p className={styles.detail}>{frame.detail}</p>
+        )}
 
         {frame.kind === "error" && frame.detail && <p className={styles.detail}>{frame.detail}</p>}
       </div>

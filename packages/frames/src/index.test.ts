@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   candidatesFromResult,
   confirmFrame,
+  factsFromResult,
   idleFrame,
   isOperable,
   MAX_CHOICES,
   nextMissingParam,
+  outcomeFromResult,
   parameters,
   paramFrame,
 } from "./index.js";
@@ -143,5 +145,105 @@ describe("the gate", () => {
     expect(f.consequence).toBe("$4.29");
     expect(f.choices.map((c) => c.id)).toEqual(["__confirm", "__cancel"]);
     expect(f.choices[1]!.tone).toBe("danger");
+  });
+});
+
+/**
+ * Reading an arbitrary tool result.
+ *
+ * The site whose keys these tests DO NOT use is the point. Dusky's claim is
+ * that it works against a tool nobody has ever seen, and the previous
+ * summarizer quietly failed that claim for every site except the first-party
+ * test market.
+ */
+describe("facts lifted from a result", () => {
+  it("reads a shape nobody has seen before", () => {
+    const raw = JSON.stringify({
+      reservation_id: "R-8841",
+      restaurant: "Kaldi House",
+      party_size: 2,
+      confirmed: true,
+    });
+    expect(factsFromResult(raw)).toEqual([
+      { label: "Reservation id", value: "R-8841" },
+      { label: "Restaurant", value: "Kaldi House" },
+      { label: "Party size", value: "2" },
+      { label: "Confirmed", value: "Yes" },
+    ]);
+  });
+
+  it("reads camelCase as readily as snake_case", () => {
+    expect(factsFromResult(JSON.stringify({ orderNumber: "A7" }))).toEqual([
+      { label: "Order number", value: "A7" },
+    ]);
+  });
+
+  it("formats anything money-shaped, because a misread price is the worst error", () => {
+    const facts = factsFromResult(JSON.stringify({ total: 4.3, subtotal: 4, quantity: 2 }));
+    expect(facts).toEqual([
+      { label: "Total", value: "$4.30" },
+      { label: "Subtotal", value: "$4.00" },
+      { label: "Quantity", value: "2" },
+    ]);
+  });
+
+  it("reads through a single wrapper object", () => {
+    const raw = JSON.stringify({ product: { name: "Organic oat milk", price: 4.29 } });
+    expect(factsFromResult(raw)).toEqual([
+      { label: "Name", value: "Organic oat milk" },
+      { label: "Price", value: "$4.29" },
+    ]);
+  });
+
+  it("counts a list rather than trying to show it", () => {
+    expect(factsFromResult(JSON.stringify({ items: [1, 2, 3] }))).toEqual([
+      { label: "Items", value: "3 items" },
+    ]);
+  });
+
+  it("shows nothing it cannot show honestly", () => {
+    // A nested object cannot be checked at a glance, so it is not offered.
+    expect(factsFromResult(JSON.stringify({ meta: { a: { b: 1 } }, ok: true }))).toEqual([]);
+    expect(factsFromResult("not json")).toEqual([]);
+  });
+
+  it("fits the frame", () => {
+    const wide = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`field_${i}`, `value ${i}`]),
+    );
+    expect(factsFromResult(JSON.stringify(wide))).toHaveLength(4);
+  });
+});
+
+describe("whether a result says it worked", () => {
+  it("treats a returned answer as success by default", () => {
+    expect(outcomeFromResult(JSON.stringify({ added: "oat milk" }))).toEqual({ ok: true });
+    expect(outcomeFromResult("plain text")).toEqual({ ok: true });
+  });
+
+  it("believes an explicit failure, whatever the call did", () => {
+    // Rule 3 cuts both ways: a returned {"ok": false} IS a returned result,
+    // and reporting it as success is asserting from having called.
+    expect(outcomeFromResult(JSON.stringify({ ok: false, message: "Out of stock" }))).toEqual({
+      ok: false,
+      message: "Out of stock",
+    });
+    expect(outcomeFromResult(JSON.stringify({ success: false }))).toEqual({
+      ok: false,
+      message: undefined,
+    });
+    expect(outcomeFromResult(JSON.stringify({ error: "card declined" }))).toEqual({
+      ok: false,
+      message: "card declined",
+    });
+    expect(outcomeFromResult(JSON.stringify({ error: { message: "nope" } }))).toEqual({
+      ok: false,
+      message: "nope",
+    });
+  });
+
+  it("does not invent a failure from an empty or absent signal", () => {
+    expect(outcomeFromResult(JSON.stringify({ error: "" })).ok).toBe(true);
+    expect(outcomeFromResult(JSON.stringify({ ok: true })).ok).toBe(true);
   });
 });

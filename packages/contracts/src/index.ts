@@ -37,6 +37,19 @@ export interface ToolDescriptor {
 
 export type ChoiceTone = "default" | "danger";
 
+/**
+ * One labelled value read out of a tool result.
+ *
+ * Facts are extracted from the site's own returned JSON, never written by a
+ * model and never composed as prose. A wearer reading a fact is reading what
+ * the site actually said, which is the only reason a glanceable summary can be
+ * trusted at all.
+ */
+export interface Fact {
+  label: string;
+  value: string;
+}
+
 export interface Choice {
   id: string;
   label: string;
@@ -69,9 +82,12 @@ export type DisplayFrame =
   | {
       kind: "result";
       source: string;
+      /** Read from the returned result. A returned error is NOT a success. */
       ok: boolean;
       title: string;
       detail?: string;
+      /** Short labelled values lifted from the result, for a glance. */
+      facts?: Fact[];
       choices: Choice[];
     }
   | {

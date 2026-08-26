@@ -13,13 +13,16 @@
 
 import type { AuditEntry, Choice, DisplayFrame, ToolDescriptor } from "@dusky/contracts";
 import {
+  busyFrame,
   candidatesFromResult,
   confirmFrame,
   errorFrame,
+  factsFromResult,
   idleFrame,
   isOperable,
   label,
   nextMissingParam,
+  outcomeFromResult,
   parameters,
   paramFrame,
   resultFrame,
@@ -70,6 +73,15 @@ export interface SessionOptions {
   invokeTimeoutMs?: number;
   now?: () => number;
   onAudit?: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
+  /**
+   * Fired for EVERY frame the wearer should see, as it happens.
+   *
+   * Without this a transport can only read the frame a call settles on, so
+   * every intermediate state is invisible: a wearer stares at an unchanged
+   * screen for the whole of a model call and a tool invocation, which on a
+   * cursorless display is indistinguishable from a crash.
+   */
+  onTransition?: (frame: DisplayFrame) => void;
 }
 
 /* ------------------------------------------------------------------ state */
@@ -116,6 +128,19 @@ export class Session {
     return this.frame;
   }
 
+  /**
+   * The only place `frame` is assigned.
+   *
+   * Routing every change through here is what makes intermediate states
+   * observable rather than merely computed, and it is why a transport does
+   * not have to guess when to repaint.
+   */
+  private show(f: DisplayFrame): DisplayFrame {
+    this.frame = f;
+    this.o.onTransition?.(f);
+    return f;
+  }
+
   private byName(name: string): ToolDescriptor | undefined {
     return this.tools.find((t) => t.name === name);
   }
@@ -131,9 +156,9 @@ export class Session {
       this.toolsChangedAt = this.now();
       this.audit({ kind: "discover", detail: { count: this.tools.length } });
       this.page = 0;
-      this.frame = idleFrame(this.o.source, this.tools, 0);
+      this.show(idleFrame(this.o.source, this.tools, 0));
     } catch (err) {
-      this.frame = errorFrame(this.o.source, "Cannot reach this source", msg(err), true);
+      this.show(errorFrame(this.o.source, "Cannot reach this source", msg(err), true));
     }
     return this.frame;
   }
@@ -142,6 +167,11 @@ export class Session {
   async submitIntent(text: string): Promise<DisplayFrame> {
     this.intent = text;
     if (!this.o.planner) return this.frame;
+
+    // The wearer caused this wait, so they have to see it. The title echoes
+    // what Dusky heard, because a misheard request is the thing they most
+    // need to catch before it turns into an action.
+    this.show(busyFrame(this.o.source, text, "Finding the right action"));
 
     // A planner is assistance, never a dependency. Anything it does wrong,
     // including throwing, has to land the wearer on the menu they can already
@@ -154,10 +184,7 @@ export class Session {
     }
 
     // A planner that is unsure must produce a question, never a guess.
-    if (!pick) {
-      this.frame = idleFrame(this.o.source, this.tools, 0);
-      return this.frame;
-    }
+    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0));
 
     const tool = this.byName(pick.name);
     if (!tool) {
@@ -167,8 +194,7 @@ export class Session {
         toolName: pick.name,
         detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
       });
-      this.frame = idleFrame(this.o.source, this.tools, 0);
-      return this.frame;
+      return this.show(idleFrame(this.o.source, this.tools, 0));
     }
 
     const args = declaredArgs(tool, pick.args ?? {});
@@ -192,8 +218,7 @@ export class Session {
         this.audit({ kind: "cancel", toolName: this.pending?.tool.name });
       this.pending = null;
       this.page = 0;
-      this.frame = idleFrame(this.o.source, this.tools, 0);
-      return this.frame;
+      return this.show(idleFrame(this.o.source, this.tools, 0));
     }
     if (choiceId === "__retry") {
       if (!this.pending) return this.frame;
@@ -227,8 +252,7 @@ export class Session {
 
   private repaint(): DisplayFrame {
     if (this.pending?.awaiting) return this.frame;
-    this.frame = idleFrame(this.o.source, this.tools, this.page);
-    return this.frame;
+    return this.show(idleFrame(this.o.source, this.tools, this.page));
   }
 
   private async beginTool(
@@ -254,6 +278,7 @@ export class Session {
       // than asking the wearer to spell a product id, run something that
       // produces them and offer the results as choices.
       if (missing.kind === "text" && this.o.planner) {
+        this.show(busyFrame(this.o.source, label(p.tool), "Looking up your options"));
         let plan: { name: string; args: Record<string, unknown> } | null = null;
         try {
           plan = await this.o.planner.planResolver(
@@ -303,8 +328,7 @@ export class Session {
         }
       }
 
-      this.frame = paramFrame(this.o.source, p.tool, missing, candidates, this.page);
-      return this.frame;
+      return this.show(paramFrame(this.o.source, p.tool, missing, candidates, this.page));
     }
 
     // Ready to run. Ask a human first unless this is a read.
@@ -318,8 +342,7 @@ export class Session {
         origin: p.tool.origin,
         detail: { consequence: g.consequence, reason: g.reason },
       });
-      this.frame = confirmFrame(this.o.source, p.tool, p.targetLabel, p.consequence);
-      return this.frame;
+      return this.show(confirmFrame(this.o.source, p.tool, p.targetLabel, p.consequence));
     }
     return this.execute();
   }
@@ -334,14 +357,15 @@ export class Session {
         toolName: p.tool.name,
         detail: { reason: "stale confirmation" },
       });
-      this.frame = errorFrame(
-        this.o.source,
-        "This changed while you were deciding",
-        "Choose again so you approve what will actually run.",
-        false,
-      );
       this.pending = null;
-      return this.frame;
+      return this.show(
+        errorFrame(
+          this.o.source,
+          "This changed while you were deciding",
+          "Choose again so you approve what will actually run.",
+          false,
+        ),
+      );
     }
     return this.execute();
   }
@@ -349,7 +373,7 @@ export class Session {
   private async execute(): Promise<DisplayFrame> {
     const p = this.pending;
     if (!p) return this.frame;
-    this.frame = workingFrame(this.o.source, p.tool);
+    this.show(workingFrame(this.o.source, p.tool));
 
     const ctrl = new AbortController();
     const budget = this.o.invokeTimeoutMs ?? 15_000;
@@ -378,21 +402,37 @@ export class Session {
         this.audit({ kind: "error", toolName: p.tool.name, detail: { reason: "timeout" } });
         // The deadline does not stop the tool, so this is "unknown", never
         // "did not happen". Retrying a write here could double-charge.
-        this.frame = errorFrame(
-          this.o.source,
-          "No answer yet",
-          "The site did not respond in time. It may still have run.",
-          retryable,
+        this.show(
+          errorFrame(
+            this.o.source,
+            "No answer yet",
+            "The site did not respond in time. It may still have run.",
+            retryable,
+          ),
         );
       } else {
-        this.audit({ kind: "result", toolName: p.tool.name, origin: p.tool.origin });
-        // Success is asserted from the returned result, never from having called.
-        this.frame = resultFrame(this.o.source, `${label(p.tool)} done`, summarize(outcome.raw));
+        // Success is asserted from the returned RESULT, never from the fact
+        // that a call came back. A site answering {"ok": false} has returned a
+        // result, and that result is a failure.
+        const said = outcomeFromResult(outcome.raw);
+        this.audit({
+          kind: "result",
+          toolName: p.tool.name,
+          origin: p.tool.origin,
+          detail: { ok: said.ok },
+        });
+        this.show(
+          resultFrame(this.o.source, `${label(p.tool)} ${said.ok ? "done" : "did not work"}`, {
+            ok: said.ok,
+            detail: said.message ?? summarize(outcome.raw),
+            facts: factsFromResult(outcome.raw),
+          }),
+        );
         this.pending = null;
       }
     } catch (err) {
       this.audit({ kind: "error", toolName: p.tool.name, detail: { message: msg(err) } });
-      this.frame = errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable);
+      this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
@@ -436,21 +476,16 @@ function describeArgs(args: Record<string, unknown>): string {
   return vals.length ? vals.map(String).join(", ") : "";
 }
 
-/** Pull a one-line human summary out of an arbitrary tool result. */
+/**
+ * The last-resort one-liner, for a result no generic reader could structure.
+ *
+ * This used to sniff for `added`, `cart_total` and `removed`, which are the
+ * exact keys the first-party test market returns. That was a per-site branch
+ * wearing a helper's clothes: every other site in the world fell through to
+ * truncated JSON. Structure now comes from `factsFromResult`, which knows no
+ * site, and this only runs when even that finds nothing to show.
+ */
 function summarize(raw: string): string {
-  try {
-    const o: unknown = JSON.parse(raw);
-    if (typeof o === "object" && o !== null) {
-      const r = o as Record<string, unknown>;
-      const parts: string[] = [];
-      if (typeof r["added"] === "string") parts.push(String(r["added"]));
-      if (typeof r["cart_total"] === "number") parts.push(`total $${r["cart_total"]}`);
-      if (typeof r["removed"] === "number") parts.push(`removed ${r["removed"]}`);
-      if (typeof r["total"] === "number" && !parts.length) parts.push(`total $${r["total"]}`);
-      if (parts.length) return parts.join(" · ");
-    }
-  } catch {
-    /* fall through to the raw string */
-  }
-  return raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+  const flat = raw.replace(/\s+/g, " ").trim();
+  return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat;
 }

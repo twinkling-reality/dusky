@@ -98,5 +98,13 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   // And the Display reports the site's returned value, not a guess.
   await expect(displayPage.getByText(/Organic oat milk/)).toBeVisible();
 
+  // The result frame is built from the site's OWN returned JSON: these labels
+  // are its key names humanized, not anything Dusky knows about this site.
+  // A site Dusky has never seen gets the same treatment or the claim is false.
+  await expect(displayPage.getByText("Cart total")).toBeVisible();
+  await expect(displayPage.getByText("$4.29")).toBeVisible();
+
+  await displayPage.screenshot({ path: "test-results/display-result.png" });
+
   await ctx.close();
 });

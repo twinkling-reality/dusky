@@ -126,6 +126,11 @@ export class SessionActor {
       // wearer's audit trail rather than a shared one.
       planner: makePlanner?.(record),
       onAudit: record,
+      // Every frame the machine produces goes to the glasses as it happens,
+      // not just the one a call happens to settle on. Working and thinking
+      // frames only exist for the wearer if they are transmitted while the
+      // work is still running.
+      onTransition: () => this.pushFrame(),
     });
   }
 
@@ -168,7 +173,6 @@ export class SessionActor {
     this.consoleSock = sock;
     this.runner.origins = origins;
     await this.session.start();
-    this.pushFrame();
   }
 
   detachConsole(sock: WebSocket): void {
@@ -186,15 +190,12 @@ export class SessionActor {
         // Acknowledge before any work, so the wearer never wonders.
         this.toDisplay({ t: "ack", frameId: msg.frameId, choiceId: msg.choiceId });
         await this.session.handle(msg.choiceId);
-        this.pushFrame();
         return;
       case "text":
         await this.session.submitText(msg.value);
-        this.pushFrame();
         return;
       case "cancel":
         await this.session.handle("__cancel");
-        this.pushFrame();
         return;
     }
   }
@@ -214,7 +215,6 @@ export class SessionActor {
         // A page added or removed tools. Re-discover and repaint so the wearer
         // never selects something that has since disappeared.
         await this.session.start();
-        this.pushFrame();
         return;
     }
   }

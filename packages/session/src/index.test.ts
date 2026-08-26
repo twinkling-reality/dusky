@@ -1,4 +1,4 @@
-import type { ToolDescriptor } from "@dusky/contracts";
+import type { DisplayFrame, ToolDescriptor } from "@dusky/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { type Planner, Session, type ToolRunner } from "./index.js";
 
@@ -337,5 +337,138 @@ describe("a planner the machine does not trust", () => {
     if (f.kind !== "choose") throw new Error("unreachable");
     expect(f.choices.map((c) => c.id)).toEqual(["__compose"]);
     expect(runner.calls).toEqual([]);
+  });
+});
+
+/**
+ * On a cursorless display an unchanged screen is indistinguishable from a
+ * crash, so every wait the wearer caused must be visible WHILE it happens.
+ * Returning the final frame is not enough: a transport that only reads the
+ * settled frame shows the wearer nothing for the whole of a model call and a
+ * tool invocation.
+ */
+describe("what the wearer sees while waiting", () => {
+  function watched(planner?: Planner) {
+    const seen: DisplayFrame[] = [];
+    const runner = fakeRunner();
+    const s = new Session({
+      source: "Shop",
+      runner,
+      planner,
+      onTransition: (f) => seen.push(f),
+    });
+    return { s, seen, runner };
+  }
+
+  it("shows a working frame during the tool call, not just the result after it", async () => {
+    const { s, seen } = watched();
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.handle("oat-1");
+    seen.length = 0;
+    await s.handle("__confirm");
+    expect(seen.map((f) => f.kind)).toEqual(["working", "result"]);
+  });
+
+  it("echoes what it heard while the planner is thinking", async () => {
+    const slow: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: { product_id: "oat-1" } }),
+      planResolver: async () => null,
+    };
+    const { s, seen } = watched(slow);
+    await s.start();
+    seen.length = 0;
+    await s.submitText("add the organic oat milk");
+
+    const busy = seen[0];
+    expect(busy?.kind).toBe("working");
+    // The wearer must be able to catch a misheard request before it acts.
+    expect(busy?.title).toBe("add the organic oat milk");
+    expect(seen.map((f) => f.kind)).toEqual(["working", "confirm"]);
+  });
+
+  it("shows that it is looking up options before the candidates appear", async () => {
+    const planner: Planner = {
+      pickTool: async () => null,
+      planResolver: async () => ({ name: "search_products", args: { query: "oat" } }),
+    };
+    const { s, seen } = watched(planner);
+    await s.start();
+    seen.length = 0;
+    await s.handle("add_to_cart");
+    expect(seen.map((f) => f.kind)).toEqual(["working", "choose"]);
+    expect(seen[0]?.kind === "working" && seen[0].note).toBe("Looking up your options");
+  });
+});
+
+/**
+ * Rule 3 cuts both ways. "Asserted from a returned result" is broken just as
+ * badly by calling every return a success as by never checking at all.
+ */
+describe("reporting what the site actually said", () => {
+  function runnerReturning(value: string) {
+    const calls: string[] = [];
+    const runner: ToolRunner = {
+      discover: async () => [SEARCH, ADD],
+      invoke: async (_o, name) => {
+        calls.push(name);
+        return value;
+      },
+    };
+    return { runner, calls };
+  }
+
+  async function runToResult(value: string) {
+    const { runner } = runnerReturning(value);
+    const s = new Session({ source: "Shop", runner });
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.handle("oat-1");
+    return s.handle("__confirm");
+  }
+
+  it("does not call a returned failure a success", async () => {
+    const f = await runToResult(JSON.stringify({ ok: false, message: "Out of stock" }));
+    expect(f.kind).toBe("result");
+    if (f.kind !== "result") throw new Error("unreachable");
+    expect(f.ok).toBe(false);
+    expect(f.title).toContain("did not work");
+    expect(f.detail).toBe("Out of stock");
+  });
+
+  it("reports a success the site did confirm", async () => {
+    const f = await runToResult(
+      JSON.stringify({ ok: true, added: "Organic oat milk", total: 4.29 }),
+    );
+    if (f.kind !== "result") throw new Error("unreachable");
+    expect(f.ok).toBe(true);
+    expect(f.facts).toEqual([
+      { label: "Added", value: "Organic oat milk" },
+      { label: "Total", value: "$4.29" },
+    ]);
+  });
+
+  // The old summarizer matched `added` and `cart_total`, which are the exact
+  // keys the first-party test market returns. Any other site fell through to
+  // truncated JSON, which quietly made the whole no-per-site-branching claim
+  // untrue at the last frame of every flow.
+  it("reads a site whose keys Dusky has never seen", async () => {
+    const f = await runToResult(
+      JSON.stringify({ reservation_id: "R-8841", restaurant: "Kaldi House", party_size: 2 }),
+    );
+    if (f.kind !== "result") throw new Error("unreachable");
+    expect(f.ok).toBe(true);
+    expect(f.facts).toEqual([
+      { label: "Reservation id", value: "R-8841" },
+      { label: "Restaurant", value: "Kaldi House" },
+      { label: "Party size", value: "2" },
+    ]);
+  });
+
+  it("falls back to the raw text rather than an empty frame", async () => {
+    const f = await runToResult("done and dusted");
+    if (f.kind !== "result") throw new Error("unreachable");
+    expect(f.facts).toBeUndefined();
+    expect(f.detail).toBe("done and dusted");
   });
 });

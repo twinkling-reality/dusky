@@ -25,11 +25,26 @@ Three surfaces, and confusing them is the most common mistake:
 The glasses hold attention and authority. The browser holds capability and
 session. Dusky moves intent, never credentials.
 
+**A transport must push on `onTransition`, not after the call returns.**
+`Session` reports every frame the wearer should see as it happens. Reading only
+the frame a call settles on is how the working frame ended up computed but
+never transmitted: the wearer sat on an unchanged screen for the whole of a
+model call and a tool invocation, which on a cursorless display is
+indistinguishable from a crash. `apps/server/src/hub.ts` is the reference
+implementation, and it is why the busy frames a planner introduces are visible
+at all.
+
 ## Rules that are load-bearing
 
 1. **No per-site branching, ever.** If a frame depends on WHICH site registered
    a tool, Dusky has become a hardcoded integration wearing a protocol costume.
    Everything the wearer sees is derived from tool schemas in `packages/frames`.
+   This rule is easiest to break in the LAST frame, not the first. The result
+   summarizer once matched `added`, `cart_total` and `removed`, which are the
+   exact keys the first-party test market returns, so every other site on earth
+   fell through to truncated JSON while the menu still looked perfect.
+   `factsFromResult` replaced it and knows no site. Do not reintroduce a key
+   because it made the demo read nicely.
 2. **The model proposes, code disposes.** Whether a human must confirm is
    decided in `packages/policy`, which has no model, no network and no DOM.
    A `Planner` may only suggest; `Session` enforces. A proposal is checked
@@ -39,6 +54,12 @@ session. Dusky moves intent, never credentials.
    through the resolver path, cannot name a tool it was not offered, and cannot
    smuggle an undeclared argument into an invocation. See "The planner" below.
 3. **Success is asserted from a returned tool result, never from having called.**
+   This cuts both ways, and the second edge is the one that got missed for a
+   while: calling EVERY return a success is also asserting from having called.
+   A site answering `{"ok": false, "error": "out of stock"}` has returned a
+   result and that result is a failure. `outcomeFromResult` reads it. Only an
+   explicit negative flips the verdict, because inventing a failure from a
+   shape we do not recognise would be guessing in the other direction.
 4. **An annotation may lower ceremony, never raise it.** `readOnlyHint` is a
    hint from a party that may be hostile, and Chrome passes only 1 of 4 WPT
    annotation tests. Hard danger verbs override it; see `classifyDetailed`.

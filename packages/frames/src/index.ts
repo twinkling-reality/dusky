@@ -12,7 +12,7 @@
  * network. Choosing WHICH tool to run is probabilistic and lives in the agent.
  */
 
-import type { Choice, DisplayFrame, JsonSchema, ToolDescriptor } from "@dusky/contracts";
+import type { Choice, DisplayFrame, Fact, JsonSchema, ToolDescriptor } from "@dusky/contracts";
 
 /**
  * 600x600 cannot scroll, and Meta requires 88px interactive targets. With a
@@ -220,13 +220,35 @@ export function workingFrame(source: string, tool: ToolDescriptor): DisplayFrame
   return { kind: "working", source, title: label(tool), note: `invoking ${tool.name}` };
 }
 
-export function resultFrame(source: string, title: string, detail?: string): DisplayFrame {
+/**
+ * Work that is not about one tool yet: understanding a request, looking up
+ * options to offer.
+ *
+ * On a cursorless display an unchanged screen is indistinguishable from a
+ * hang, so every wait a wearer caused has to be visible while it happens.
+ * The title echoes what Dusky heard, because a misheard request is the failure
+ * a wearer most needs to catch early.
+ */
+export function busyFrame(source: string, title: string, note?: string): DisplayFrame {
+  const clipped = title.length > 60 ? `${title.slice(0, 59)}...` : title;
+  return { kind: "working", source, title: clipped, note };
+}
+
+export interface ResultOptions {
+  /** Read from the returned result, never from the fact that a call returned. */
+  ok: boolean;
+  detail?: string;
+  facts?: Fact[];
+}
+
+export function resultFrame(source: string, title: string, o: ResultOptions): DisplayFrame {
   return {
     kind: "result",
     source,
-    ok: true,
+    ok: o.ok,
     title,
-    detail,
+    detail: o.detail,
+    facts: o.facts?.length ? o.facts : undefined,
     choices: [{ id: "__home", label: "Do something else", meta: "enter" }],
   };
 }
@@ -241,6 +263,114 @@ export function errorFrame(
   if (retryable) choices.push({ id: "__retry", label: "Try again", meta: "enter" });
   choices.push({ id: "__home", label: "Back", meta: "esc" });
   return { kind: "error", source, title, detail, retryable, choices };
+}
+
+/* ------------------------------------------------------- reading a result */
+
+/**
+ * What a tool's returned JSON says about whether it worked.
+ *
+ * Load-bearing rule 3 says success is asserted from a returned result, never
+ * from having called. Treating every return as a success breaks that rule just
+ * as thoroughly as never checking at all, because a site that answers
+ * `{"ok": false, "error": "out of stock"}` has returned a RESULT and that
+ * result is a failure.
+ *
+ * The reading is deliberately one-directional: only an EXPLICIT negative flips
+ * the verdict. An unrecognised shape stays a success, because we did get an
+ * answer back and inventing a failure from silence would be guessing. These
+ * key names are ordinary JSON convention rather than knowledge of any site,
+ * the same basis on which `candidatesFromResult` reads `id` and `name`.
+ */
+export function outcomeFromResult(raw: string): { ok: boolean; message?: string } {
+  const rec = asRecord(safeParse(raw));
+  if (!rec) return { ok: true };
+
+  const err = rec["error"];
+  if (typeof err === "string" && err.trim() !== "") return { ok: false, message: err.trim() };
+  const errRec = asRecord(err);
+  if (errRec && typeof errRec["message"] === "string") {
+    return { ok: false, message: String(errRec["message"]) };
+  }
+
+  for (const key of ["ok", "success"]) {
+    if (rec[key] === false) {
+      const m = rec["message"];
+      return { ok: false, message: typeof m === "string" ? m : undefined };
+    }
+  }
+  return { ok: true };
+}
+
+/** Keys that describe the call rather than the outcome, so never shown as facts. */
+const VERDICT_KEYS = new Set(["ok", "success", "error", "status", "code"]);
+
+/** Money is the one value a wearer must never misread, so it is formatted. */
+const MONEY_KEY = /(price|amount|cost|total|subtotal|fee|balance|charge)/;
+
+function humanizeKey(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function factValue(key: string, value: unknown): string | null {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return MONEY_KEY.test(key.toLowerCase()) ? `$${value.toFixed(2)}` : String(value);
+  }
+  if (typeof value === "string") {
+    const v = value.trim();
+    if (v === "") return null;
+    return v.length > 48 ? `${v.slice(0, 47)}...` : v;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 1 ? "1 item" : `${value.length} items`;
+  }
+  // An object cannot be read at a glance, and a wearer must never be shown
+  // something they cannot actually check.
+  return null;
+}
+
+/**
+ * Lift a few short labelled values out of an arbitrary tool result.
+ *
+ * There is no site-specific key in here and there must never be one. Given a
+ * result nobody has seen before, this produces something a wearer can read in
+ * one glance; given a shape it cannot read, it produces nothing and the caller
+ * falls back to the raw text rather than inventing structure.
+ */
+export function factsFromResult(raw: string, limit = 4): Fact[] {
+  const rec = asRecord(safeParse(raw));
+  if (!rec) return [];
+
+  // A result that is a single wrapper around one object, `{"product": {...}}`,
+  // is describing that object. Read through it rather than reporting nothing.
+  const entries = Object.entries(rec);
+  const inner = entries.length === 1 && entries[0] ? asRecord(entries[0][1] as unknown) : null;
+  const source = inner ?? rec;
+
+  const out: Fact[] = [];
+  for (const [key, value] of Object.entries(source)) {
+    if (out.length >= limit) break;
+    if (VERDICT_KEYS.has(key.toLowerCase())) continue;
+    const v = factValue(key, value);
+    if (v === null) continue;
+    out.push({ label: humanizeKey(key), value: v });
+  }
+  return out;
+}
+
+function safeParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 /**

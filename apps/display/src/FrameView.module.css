@@ -165,3 +165,36 @@
   letter-spacing: 0.03em;
   color: var(--emit-dim);
 }
+
+/*
+ * Facts read out of a tool result. Labels are dim and values are bright,
+ * because on an additive waveguide brightness IS emphasis: there is no
+ * background to contrast against, only light against the room.
+ */
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.factLabel {
+  font-size: 16px;
+  color: var(--emit-dim);
+  white-space: nowrap;
+}
+
+.factValue {
+  margin: 0;
+  font-size: 20px;
+  color: var(--emit-bright);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
