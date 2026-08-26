@@ -291,7 +291,13 @@ export function paramFrame(
   candidates: Choice[] = [],
   page = 0,
 ): DisplayFrame {
-  const title = param.description?.trim() || `${humanizeParam(param.name)}?`;
+  // The site wrote this question and it goes straight into the panel's largest
+  // text. Measured at 600x600 with four choices, about 35 characters is one
+  // line and fits; 54 is two lines and runs roughly 28px past the bottom,
+  // where `overflow: hidden` removes the note and part of a choice without
+  // saying so, while focus still moves onto rows nobody can see.
+  const asked = param.description?.trim() || `${humanizeParam(param.name)}?`;
+  const title = asked.length > 40 ? `${asked.slice(0, 37)}...` : asked;
 
   if (candidates.length > 0) {
     const { choices } = paginate(candidates, page);
@@ -491,7 +497,14 @@ function factValue(key: string, value: unknown): string | null {
   if (typeof value === "string") {
     const v = value.trim();
     if (v === "") return null;
-    return v.length > 48 ? `${v.slice(0, 47)}...` : v;
+    // A value with no spaces in it is an identifier, and an identifier is the
+    // one string a wearer may have to read off the lens and type somewhere
+    // else. Clipping a booking reference to a prefix is the same mistake as
+    // rendering the pairing code in the smallest text on the panel, which
+    // FIELD-NOTES already cost us twenty minutes. `.factValue` wraps, so it
+    // gets room. Prose does not have to survive transcription.
+    const limit = /\s/.test(v) ? 48 : 64;
+    return v.length > limit ? `${v.slice(0, limit - 3)}...` : v;
   }
   if (Array.isArray(value)) {
     // A list of things a wearer could NAME is worth naming. Reporting "1 item"

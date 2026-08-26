@@ -223,6 +223,23 @@
   white-space: nowrap;
 }
 
+/*
+ * Every one of these renders text a partner site wrote, at sizes chosen for a
+ * waveguide, on a panel that cannot scroll. `.factValue` already wrapped and
+ * the rest did not, so one unbroken argument, a SKU or a booking reference,
+ * ran off the right edge of the confirmation frame with no ellipsis: the
+ * wearer was approving something they could not finish reading.
+ *
+ * The frame builder clips by length; this is what happens to what survives.
+ */
+.title,
+.target,
+.detail,
+.label,
+.note {
+  overflow-wrap: anywhere;
+}
+
 .factValue {
   margin: 0;
   font-size: 20px;

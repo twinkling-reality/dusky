@@ -407,3 +407,66 @@ describe("a menu with nothing on it", () => {
     expect(f.note).toBeTruthy();
   });
 });
+
+describe("site text on a panel that cannot scroll", () => {
+  const anyTool: ToolDescriptor = {
+    name: "x",
+    description: "",
+    origin: "https://shop.test",
+    inputSchema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  };
+
+  const withParam = (description: string) =>
+    paramFrame(
+      "Shop",
+      anyTool,
+      { name: "product_id", kind: "text", required: true, description, schema: {} },
+      [],
+      0,
+    );
+
+  it("clips a parameter question that would push the panel off screen", () => {
+    // Measured at 600x600 with four choices: about 35 characters is one line
+    // and fits, 54 is two lines and overflows by roughly 28px. `overflow:
+    // hidden` then cuts the note and half a choice away in silence, while
+    // focus still moves onto rows nobody can see.
+    const long =
+      "Which product would you like to add to your shopping cart today, by its catalogue identifier?";
+    const f = withParam(long);
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.title.length, `title was ${f.title.length} characters`).toBeLessThanOrEqual(40);
+  });
+
+  it("leaves a short question exactly as the site wrote it", () => {
+    const f = withParam("Which product?");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.title).toBe("Which product?");
+  });
+
+  it("does not chop up the one value a wearer has to read out loud", () => {
+    // The pairing-code lesson in FIELD-NOTES, arriving from the other side: an
+    // identifier is the one string that has to survive being transcribed, and
+    // clipping it at 48 turned a booking reference into a prefix.
+    const facts = factsFromResult(
+      JSON.stringify({ confirmation_code: "RSV-2026-08-26-TABLE-14-PARTY-OF-FOUR-WINDOW-SEAT" }),
+    );
+    const value = facts[0]?.value ?? "";
+    expect(value, "an identifier was clipped").not.toContain("...");
+    expect(value).toContain("WINDOW-SEAT");
+  });
+
+  it("still clips long prose, which is not an identifier", () => {
+    const facts = factsFromResult(
+      JSON.stringify({
+        note: "We have held the table by the window for you and will keep it for fifteen minutes past the hour.",
+      }),
+    );
+    expect(facts[0]?.value ?? "").toContain("...");
+  });
+
+  it("still bounds an absurd identifier rather than trusting it", () => {
+    const facts = factsFromResult(JSON.stringify({ ref: "A".repeat(400) }));
+    expect((facts[0]?.value ?? "").length).toBeLessThanOrEqual(70);
+  });
+});
