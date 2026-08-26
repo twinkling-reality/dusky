@@ -8,7 +8,7 @@ import styles from "./Derivation.module.css";
 import { PRESETS, type Preset } from "./presets.js";
 
 /**
- * The schema, and the screens it compiled to.
+ * The schema, and the screens it compiled to, in one place.
  *
  * The panel here is the same `FrameView` the glasses run, driven by the same
  * `Session` state machine, over the same `@dusky/frames` compiler. The only
@@ -17,10 +17,12 @@ import { PRESETS, type Preset } from "./presets.js";
  * editable box is the whole argument: a hardcoded interface cannot answer an
  * edit.
  *
- * Split into a hook and two views because the page shows them in different
- * places, and they must be ONE machine. Two `<Derivation />` elements would be
- * two independent sessions, and editing the schema in one would leave the
- * other showing screens from a tool that no longer exists.
+ * This was briefly split into a hook and two views, because the panel sat in
+ * a cell on the front page while the boxes lived in a drawer underneath it.
+ * A live panel on its own only proves that something moves. Standing next to
+ * the JSON Schema it was derived from, with the schema editable, it proves
+ * the thing this page exists to prove, so the two halves are back together
+ * and the split that kept them in sync is gone with them.
  */
 
 /** A runner that answers from a text box. No network, no browser API, no site. */
@@ -79,9 +81,7 @@ function parseTool(text: string, origin: string): Parsed {
   };
 }
 
-export type Derivation = ReturnType<typeof useDerivation>;
-
-export function useDerivation() {
+export function Derivation() {
   const [preset, setPreset] = useState<Preset>(PRESETS[0] as Preset);
   const [toolText, setToolText] = useState(preset.tool);
   const [resultText, setResultText] = useState(preset.result);
@@ -116,123 +116,122 @@ export function useDerivation() {
     };
   }, [tool, resultText, preset.origin, show]);
 
-  return {
-    preset,
-    toolText,
-    resultText,
-    frame,
-    frameKey,
-    parsed,
-    tool,
-    setToolText,
-    setResultText,
-    pick: (p: Preset) => {
-      setPreset(p);
-      setToolText(p.tool);
-      setResultText(p.result);
-    },
-    choose: (id: string) => void session.current?.handle(id),
-    text: (v: string) => void session.current?.submitText(v),
-    back: () => void session.current?.handle("__cancel"),
+  const pick = (p: Preset) => {
+    setPreset(p);
+    setToolText(p.tool);
+    setResultText(p.result);
   };
-}
 
-/** The 600x600 panel, at whatever scale the surrounding layout allows. */
-export function DerivationPanel({ d }: { d: Derivation }) {
-  return (
-    <div className={styles.stage}>
-      {d.frame && (
-        <div className={styles.panel}>
-          {/* keyboard={false}: the D-pad listener sits on `document`, and a
-              widget swallowing every arrow key would break the page around it.
-              Click the choices instead. */}
-          <FrameView
-            frame={d.frame}
-            frameKey={d.frameKey}
-            keyboard={false}
-            headingLevel={2}
-            onChoose={d.choose}
-            onBack={d.back}
-            onText={d.text}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Everything that feeds the panel: the presets, the two boxes, the readout. */
-export function DerivationControls({ d }: { d: Derivation }) {
-  const g = d.tool ? gate(d.tool) : null;
-  const params = d.tool ? parameters(d.tool) : [];
-  const outcome = outcomeFromResult(d.resultText);
-  const facts = factsFromResult(d.resultText);
+  const g = tool ? gate(tool) : null;
+  const params = tool ? parameters(tool) : [];
+  const outcome = outcomeFromResult(resultText);
+  const facts = factsFromResult(resultText);
 
   return (
     <div className={styles.wrap}>
+      {/* A segmented control and one line about the current choice, rather
+          than four bordered cards each carrying its own paragraph. Only one of
+          those paragraphs is ever the relevant one, and the other three were
+          noise sitting above the thing they were describing. */}
       <div className={styles.presets}>
-        {PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={styles.preset}
-            data-on={p.id === d.preset.id}
-            onClick={() => d.pick(p)}
-          >
-            <span className={styles.presetName}>{p.name}</span>
-            <span className={styles.presetPoint}>{p.point}</span>
-          </button>
-        ))}
+        <fieldset className={styles.segments}>
+          <legend className={styles.srOnly}>Example schemas</legend>
+          {PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={styles.preset}
+              data-on={p.id === preset.id}
+              aria-pressed={p.id === preset.id}
+              onClick={() => pick(p)}
+            >
+              {p.name}
+            </button>
+          ))}
+        </fieldset>
+        <p className={styles.presetPoint}>{preset.point}</p>
       </div>
 
-      <div className={styles.cols}>
+      {/* Schema in, screens out, side by side. The whole point is that these
+          two are the same machine seen from either end. */}
+      <div className={styles.derive}>
         <div className={styles.col}>
           <h3 className={styles.h3}>
-            The tool, as the site registered it
+            What the site declared
             <span className={styles.tag}>editable</span>
           </h3>
           <textarea
             className={styles.code}
-            value={d.toolText}
+            value={toolText}
             spellCheck={false}
             rows={14}
-            onChange={(e) => d.setToolText(e.target.value)}
+            onChange={(e) => setToolText(e.target.value)}
             aria-label="Tool definition"
           />
           <p className={styles.foot}>
-            <code>origin</code> is not in there on purpose. A site does not get to say where it came
-            from; the browser supplies it, which is why it is the one field on a tool that can be
-            trusted. Here it is <code>{d.preset.origin}</code>.
+            No <code>origin</code>: the browser supplies that, not the site. Here,{" "}
+            <code>{preset.origin}</code>.
           </p>
 
           <h3 className={styles.h3}>
-            What the site returns when it runs
+            What it returns
             <span className={styles.tag}>editable</span>
           </h3>
           <textarea
             className={styles.code}
-            value={d.resultText}
+            value={resultText}
             spellCheck={false}
             rows={6}
-            onChange={(e) => d.setResultText(e.target.value)}
+            onChange={(e) => setResultText(e.target.value)}
             aria-label="Tool result"
           />
         </div>
 
         <div className={styles.col}>
+          <h3 className={styles.h3}>
+            What the wearer sees
+            <span className={styles.tag}>live, 600 x 600</span>
+          </h3>
+          <div className={styles.stage}>
+            {frame && (
+              <div className={styles.panel}>
+                {/* keyboard={false}: the D-pad listener sits on `document`, and
+                    a widget swallowing every arrow key would break the page
+                    around it. Click the choices instead. */}
+                <FrameView
+                  frame={frame}
+                  frameKey={frameKey}
+                  keyboard={false}
+                  headingLevel={2}
+                  onChoose={(id) => void session.current?.handle(id)}
+                  onBack={() => void session.current?.handle("__cancel")}
+                  onText={(v) => void session.current?.submitText(v)}
+                />
+              </div>
+            )}
+          </div>
+          <p className={styles.foot}>
+            The same component the glasses run. Click a choice, or edit the schema and watch it
+            answer.
+          </p>
+        </div>
+      </div>
+
+      <div className={styles.readout}>
+        <div className={styles.col}>
           <h3 className={styles.h3}>Every step, and the function that took it</h3>
-          {d.parsed.error ? (
-            <p className={styles.err}>{d.parsed.error}</p>
+          {parsed.error ? (
+            <p className={styles.err}>{parsed.error}</p>
           ) : (
             <dl className={styles.steps}>
-              <Step fn="label(tool)" pkg="frames" value={d.tool ? label(d.tool) : ""} />
+              <Step fn="label(tool)" pkg="frames" value={tool ? label(tool) : ""} />
               <Step
                 fn="isOperable(tool)"
                 pkg="frames"
-                value={String(d.tool ? isOperable(d.tool) : false)}
+                value={String(tool ? isOperable(tool) : false)}
                 note={
-                  d.tool && !isOperable(d.tool)
-                    ? "a required parameter cannot be collected on six keys, so this tool is left off the menu rather than offered as a dead control"
+                  tool && !isOperable(tool)
+                    ? "a required parameter cannot be collected on six keys, so it is left off the menu"
                     : undefined
                 }
               />
@@ -246,7 +245,9 @@ export function DerivationControls({ d }: { d: Derivation }) {
               <Step fn="outcomeFromResult(raw).ok" pkg="frames" value={String(outcome.ok)} />
             </dl>
           )}
+        </div>
 
+        <div className={styles.col}>
           <h3 className={styles.h3}>parameters(tool)</h3>
           <ul className={styles.params}>
             {params.map((p) => (
@@ -271,9 +272,7 @@ export function DerivationControls({ d }: { d: Derivation }) {
               </li>
             ))}
             {facts.length === 0 && (
-              <li className={styles.none}>
-                nothing readable, so the wearer is shown the raw text rather than invented structure
-              </li>
+              <li className={styles.none}>nothing readable, so the wearer is shown the raw text</li>
             )}
           </ul>
         </div>

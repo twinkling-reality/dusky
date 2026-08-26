@@ -4,141 +4,132 @@
   gap: var(--dusky-s4);
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-}
-
-.h2 {
-  margin: 0;
-  font-weight: 300;
-  font-size: 1.35rem;
-  letter-spacing: -0.025em;
-  color: var(--dusky-ink-strong);
-}
-
-.lede {
-  margin: 0;
-  max-width: 68ch;
-  color: var(--dusky-ink-dim);
-}
-
+/*
+ * A label, not a banner. These were mono, uppercase and letterspaced, which is
+ * the loudest treatment in the palette and there are six of them on this page:
+ * every box was introduced by something shouting at the same volume as
+ * everything else, which is the same as nothing having a hierarchy at all.
+ */
 .h3 {
   margin: var(--dusky-s3) 0 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--dusky-s3);
-  font-family: var(--dusky-mono);
   font-weight: 400;
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
+  font-size: 0.86rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dusky-ink-dim);
 }
 
 .tag {
-  text-transform: none;
-  letter-spacing: 0.04em;
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--dusky-accent);
 }
 
 /* ------------------------------------------------------------- presets */
 
 .presets {
-  display: grid;
-  gap: var(--dusky-s3);
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dusky-s3) var(--dusky-s4);
+}
+
+/*
+ * One track with the choices inside it, in the manner of a segmented control.
+ * These used to be four bordered cards in a grid, which put four rectangles and
+ * four paragraphs above the two rectangles that matter.
+ */
+.segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0;
+  border: 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dusky-ink-strong) 5%, transparent);
 }
 
 .preset {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  text-align: left;
-  padding: var(--dusky-s3);
-  background: var(--dusky-sunken);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  color: inherit;
+  padding: 0.4rem 0.95rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--dusky-ink-dim);
   font: inherit;
+  font-size: 0.88rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 .preset:hover {
-  border-color: var(--dusky-accent-soft);
-}
-.preset[data-on="true"] {
-  border-color: var(--dusky-accent);
-  background: var(--dusky-raised);
-}
-
-.presetName {
   color: var(--dusky-ink-strong);
 }
+/* The chosen one is the only thing on its own ground, which is what a
+   segmented control does and why it needs no border to say it. */
+.preset[data-on="true"] {
+  background: var(--dusky-surface);
+  color: var(--dusky-ink-strong);
+  box-shadow: 0 1px 2px rgb(20 22 19 / 8%);
+}
 
+/* The group needs a name for anything that cannot see the buttons, and does
+   not need it taking up a line for everything that can. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* One line, about the choice actually made. */
 .presetPoint {
-  font-size: 0.82rem;
+  margin: 0;
+  font-size: 0.88rem;
   color: var(--dusky-ink-dim);
 }
 
 /* -------------------------------------------------------------- layout */
 
-.cols {
+/**
+ * Schema on the left, the screens it compiled to on the right.
+ *
+ * The right track is sized by the panel rather than by the page, because
+ * 600 by 600 is the one measurement in this product that is not ours to
+ * choose. The left takes what is left.
+ */
+.derive {
   display: grid;
   gap: var(--dusky-s5);
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
-@media (min-width: 900px) {
-  .cols {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+@media (min-width: 1000px) {
+  .derive {
+    grid-template-columns: minmax(0, 1fr) 480px;
   }
 }
 
-/**
- * The lead row: the claim, and the thing the claim is about.
- *
- * The right cell is sized by the panel rather than by the page, because 600 by
- * 600 is the one measurement in this product that is not ours to choose. The
- * page's module is the device's viewport.
- */
-.lead {
+/* What happened in between, on the same two tracks, so the seam between the
+   columns does not move from one row of the section to the next. */
+.readout {
   display: grid;
-  gap: 0;
+  gap: var(--dusky-s5);
   grid-template-columns: minmax(0, 1fr);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  overflow: hidden;
+  align-items: start;
 }
 @media (min-width: 1000px) {
-  .lead {
-    grid-template-columns: minmax(0, 1fr) 528px;
-  }
-}
-
-.introCell {
-  padding: var(--dusky-s6) var(--dusky-s5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s4);
-  justify-content: center;
-  min-width: 0;
-}
-
-.stageCell {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-  padding: var(--dusky-s4);
-  border-top: 1px solid var(--dusky-hair);
-  background: var(--dusky-sunken);
-  min-width: 0;
-}
-@media (min-width: 1000px) {
-  .stageCell {
-    border-top: 0;
-    border-left: 1px solid var(--dusky-hair);
+  .readout {
+    grid-template-columns: minmax(0, 1fr) 480px;
   }
 }
 
@@ -149,6 +140,11 @@
   min-width: 0;
 }
 
+/*
+ * A field, not a box. A hairline rectangle around a block of monospace inside a
+ * page that already has rules drawn down both margins is one framing system too
+ * many; the tint is enough to say "you can type in here".
+ */
 .code {
   width: 100%;
   resize: vertical;
@@ -156,14 +152,20 @@
   font-size: 0.76rem;
   line-height: 1.65;
   tab-size: 2;
-  background: var(--dusky-sunken);
+  background: color-mix(in srgb, var(--dusky-ink-strong) 4%, transparent);
   color: var(--dusky-ink);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  padding: var(--dusky-s3);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: var(--dusky-s4);
+}
+.code:hover {
+  background: color-mix(in srgb, var(--dusky-ink-strong) 6%, transparent);
 }
 .code:focus-visible {
-  border-color: var(--dusky-accent);
+  outline: none;
+  background: var(--dusky-surface);
+  border-color: var(--dusky-accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dusky-accent) 14%, transparent);
 }
 
 .foot {
@@ -178,9 +180,9 @@
 
 .err {
   margin: 0;
-  padding: var(--dusky-s3);
-  border: 1px solid var(--dusky-stop);
-  border-radius: var(--dusky-radius);
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dusky-stop) 7%, transparent);
   color: var(--dusky-stop);
   font-family: var(--dusky-mono);
   font-size: 0.78rem;
@@ -312,12 +314,18 @@
  * Reflowing it would be showing a layout the glasses cannot produce.
  */
 .stage {
+  position: relative;
   width: 480px;
   height: 480px;
   max-width: 100%;
   overflow: hidden;
-  border-radius: var(--dusky-radius);
-  align-self: center;
+  border-radius: 16px;
+  /* The waveguide is black and the page is warm paper. Without something under
+     it the panel is a black rectangle dropped on a cream sheet; the shadow is
+     what puts it above the page instead of in a hole cut through it. */
+  box-shadow:
+    0 2px 6px rgb(20 22 19 / 10%),
+    0 18px 44px rgb(20 22 19 / 14%);
 }
 
 .panel {
