@@ -235,6 +235,22 @@ export const SESSION_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 /** Six places over 23 symbols, which is about 148 million codes. */
 export const SESSION_CODE_LENGTH = 6;
 
+/**
+ * Whether a string could have come off a lens.
+ *
+ * Here rather than in either surface because both have to ask and they must
+ * not answer differently. The browser asked before typing a code into a form;
+ * the relay did not ask at all, and took `msg.sessionId.toUpperCase()` for any
+ * string of any length, minting a session actor for each distinct one. A check
+ * that only exists in the browser is a check enforced in the layer an attacker
+ * is already standing in.
+ */
+export function isSessionCode(raw: string): boolean {
+  const v = raw.trim().toUpperCase();
+  if (v.length !== SESSION_CODE_LENGTH) return false;
+  return [...v].every((c) => SESSION_CODE_ALPHABET.includes(c));
+}
+
 export const DISPLAY_VIEWPORT = { width: 600, height: 600 } as const;
 /** Meta's documented minimum interactive target on the waveguide. */
 export const MIN_TARGET_PX = 88;

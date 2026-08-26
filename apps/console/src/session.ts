@@ -1,4 +1,4 @@
-import { SESSION_CODE_ALPHABET, SESSION_CODE_LENGTH } from "@dusky/contracts";
+import { isSessionCode, SESSION_CODE_ALPHABET, SESSION_CODE_LENGTH } from "@dusky/contracts";
 
 /**
  * Starting a session from the website rather than from a pair of glasses.
@@ -14,12 +14,13 @@ export function mintCode(): string {
   return Array.from(bytes, (b) => SESSION_CODE_ALPHABET[b % SESSION_CODE_ALPHABET.length]).join("");
 }
 
-/** A code is only a code if it could have come off a lens. */
-export function isCode(raw: string): boolean {
-  const v = raw.trim().toUpperCase();
-  if (v.length !== SESSION_CODE_LENGTH) return false;
-  return [...v].every((c) => SESSION_CODE_ALPHABET.includes(c));
-}
+/**
+ * A code is only a code if it could have come off a lens.
+ *
+ * The rule itself lives in `@dusky/contracts`, because the relay has to apply
+ * the same one and a check that only runs in the browser protects nobody.
+ */
+export const isCode = isSessionCode;
 
 /**
  * How this session got here.
