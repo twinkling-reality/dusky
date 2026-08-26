@@ -51,9 +51,20 @@ at all.
    one returns `cart_total`, the other `reservation_id` and `party_size`. The
    second one also declares a string enum, an integer enum and a boolean, none
    of which the market has, so three branches of `paramKind` are reachable at
-   all. `e2e/reservations.spec.ts` drives it end to end. Adding it required no
-   change inside Dusky, which is the only form this claim can take that is
-   worth anything.
+   all. `e2e/reservations.spec.ts` drives it end to end.
+
+   Adding it needed no per-site branch, and it is worth stating what it DID
+   need, because the weaker claim is the one that survives someone reading the
+   log. `8254e30` added the whole service and touched no shared package. The
+   next two commits changed three: `coerce` in `packages/session` was sending
+   an integer enum a parsed copy of its label, `packages/webmcp` was passing
+   through the empty `title` Chrome returns for an absent one, and `idKeyOf`
+   in `packages/frames` was matching a list of nouns rather than a convention.
+   None of those was a per-site branch. All three were genericity bugs that a
+   single test source had kept unreachable, which is exactly the thing a
+   second source is for. The first two are written up in FIELD-NOTES.md under
+   "Building against WebMCP"; the third is not, and the commit is the only
+   record.
 2. **The model proposes, code disposes.** Whether a human must confirm is
    decided in `packages/policy`, which has no model, no network and no DOM.
    A `Planner` may only suggest; `Session` enforces. A proposal is checked
@@ -114,7 +125,16 @@ together cannot widen what the machine will do.
 - A name the model returns must match a candidate it was actually offered.
   Anything else is refused and recorded.
 - A name two origins both registered is refused as ambiguous, so a site cannot
-  hijack a familiar tool name by registering it too.
+  hijack a familiar tool name by registering it too. The session enforces this
+  independently, and it had to learn the rule the hard way: it resolved a
+  gesture by name with `find`, which returns whichever tool the browser listed
+  first, so an origin registering `checkout` could have its own tool run when
+  the wearer picked somebody else's. A NAME IS NOT AN IDENTITY. Any origin may
+  register any name, so identity is `(origin, name)`, which is what `toolId` in
+  `packages/frames` builds and what a menu row now carries. A bare name still
+  resolves, because a model is only ever shown names, but only while it is
+  unique. Colliding rows are also labelled with their host, since two identical
+  rows give a wearer no way to choose.
 - A resolver must be read-only, checked in `packages/planner` AND again in
   `packages/session`. The planner does not rely on the session's filter: a
   guarantee that only holds while two files agree is not a guarantee. This is
@@ -123,6 +143,16 @@ together cannot widen what the machine will do.
   invented `force` or `confirm` cannot ride along into an invocation and bypass
   the gate without anyone touching the gate. Values outside a declared enum are
   dropped rather than passed through.
+
+  This was half true for a while, and the half that was missing is the
+  instructive one. `packages/planner` validated names AND values; the session
+  filtered names only. So the session's independent check was strictly weaker
+  than the planner's, and a `Planner` is a PORT: another implementation reaches
+  the session without passing through that package at all. `party_size: 9999`
+  went to a site declaring `enum: [1,2,3,4]`, and an object argument went with
+  it, invisible on the confirmation frame the wearer approved. The rule now has
+  ONE implementation, `valueForParam` in `packages/frames`, which both packages
+  call. Two checks, one rule; the thing to avoid is two rules.
 - A planner that throws lands the wearer on the menu. It is assistance, never
   a dependency.
 

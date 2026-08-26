@@ -212,13 +212,36 @@ Worth listing separately: these were all live in a passing test suite.
 
 Honest gaps, not oversights.
 
-- **WebSocket survival across display sleep and dim.** Partially answered.
+- **WebSocket survival across display sleep and dim.** Partially answered,
+  and the code no longer assumes the good case.
+
   The glasses survived a full relay redeploy on 2026-08-26: Render restarted
   the service, every socket dropped for roughly forty seconds, and the Display
   reconnected on its own with no wearer action and no lost pairing. That covers
-  relay downtime while the panel is awake. What is still untested is the radio
-  going quiet because the DISPLAY slept, which suspends the page rather than
-  closing the socket, and is a different failure.
+  relay downtime while the panel is awake.
+
+  It does not cover the radio going quiet because the DISPLAY slept, and that
+  is a different failure in a way worth spelling out. A suspend closes nothing:
+  no FIN, no RST, so `readyState` stays OPEN, `send` writes into a dead socket,
+  and `onclose` never fires. Every recovery path in `useRelay` hung off
+  `onclose`, so there was no recovery path at all. The wearer would have kept a
+  stale frame with dead controls, no reconnecting badge, and a gesture
+  acknowledgement sweeping forever, which is the exact "indistinguishable from
+  a crash" failure this codebase refuses everywhere else. The relay would have
+  gone on reporting `display_connected: true` and accepting agent tasks into a
+  void.
+
+  Now the Display pings every 15s and tears the socket down after 30s of
+  silence, `visibilitychange` and `pageshow` probe on resume rather than
+  waiting out a watchdog that could not have been running while the page was
+  suspended, and the relay answers with `pong` even before a console has
+  paired. The relay also pings at the socket level and terminates what does not
+  answer, so a half-open connection stops being reported as live.
+  `e2e/liveness.spec.ts` proves the traffic flows in a real browser.
+
+  **Still untested: the suspend itself.** Nothing here has met a sleeping pair
+  of glasses. The mechanism is now present and exercised; whether 15s and 30s
+  are the right numbers against a real radio is a guess.
 - **The composer's focus-then-tap behaviour** on handwriting and dictation.
 - **How a wearer launches or exits a web app on the glasses.** Meta's own
   documentation covers deployment and the companion-app flow in detail and does
