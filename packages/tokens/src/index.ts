@@ -24,7 +24,7 @@ export const DISPLAY = {
  */
 export const EMIT = {
   ground: "#000000",
-  dim: "#4F6D6C",
+  dim: "#93AEAC",
   body: "#B9CFCD",
   bright: "#F2FCFB",
   accent: "#6FD6D2",

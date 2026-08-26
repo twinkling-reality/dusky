@@ -18,7 +18,10 @@ body,
 body {
   color: var(--emit-body);
   font-family: var(--dusky-sans);
-  font-weight: 300;
+  /* 300 is a display weight borrowed from screens. A thin stroke on an
+     additive panel is fewer lit pixels, which is exactly the wrong trade
+     when the background is an uncontrolled room. */
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
 }
 /* No cursor exists on the glasses, so nothing should imply one. */

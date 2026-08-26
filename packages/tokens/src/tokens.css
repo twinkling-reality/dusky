@@ -27,7 +27,17 @@
 
   /* Display, never themed */
   --emit-ground: #000000;
-  --emit-dim: #4f6d6c;
+  /*
+   * Raised from #4f6d6c on 2026-08-26 after the first look through real
+   * glasses: the eyebrow and footer text were unreadable outdoors.
+   *
+   * The mistake was treating this as a dark theme. On an additive waveguide
+   * you cannot de-emphasise by dimming, because there is no dark ground to
+   * recede against: dimmer literally means fewer photons competing with
+   * whatever the wearer is looking at. Every colour here has to survive being
+   * seen against a bright room. Hierarchy comes from size, weight and case.
+   */
+  --emit-dim: #93aeac;
   --emit-body: #b9cfcd;
   --emit-bright: #f2fcfb;
   --emit-accent: #6fd6d2;
