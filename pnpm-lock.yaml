@@ -38,6 +38,9 @@ importers:
       '@dusky/frames':
         specifier: workspace:*
         version: link:../../packages/frames
+      '@dusky/lens':
+        specifier: workspace:*
+        version: link:../../packages/lens
       '@dusky/policy':
         specifier: workspace:*
         version: link:../../packages/policy

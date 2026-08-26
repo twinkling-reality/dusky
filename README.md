@@ -46,6 +46,20 @@ Watch the console's **Protocol activity** panel while you do it: every
 `getTools` and `executeTool` call is logged as it happens, so nothing has to be
 taken on trust.
 
+## Watching a schema become an interface
+
+Further down the console there is a JSON Schema on one side and the screens it
+compiled to on the other, with every step in between labelled by the function
+that took it. The panel is the component the glasses render, driven by the same
+state machine over the same compiler, with a tool runner that answers from a
+text box rather than from a network.
+
+Which means the schema is editable. Change a parameter from a string to an enum
+and the composer becomes buttons while you watch; paste a tool from a site
+nobody here has seen and it compiles anyway. A hardcoded interface cannot
+answer an edit, so this is the one part of the argument that costs no trust.
+It also needs no WebMCP, which is why it works in any browser.
+
 ## On the actual glasses
 
 1. Deploy `apps/display` to any HTTPS host.
@@ -87,6 +101,7 @@ mediated by the browser.
 | `packages/session` | The task machine. Intent in, frames out, ports for everything else. |
 | `packages/webmcp` | The only file that knows what browsers actually do, versus what the spec says. |
 | `packages/tokens` | Design tokens. Two palettes: console, and emitted light for the waveguide. |
+| `packages/lens` | The 600x600 panel as a component, so the website renders the real one. |
 | `apps/display` | The 600x600 Web App. The primary product surface. |
 | `apps/console` | The operator console and WebMCP client. |
 | `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |

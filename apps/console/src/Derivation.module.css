@@ -1,0 +1,284 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s4);
+  padding-top: var(--dusky-s6);
+  border-top: 1px solid var(--dusky-hair);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s2);
+}
+
+.h2 {
+  margin: 0;
+  font-weight: 300;
+  font-size: 1.35rem;
+  letter-spacing: -0.025em;
+  color: var(--dusky-ink-strong);
+}
+
+.lede {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--dusky-ink-dim);
+}
+
+.h3 {
+  margin: var(--dusky-s3) 0 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dusky-s3);
+  font-family: var(--dusky-mono);
+  font-weight: 400;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.tag {
+  text-transform: none;
+  letter-spacing: 0.04em;
+  color: var(--dusky-accent);
+}
+
+/* ------------------------------------------------------------- presets */
+
+.presets {
+  display: grid;
+  gap: var(--dusky-s3);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.preset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: var(--dusky-s3);
+  background: var(--dusky-sunken);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.preset:hover {
+  border-color: var(--dusky-accent-soft);
+}
+.preset[data-on="true"] {
+  border-color: var(--dusky-accent);
+  background: var(--dusky-raised);
+}
+
+.presetName {
+  color: var(--dusky-ink-strong);
+}
+
+.presetPoint {
+  font-size: 0.82rem;
+  color: var(--dusky-ink-dim);
+}
+
+/* -------------------------------------------------------------- layout */
+
+.cols {
+  display: grid;
+  gap: var(--dusky-s5);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .cols {
+    /* The panel column is fixed because 600x600 is fixed. The two reading
+       columns take whatever is left. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 480px;
+  }
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s2);
+  min-width: 0;
+}
+
+.code {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--dusky-mono);
+  font-size: 0.76rem;
+  line-height: 1.65;
+  tab-size: 2;
+  background: var(--dusky-sunken);
+  color: var(--dusky-ink);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  padding: var(--dusky-s3);
+}
+.code:focus-visible {
+  border-color: var(--dusky-accent);
+}
+
+.foot {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--dusky-ink-faint);
+}
+.foot code {
+  font-family: var(--dusky-mono);
+  color: var(--dusky-ink-dim);
+}
+
+.err {
+  margin: 0;
+  padding: var(--dusky-s3);
+  border: 1px solid var(--dusky-stop);
+  border-radius: var(--dusky-radius);
+  color: var(--dusky-stop);
+  font-family: var(--dusky-mono);
+  font-size: 0.78rem;
+}
+
+/* --------------------------------------------------------------- steps */
+
+.steps {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+
+.stepFn {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dusky-s3);
+  font-family: var(--dusky-mono);
+  font-size: 0.76rem;
+  color: var(--dusky-ink-dim);
+}
+
+.pkg {
+  font-size: 0.68rem;
+  color: var(--dusky-ink-faint);
+}
+
+.stepVal {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--dusky-ink-strong);
+}
+
+.stepNote {
+  font-size: 0.8rem;
+  color: var(--dusky-ink-faint);
+}
+
+/* ---------------------------------------------------------- parameters */
+
+.params {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* A grid rather than wrapping flex, so the kind chips and the consequences
+   line up down the column instead of landing wherever the name length puts
+   them. Four fixed tracks: name, kind, whether it is required, what it
+   becomes on the panel. */
+.param {
+  display: grid;
+  grid-template-columns: minmax(6rem, max-content) max-content max-content 1fr;
+  align-items: baseline;
+  gap: var(--dusky-s3);
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+  font-size: 0.86rem;
+  color: var(--dusky-ink-faint);
+}
+.param code {
+  font-family: var(--dusky-mono);
+  font-size: 0.8rem;
+  color: var(--dusky-ink-strong);
+}
+
+/* Facts are two columns, not four, so they get their own row shape. */
+.fact {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  align-items: baseline;
+  gap: var(--dusky-s3);
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+  font-size: 0.86rem;
+  color: var(--dusky-ink-faint);
+}
+.fact code {
+  font-family: var(--dusky-mono);
+  font-size: 0.8rem;
+  color: var(--dusky-ink-strong);
+}
+
+/* A row that is only prose, so it must not be forced into the grid tracks. */
+.none {
+  padding: 0.4rem 0;
+  font-size: 0.86rem;
+  color: var(--dusky-ink-faint);
+}
+
+.kind {
+  font-family: var(--dusky-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  color: var(--dusky-accent);
+}
+.kind[data-kind="unsupported"] {
+  color: var(--dusky-warn);
+  border-color: var(--dusky-warn);
+}
+
+.req {
+  font-size: 0.76rem;
+}
+
+.becomes {
+  color: var(--dusky-ink-dim);
+}
+
+/* --------------------------------------------------------------- panel */
+
+.stage {
+  /* 600 x 600 is not negotiable, so the panel is scaled rather than reflowed.
+     Reflowing it would be showing something the glasses cannot show. */
+  width: 480px;
+  height: 480px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+}
+
+.panel {
+  width: 600px;
+  height: 600px;
+  transform: scale(0.8);
+  transform-origin: top left;
+}

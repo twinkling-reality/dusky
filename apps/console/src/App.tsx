@@ -2,6 +2,7 @@ import { gate } from "@dusky/policy";
 import { ENABLE_HINT } from "@dusky/webmcp";
 import { useMemo, useState } from "react";
 import styles from "./App.module.css";
+import { Derivation } from "./Derivation.js";
 import { sourceFromQuery } from "./sources.js";
 import { useConsoleLink } from "./useConsoleLink.js";
 
@@ -145,6 +146,8 @@ export function App() {
           </pre>
         </section>
       </div>
+
+      <Derivation />
     </div>
   );
 }

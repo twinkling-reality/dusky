@@ -33,6 +33,20 @@ async function pairConsole(page: Page) {
   await page.getByRole("button", { name: "Pair" }).click();
 }
 
+/**
+ * The list of tools the console actually discovered.
+ *
+ * Scoped deliberately. A bare `getByText("Add to cart")` matched exactly one
+ * element for as long as the console had one place a tool name could appear,
+ * and silently became ambiguous the moment the page also showed a schema
+ * being compiled. A locator that depends on the rest of the page staying
+ * small is a locator that will break for a reason unrelated to the thing it
+ * is testing.
+ */
+function discovered(page: Page) {
+  return page.locator("ul").filter({ hasText: "http://localhost:7801" }).first();
+}
+
 test("WebMCP is actually enabled in this browser", async ({ page }) => {
   await page.goto("http://localhost:7801");
   const kind = await page.evaluate(
@@ -44,16 +58,17 @@ test("WebMCP is actually enabled in this browser", async ({ page }) => {
 test("console discovers the partner site's tools cross-origin", async ({ page }) => {
   await pairConsole(page);
   // Four tools, exposed to this origin only because the site named it.
-  await expect(page.getByText("Search catalog")).toBeVisible();
-  await expect(page.getByText("Add to cart")).toBeVisible();
+  const tools = discovered(page);
+  await expect(tools.getByText("Search catalog")).toBeVisible();
+  await expect(tools.getByText("Add to cart")).toBeVisible();
   await expect(page.locator("text=getTools({fromOrigins})")).toBeVisible();
 });
 
 test("policy classifies discovered tools without any site-specific rule", async ({ page }) => {
   await pairConsole(page);
-  const row = page.locator("li", { hasText: "Add to cart" }).first();
+  const row = discovered(page).locator("li", { hasText: "Add to cart" }).first();
   await expect(row.locator("text=gated")).toBeVisible();
-  const readRow = page.locator("li", { hasText: "Search catalog" }).first();
+  const readRow = discovered(page).locator("li", { hasText: "Search catalog" }).first();
   await expect(readRow.locator("text=read")).toBeVisible();
 });
 
@@ -65,7 +80,7 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   await consolePage.goto(`http://localhost:7803/?session=${CODE}`);
   await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
   await consolePage.getByRole("button", { name: "Pair" }).click();
-  await expect(consolePage.getByText("Add to cart")).toBeVisible();
+  await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${CODE}`);
 
@@ -127,7 +142,7 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   await consolePage.goto(`http://localhost:7803/?session=${code}`);
   await consolePage.getByLabel("Pairing code from your glasses").fill(code);
   await consolePage.getByRole("button", { name: "Pair" }).click();
-  await expect(consolePage.getByText("Add to cart")).toBeVisible();
+  await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${code}`);
   await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
