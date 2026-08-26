@@ -36,8 +36,13 @@
    * recede against: dimmer literally means fewer photons competing with
    * whatever the wearer is looking at. Every colour here has to survive being
    * seen against a bright room. Hierarchy comes from size, weight and case.
+   *
+   * Raised again the same day, and desaturated. #93aeac was still hard to
+   * read and its teal cast read as green text rather than as quiet text: at
+   * small sizes a neutral emits across more of the spectrum and simply looks
+   * brighter. The teal belongs to --emit-accent, which is large and deliberate.
    */
-  --emit-dim: #93aeac;
+  --emit-dim: #b0c2c0;
   --emit-body: #b9cfcd;
   --emit-bright: #f2fcfb;
   --emit-accent: #6fd6d2;

@@ -168,9 +168,12 @@
   margin: auto 0 0;
   font-family: var(--dusky-mono);
   /* Was 15px, below Meta's 16px floor. */
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: 0.03em;
-  color: var(--emit-dim);
+  /* The note is not decoration. It carries the only instructions on the
+     frame, and in the empty state it carries the only EXPLANATION, so it
+     cannot be the dimmest thing on a panel with no background. */
+  color: var(--emit-body);
 }
 
 /*
