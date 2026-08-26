@@ -73,28 +73,6 @@ export function Landing() {
 
       <main className={styles.page}>
         <section className={styles.hero}>
-          {/*
-            Four rules this copy is under, each one paid for by a version
-            that broke it.
-
-            No acronym and no term of art. A stranger owns "website",
-            "glasses", "shop", "restaurant"; they do not own "declared
-            tools", "gesture-driven" or "per-site integration".
-
-            Nothing a competitor could print unchanged. "Use websites from
-            your glasses" is equally true of screen mirroring, a voice
-            assistant and a native app store, so it named a category rather
-            than this product.
-
-            Nothing the demo disproves. "Pick one, and it happens" was
-            false: a consequential tool stops on the lens for a human yes,
-            which is the best property in the project and was traded away
-            for a rhythm.
-
-            Range, never absence. "No code for any site" is the achievement
-            and reads to a stranger as "supports nothing", so the claim is
-            made by naming two unrelated sites on one code path instead.
-          */}
           <h1 className={styles.claim}>Turn web actions into augmented reality.</h1>
           <p className={styles.lede}>
             Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for
