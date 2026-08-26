@@ -6,6 +6,8 @@ dist/
 .env.local
 .vercel/
 test-results/
+# Throwaway screenshots taken while reviewing a page.
+z-*.png
 playwright-report/
 .turbo/
 
