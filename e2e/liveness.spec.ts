@@ -46,51 +46,39 @@ test("the Display makes traffic, and the relay answers it", async ({ page }) => 
 });
 
 /**
- * What a wearer is shown once the link is gone.
+ * The badge that tells a wearer their panel may be stale.
  *
- * Note what this does NOT cover. Chromium's offline emulation CLOSES the
- * socket, so this is the ordinary drop, which was never the broken case. The
- * half-open one, where the radio stops and `readyState` stays OPEN and no
- * close event ever fires, is what the watchdog in `useRelay` is for, and
- * nothing here can produce it: it needs packets silently discarded rather than
- * a connection torn down. That case is still verified only by reading.
+ * Measured while the page is still connecting, which is when it is on screen
+ * without any network trickery. Chromium's offline emulation does NOT sever an
+ * established WebSocket, so there is no way from here to produce a dropped
+ * link on demand; an earlier version of this test appeared to and was actually
+ * measuring a rejected session code.
  *
- * What this does cover is the badge itself, which was drawn on top of the
- * frame's own status word and below Meta's 16px floor, on the one element
- * whose job is to be readable when nothing else can be trusted.
+ * What is checked is what was wrong: the badge sat exactly where the frame
+ * draws its own status word, at 14px against a documented 16px floor. Giving
+ * it a background is not a fix on this hardware, because the ground colour
+ * emits nothing and so occludes nothing. It had to move.
  */
-test("a dropped link says so legibly and out of the frame's way", async ({ page, context }) => {
-  test.setTimeout(120_000);
+test("the link badge is legible and out of the frame's way", async ({ page }) => {
+  // Refuse the socket outright, which is the one way from here to hold a
+  // Display in a degraded link for long enough to measure it. Locally the
+  // relay answers in milliseconds, so the badge is otherwise never on screen.
+  await page.routeWebSocket(/.*/, (ws) => ws.close());
+  await page.goto("http://localhost:7802/?session=QUYETA");
 
-  await page.goto("http://localhost:7802/?session=QUIETA");
-  const panel = page.locator("div[data-kind]");
-  await expect(panel).toBeVisible();
-
-  // The badge is up while connecting and clears once the socket opens, so
-  // waiting for it to go is also how we know we are actually connected.
   const badge = page.locator("div[class*='_link_']");
-  await expect(badge, "never reached a healthy link").toHaveCount(0, { timeout: 20_000 });
+  await expect(badge, "no badge on a link that will not come up").toHaveCount(1);
 
-  await context.setOffline(true);
-  try {
-    await expect(badge).toHaveCount(1, { timeout: 60_000 });
+  const px = await badge.evaluate((n) => Number.parseFloat(getComputedStyle(n).fontSize));
+  expect(px, `badge was ${px}px, under Meta's 16px floor`).toBeGreaterThanOrEqual(16);
 
-    // Meta's documented floor is 16px, and this is the element whose whole
-    // job is to be readable when nothing else on the panel can be trusted.
-    const px = await badge.evaluate((n) => Number.parseFloat(getComputedStyle(n).fontSize));
-    expect(px, `badge was ${px}px`).toBeGreaterThanOrEqual(16);
-
-    // It used to sit exactly where the frame's own status word sits. A
-    // background cannot fix that here: the ground colour emits nothing on a
-    // waveguide, so overlapping text just adds up.
-    const b = await badge.boundingBox();
-    const header = await panel.locator("> div").first().boundingBox();
-    if (b && header) {
-      expect(b.y, "the badge overlapped the frame's own header").toBeGreaterThan(
-        header.y + header.height,
-      );
-    }
-  } finally {
-    await context.setOffline(false);
+  const b = await badge.boundingBox();
+  const header = await page.locator("div[data-kind] > div").first().boundingBox();
+  expect(b, "the badge has no box").not.toBeNull();
+  expect(header, "the frame has no header").not.toBeNull();
+  if (b && header) {
+    expect(b.y, "the badge overlapped the frame's own header").toBeGreaterThan(
+      header.y + header.height,
+    );
   }
 });

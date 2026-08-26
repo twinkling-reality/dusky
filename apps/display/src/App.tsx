@@ -61,7 +61,9 @@ export function App() {
   const frame =
     relay.link === "superseded"
       ? supersededFrame()
-      : (relay.frame ?? pairingFrame(sessionId, relay.link));
+      : relay.link === "rejected"
+        ? rejectedFrame(sessionId)
+        : (relay.frame ?? pairingFrame(sessionId, relay.link));
 
   return (
     <div className={styles.root}>
@@ -76,7 +78,7 @@ export function App() {
       {/* Gesture acknowledged, work still in flight. Local, never networked. */}
       {pendingChoice !== null && <div className={styles.pending} aria-live="polite" />}
 
-      {relay.link !== "open" && relay.link !== "superseded" && (
+      {relay.link !== "open" && relay.link !== "superseded" && relay.link !== "rejected" && (
         <div className={styles.link} data-state={relay.link}>
           {relay.link === "offline" ? "no connection" : "reconnecting"}
         </div>
@@ -100,6 +102,24 @@ function supersededFrame(): DisplayFrame {
     source: "Dusky",
     title: "Another window took over",
     detail: "This session is being shown somewhere else. Close that one to use it here.",
+    retryable: false,
+    choices: [],
+  };
+}
+
+/**
+ * Shown when the session id in the URL is not a pairing code.
+ *
+ * Only reachable by hand: the Display mints its own code, so this means
+ * somebody typed or pasted one. No retry, because the relay will refuse it
+ * every time and a client that keeps asking is just a loop with a spinner.
+ */
+function rejectedFrame(sessionId: string): DisplayFrame {
+  return {
+    kind: "error",
+    source: "Dusky",
+    title: "Not a pairing code",
+    detail: `${sessionId} is not a code this can use. Open this page without one and it will make its own.`,
     retryable: false,
     choices: [],
   };

@@ -262,6 +262,17 @@ export const SESSION_CODE_LENGTH = 6;
 export const CLOSE_SUPERSEDED = 4001;
 
 /**
+ * Why a socket was closed: what it asked for is not a pairing code.
+ *
+ * Terminal, unlike a dropped link. A code that is not a code will not become
+ * one by asking again, so a client that treats this as an ordinary close
+ * reconnects forever against a relay that will keep refusing it. Found by
+ * writing a test whose own session id contained an `I`, which the alphabet
+ * excludes precisely because it is hard to read off a lens.
+ */
+export const CLOSE_NOT_A_CODE = 4400;
+
+/**
  * Whether a string could have come off a lens.
  *
  * Here rather than in either surface because both have to ask and they must

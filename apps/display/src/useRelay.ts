@@ -1,5 +1,5 @@
 import type { DisplayFrame, DisplayToServer, ServerToDisplay, TaskState } from "@dusky/contracts";
-import { CLOSE_SUPERSEDED } from "@dusky/contracts";
+import { CLOSE_NOT_A_CODE, CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -16,7 +16,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * reconnecting would take it back, which is how two clients on one pairing
  * code used to trade the session between them several times a second.
  */
-export type LinkState = "connecting" | "open" | "reconnecting" | "offline" | "superseded";
+export type LinkState =
+  | "connecting"
+  | "open"
+  | "reconnecting"
+  | "offline"
+  | "superseded"
+  /** The session id is not a pairing code. Asking again cannot change that. */
+  | "rejected";
 
 export interface Relay {
   link: LinkState;
@@ -154,6 +161,12 @@ export function useRelay(url: string, sessionId: string): Relay {
         // recovery, it is the other half of a fight.
         if (ev.code === CLOSE_SUPERSEDED) {
           setLink("superseded");
+          return;
+        }
+
+        // Not a pairing code. Retrying is not recovery, it is a loop.
+        if (ev.code === CLOSE_NOT_A_CODE) {
+          setLink("rejected");
           return;
         }
 

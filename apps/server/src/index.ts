@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { type AuditStore, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "@dusky/audit";
 import type { AuditEntry, ConsoleToServer, DisplayToServer } from "@dusky/contracts";
-import { isSessionCode } from "@dusky/contracts";
+import { CLOSE_NOT_A_CODE, isSessionCode } from "@dusky/contracts";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -178,7 +178,7 @@ function onConnection(ws: WebSocket, role: Role, url: URL): void {
         // map that never emptied into "whatever a stranger types".
         const claimed = msg.sessionId.trim().toUpperCase();
         if (!isSessionCode(claimed)) {
-          ws.close(4400, "not a pairing code");
+          ws.close(CLOSE_NOT_A_CODE, "not a pairing code");
           return;
         }
 
