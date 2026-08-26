@@ -209,5 +209,18 @@ export function rank(intent: string, tools: ToolDescriptor[]): RankedTool[] {
 export function shortlist(intent: string, tools: ToolDescriptor[], limit: number): RankedTool[] {
   const ranked = rank(intent, tools);
   const matched = ranked.filter((r) => r.score > 0);
-  return (matched.length > 0 ? matched : ranked).slice(0, limit);
+
+  // Matches first, then fill the remaining slots in rank order.
+  //
+  // This used to return ONLY the matches whenever there was at least one, so
+  // three matching tools meant a shortlist of three even with six slots free.
+  // The right tool could then be excluded at every size, which `eval.test.ts`
+  // caught: "find me some oat milk" matched `find_times` on the word "find"
+  // and left `search_products` out of a list with four empty places in it.
+  //
+  // The cap is the point of this function, not the filter. A model seeing two
+  // extra low-scoring cards costs a few dozen tokens; a model never being
+  // shown the right tool costs the request.
+  const rest = ranked.filter((r) => r.score <= 0);
+  return [...matched, ...rest].slice(0, limit);
 }
