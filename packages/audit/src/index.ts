@@ -91,7 +91,31 @@ export interface AuditFs {
   mkdir(dir: string, options: { recursive: true }): Promise<unknown>;
   appendFile(path: string, data: string, encoding: "utf8"): Promise<void>;
   readFile(path: string, encoding: "utf8"): Promise<string>;
+  // Expiry only. `mtimeMs` is the whole of what a `Stats` is consulted for,
+  // so `node:fs/promises` satisfies this without an adapter.
+  readdir(dir: string): Promise<string[]>;
+  stat(path: string): Promise<{ mtimeMs: number }>;
+  unlink(path: string): Promise<void>;
 }
+
+/** The shape a pairing code has, and therefore the shape a trail file has. */
+const CODE = /^[A-Z0-9]{1,32}$/;
+const SUFFIX = ".jsonl";
+
+/**
+ * How long a trail outlives the session that wrote it.
+ *
+ * The question this answers is "what did it actually do", and that gets asked
+ * within days of the thing happening, not within months. A week outlives a
+ * demo, a weekend and a judging pass, which is the longest anyone here has
+ * needed to look back.
+ *
+ * It is deliberately much longer than `IDLE_TTL_MS` on the Hub. A live session
+ * being forgotten and its record being forgotten are different events, and the
+ * whole reason the trail is on a disk is that the second must come long after
+ * the first.
+ */
+export const TRAIL_TTL_MS = 7 * 24 * 60 * 60_000;
 
 export interface FileAuditStoreOptions {
   dir: string;
@@ -121,8 +145,8 @@ export class FileAuditStore implements AuditStore {
    * but the characters a code can legitimately contain is allowed through.
    */
   private path(sessionId: string): string | null {
-    if (!/^[A-Z0-9]{1,32}$/.test(sessionId)) return null;
-    return `${this.o.dir}/${sessionId}.jsonl`;
+    if (!CODE.test(sessionId)) return null;
+    return `${this.o.dir}/${sessionId}${SUFFIX}`;
   }
 
   append(entry: AuditEntry): void {
@@ -159,6 +183,58 @@ export class FileAuditStore implements AuditStore {
       }
     }
     return tail(entries, query);
+  }
+
+  /**
+   * Forget the trails of sessions nobody has touched for `olderThanMs`.
+   *
+   * Nothing in Dusky may edit or delete an ENTRY, and this does not: it
+   * expires whole session files, uniformly, by age, under a policy stated in
+   * one place. That is retention rather than revision. Without it the
+   * directory only ever grows, and its key space is pairing codes, which
+   * anyone who can reach the relay can invent. `Hub.sweep` fixed exactly this
+   * shape of leak in memory and wrote the rule down; the disk was still
+   * carrying one.
+   *
+   * Two things are load-bearing.
+   *
+   * It runs THROUGH the write queue rather than beside it. Codes are six
+   * letters and get reused, so a sweep reading the directory independently
+   * could stat a file last written a month ago, have a new session under that
+   * same code append to it, and then unlink a trail seconds old.
+   *
+   * It considers only names of the exact shape this store writes, which is the
+   * same check `path` makes on the way in. The directory is a mounted volume
+   * and may hold things Dusky did not put there.
+   *
+   * Failure is reported, never thrown. A relay that cannot tidy its disk is
+   * still a relay; nothing here is worth ending a session over.
+   */
+  async sweep(at: number = Date.now(), olderThanMs: number = TRAIL_TTL_MS): Promise<number> {
+    let removed = 0;
+    this.queue = this.queue
+      .then(() => (this.ready ??= this.o.fs.mkdir(this.o.dir, { recursive: true })))
+      .then(async () => {
+        for (const name of await this.o.fs.readdir(this.o.dir)) {
+          if (!name.endsWith(SUFFIX)) continue;
+          if (!CODE.test(name.slice(0, -SUFFIX.length))) continue;
+          const file = `${this.o.dir}/${name}`;
+          try {
+            const { mtimeMs } = await this.o.fs.stat(file);
+            if (at - mtimeMs < olderThanMs) continue;
+            await this.o.fs.unlink(file);
+            removed += 1;
+          } catch (err: unknown) {
+            // One unreadable file must not stop the rest being reclaimed.
+            this.o.onError?.(err instanceof Error ? err : new Error(String(err)));
+          }
+        }
+      })
+      .catch((err: unknown) => {
+        this.o.onError?.(err instanceof Error ? err : new Error(String(err)));
+      });
+    await this.queue;
+    return removed;
   }
 
   async flush(): Promise<void> {

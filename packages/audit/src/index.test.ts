@@ -1,6 +1,12 @@
 import type { AuditEntry } from "@dusky/contracts";
 import { describe, expect, it } from "vitest";
-import { type AuditFs, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "./index.js";
+import {
+  type AuditFs,
+  FileAuditStore,
+  MemoryAuditStore,
+  TeeAuditStore,
+  TRAIL_TTL_MS,
+} from "./index.js";
 
 const entry = (p: Partial<AuditEntry> = {}): AuditEntry => ({
   at: "2026-08-26T13:20:35.963Z",
@@ -9,10 +15,18 @@ const entry = (p: Partial<AuditEntry> = {}): AuditEntry => ({
   ...p,
 });
 
-/** An in-memory filesystem, so the store is tested without touching a disk. */
+/**
+ * An in-memory filesystem, so the store is tested without touching a disk.
+ *
+ * It carries modification times because that is what expiry is decided on, and
+ * a clock the test moves by hand, because a sweep that could only be tested by
+ * waiting a week would not be tested.
+ */
 function fakeFs() {
   const files = new Map<string, string>();
+  const mtimes = new Map<string, number>();
   const dirs: string[] = [];
+  let clock = 0;
   let failNext: Error | null = null;
   const fs: AuditFs = {
     async mkdir(dir) {
@@ -26,14 +40,44 @@ function fakeFs() {
         throw e;
       }
       files.set(path, (files.get(path) ?? "") + data);
+      mtimes.set(path, clock);
     },
     async readFile(path) {
       const v = files.get(path);
       if (v === undefined) throw new Error("ENOENT");
       return v;
     },
+    async readdir(dir) {
+      const prefix = `${dir}/`;
+      return [...files.keys()]
+        .filter((f) => f.startsWith(prefix))
+        .map((f) => f.slice(prefix.length));
+    },
+    async stat(path) {
+      const m = mtimes.get(path);
+      if (m === undefined) throw new Error("ENOENT");
+      return { mtimeMs: m };
+    },
+    async unlink(path) {
+      files.delete(path);
+      mtimes.delete(path);
+    },
   };
-  return { fs, files, dirs, fail: (e: Error) => (failNext = e) };
+  const place = (name: string, mtimeMs: number) => {
+    files.set(`/var/data/audit/${name}`, "{}\n");
+    mtimes.set(`/var/data/audit/${name}`, mtimeMs);
+  };
+  return {
+    fs,
+    files,
+    dirs,
+    mtimes,
+    place,
+    tick: (t: number) => {
+      clock = t;
+    },
+    fail: (e: Error) => (failNext = e),
+  };
 }
 
 describe("keeping a trail in memory", () => {
@@ -123,6 +167,118 @@ describe("keeping a trail on disk", () => {
     expect(() => s.append(entry())).not.toThrow();
     await s.flush();
     expect(seen.map((e) => e.message)).toEqual(["EROFS: read-only file system"]);
+  });
+});
+
+/**
+ * Forgetting a trail once it is old enough.
+ *
+ * The trail is append-only and nothing may edit or delete an ENTRY, which is
+ * what makes it worth reading. Expiring a whole session's file after a stated
+ * window is a different act: it is retention policy applied uniformly by age,
+ * not history being rewritten. The distinction matters because the alternative
+ * is a directory that only ever grows, keyed on pairing codes anyone reaching
+ * the relay can invent, which is the leak `Hub.sweep` already fixed in memory
+ * and which the disk was still carrying.
+ */
+describe("forgetting a trail that is old enough", () => {
+  const DAY = 24 * 60 * 60_000;
+  const NOW = 100 * DAY;
+
+  it("removes a trail nothing has touched for longer than the window", async () => {
+    const { fs, place, files } = fakeFs();
+    place("JNKCBX.jsonl", NOW - 30 * DAY);
+    place("FRESHR.jsonl", NOW - 1 * DAY);
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs });
+
+    expect(await s.sweep(NOW, 7 * DAY)).toBe(1);
+    expect([...files.keys()]).toEqual(["/var/data/audit/FRESHR.jsonl"]);
+  });
+
+  it("keeps everything when nothing has aged out", async () => {
+    const { fs, place, files } = fakeFs();
+    place("JNKCBX.jsonl", NOW - 6 * DAY);
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs });
+
+    expect(await s.sweep(NOW, 7 * DAY)).toBe(0);
+    expect(files.size).toBe(1);
+  });
+
+  /**
+   * Codes are six letters and get reused, in this repository constantly. A
+   * sweep that read the directory outside the write queue could stat a file
+   * last touched a month ago, have a new session under the same code append to
+   * it, and then unlink a trail that is seconds old.
+   */
+  it("does not delete a trail a session has just started writing again", async () => {
+    const { fs, place, files, tick } = fakeFs();
+    place("JNKCBX.jsonl", NOW - 30 * DAY);
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs });
+
+    // Queued, deliberately not awaited: this is the race.
+    tick(NOW);
+    s.append(entry({ kind: "discover" }));
+
+    expect(await s.sweep(NOW, 7 * DAY)).toBe(0);
+    expect(files.has("/var/data/audit/JNKCBX.jsonl")).toBe(true);
+  });
+
+  /**
+   * The directory is a mounted volume that may hold things this store did not
+   * write. Only the exact shape it produces is a candidate, which is the same
+   * rule `path` applies on the way in.
+   */
+  it("never removes a file it did not write", async () => {
+    const { fs, place, files } = fakeFs();
+    for (const name of [
+      "README.md",
+      "notes.txt",
+      "jnkcbx.jsonl",
+      "JNKCBX.jsonl.bak",
+      "with space.jsonl",
+      ".jsonl",
+    ]) {
+      place(name, NOW - 90 * DAY);
+    }
+    place("JNKCBX.jsonl", NOW - 90 * DAY);
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs });
+
+    expect(await s.sweep(NOW, 7 * DAY)).toBe(1);
+    expect([...files.keys()].map((f) => f.replace("/var/data/audit/", "")).sort()).toEqual([
+      ".jsonl",
+      "JNKCBX.jsonl.bak",
+      "README.md",
+      "jnkcbx.jsonl",
+      "notes.txt",
+      "with space.jsonl",
+    ]);
+  });
+
+  it("reports a disk it cannot sweep instead of throwing at the relay", async () => {
+    const { fs, place, files } = fakeFs();
+    place("JNKCBX.jsonl", NOW - 30 * DAY);
+    const seen: Error[] = [];
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs, onError: (e) => seen.push(e) });
+    fs.unlink = async () => {
+      throw new Error("EACCES: permission denied");
+    };
+
+    // A relay must survive a disk it cannot write to, the same way `append`
+    // does. Nothing here is worth ending a session over.
+    await expect(s.sweep(NOW, 7 * DAY)).resolves.toBe(0);
+    expect(seen.map((e) => e.message)).toEqual(["EACCES: permission denied"]);
+    expect(files.size).toBe(1);
+  });
+
+  it("has a default window, so a caller cannot forget to state one", async () => {
+    const { fs, place, files } = fakeFs();
+    place("OLDONE.jsonl", NOW - 400 * DAY);
+    place("RECENT.jsonl", NOW - 1 * DAY);
+    const s = new FileAuditStore({ dir: "/var/data/audit", fs });
+
+    expect(TRAIL_TTL_MS).toBeGreaterThan(DAY);
+    expect(await s.sweep(NOW)).toBe(1);
+    expect(files.has("/var/data/audit/RECENT.jsonl")).toBe(true);
   });
 });
 
