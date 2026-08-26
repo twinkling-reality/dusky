@@ -153,7 +153,10 @@ Worth listing separately: these were all live in a passing test suite.
   `cart_total` and `removed`, which are the exact keys the first-party test
   market returns. Every other site on earth fell through to truncated JSON,
   which quietly made the whole no-per-site-branching claim untrue at the last
-  frame of every flow.
+  frame of every flow. Replaced by a generic reader, and confirmed on the
+  panel: a completed purchase shows `Added / Organic oat milk`, `Cart size / 1`,
+  `Cart total / $4.29`, with every label humanised from the site's own key
+  names and the price formatted because it is money.
 - **Every returned result was reported as a success.** A site answering
   `{"ok": false, "error": "out of stock"}` has returned a result, and that
   result is a failure. Asserting success from the fact that a call came back is
