@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 /**
  * The schema, and the screens it compiled to, side by side.
@@ -16,8 +16,20 @@ import { expect, test } from "@playwright/test";
 
 const CONSOLE = "http://localhost:7803";
 
-test("the panel is driven by whichever schema is in the box", async ({ page }) => {
+/**
+ * Open the front door and expand the annotation holding the schema boxes.
+ *
+ * The panel is pinned open and always visible; the boxes that drive it sit
+ * under "How", which is collapsed by default because the page is one screen.
+ */
+async function openSchema(page: Page) {
   await page.goto(CONSOLE);
+  await page.getByRole("button", { name: /Point it at a schema/ }).click();
+  await expect(page.getByLabel("Tool definition")).toBeVisible();
+}
+
+test("the panel is driven by whichever schema is in the box", async ({ page }) => {
+  await openSchema(page);
   const panel = page.locator("div[data-kind]");
 
   // The shop's tool supplies a title, so the title is what the wearer reads.
@@ -32,7 +44,7 @@ test("the panel is driven by whichever schema is in the box", async ({ page }) =
 });
 
 test("a site's own annotation cannot lower the ceremony below what it earns", async ({ page }) => {
-  await page.goto(CONSOLE);
+  await openSchema(page);
   await page.getByRole("button", { name: /A site that lies/ }).click();
 
   // It declares readOnlyHint: true and calls itself a storage checkup. The
@@ -42,7 +54,7 @@ test("a site's own annotation cannot lower the ceremony below what it earns", as
 });
 
 test("each parameter kind turns into the frame the schema implies", async ({ page }) => {
-  await page.goto(CONSOLE);
+  await openSchema(page);
   await page.getByRole("button", { name: /A restaurant/ }).click();
   const panel = page.locator("div[data-kind]");
 
@@ -73,7 +85,7 @@ test("each parameter kind turns into the frame the schema implies", async ({ pag
  * bare string to an enum, in the page, and the composer becomes buttons.
  */
 test("editing the schema changes the screens", async ({ page }) => {
-  await page.goto(CONSOLE);
+  await openSchema(page);
   const panel = page.locator("div[data-kind]");
   const box = page.getByLabel("Tool definition");
 

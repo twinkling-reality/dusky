@@ -1,0 +1,77 @@
+.wrap {
+  position: relative;
+  border: 1px solid var(--dusky-hair);
+  /* A squircle rather than a rounded rectangle: the corner keeps curving
+     instead of meeting a straight edge, which is the same shape family as the
+     rims in the drawing above it. */
+  border-radius: 1.5rem;
+  background: var(--dusky-raised);
+  padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s4);
+  min-width: 0;
+}
+
+/* On the edge, not above it: a label attached to a part. */
+.pill {
+  position: absolute;
+  top: 0;
+  left: var(--dusky-s5);
+  transform: translateY(-50%);
+  padding: 0.28em 0.8em;
+  border-radius: 999px;
+  background: var(--dusky-accent);
+  color: var(--dusky-ground);
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dusky-s3);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dusky-ink-dim);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+.toggle:hover {
+  color: var(--dusky-ink-strong);
+}
+
+.teaser {
+  min-width: 0;
+}
+
+.chevron {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+.chevron[data-open="true"] {
+  transform: rotate(-135deg);
+}
+
+.body {
+  min-width: 0;
+}
+.wrap[data-open="true"] .toggle {
+  margin-bottom: var(--dusky-s3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

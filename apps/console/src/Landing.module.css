@@ -1,129 +1,113 @@
 .page {
-  max-width: 78rem;
+  max-width: 84rem;
   margin: 0 auto;
-  padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s7);
+  padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s6);
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s6);
+  gap: var(--dusky-s5);
+}
+
+/**
+ * Object left, annotations right, leader line between.
+ *
+ * The middle column exists only to hold the leader, and collapses out of the
+ * grid below the width where a diagonal line between two columns would be
+ * pointing at nothing.
+ */
+.stage {
+  display: grid;
+  gap: var(--dusky-s5);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+}
+@media (min-width: 1080px) {
+  .stage {
+    /* The right column is sized by the panel it has to hold: 600px scaled to
+       0.8 is 480, plus the callout's own padding. Sizing it any other way
+       would clip the one thing on the page that cannot be reflowed. */
+    grid-template-columns: minmax(0, 1fr) 33rem;
+    gap: var(--dusky-s5);
+  }
+}
+
+.objectCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s4);
+  min-width: 0;
 }
 
 .claim {
   margin: 0;
   font-weight: 200;
-  font-size: clamp(1.9rem, 4.2vw, 3.1rem);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.8rem, 3.4vw, 2.7rem);
+  line-height: 1.06;
+  letter-spacing: -0.032em;
   color: var(--dusky-ink-strong);
   text-wrap: balance;
+  max-width: 18ch;
 }
 
 .lede {
   margin: 0;
-  font-size: 1.02rem;
+  max-width: 46ch;
   color: var(--dusky-ink-dim);
+}
+
+.calloutCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s5);
+  min-width: 0;
+}
+
+.caption {
+  margin: var(--dusky-s3) 0 0;
+  font-size: 0.82rem;
+  color: var(--dusky-ink-faint);
+}
+
+.body {
+  margin: 0 0 var(--dusky-s3);
+  font-size: 0.9rem;
+  color: var(--dusky-ink-dim);
+}
+.body:last-child {
+  margin-bottom: 0;
+}
+.body code {
+  font-family: var(--dusky-mono);
+  font-size: 0.86em;
+  color: var(--dusky-accent);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--dusky-s3);
   align-items: center;
+  justify-content: center;
+  gap: var(--dusky-s4);
+  text-align: center;
 }
 
 .primary {
   display: inline-block;
-  padding: 0.7em 1.4em;
+  padding: 0.8em 2em;
   border: 1px solid var(--dusky-accent);
-  border-radius: var(--dusky-radius);
+  border-radius: 999px;
   background: var(--dusky-accent);
   color: var(--dusky-ground);
-  font-size: 0.98rem;
+  font-size: 1rem;
   text-decoration: none;
+  border-bottom: 1px solid var(--dusky-accent);
 }
 .primary:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.1);
 }
 
-.secondary {
-  display: inline-block;
-  padding: 0.7em 1.4em;
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  color: var(--dusky-ink);
-  text-decoration: none;
-}
-.secondary:hover {
-  border-color: var(--dusky-accent-soft);
-}
-
-/* Stated beside the pitch, not discovered when something breaks. */
-.requires {
-  margin: 0;
-  padding: var(--dusky-s3) var(--dusky-s4);
-  border-left: 2px solid var(--dusky-accent-soft);
-  font-size: 0.9rem;
-  color: var(--dusky-ink-dim);
-}
-.requires code {
-  font-family: var(--dusky-mono);
-  font-size: 0.86em;
-  color: var(--dusky-accent);
-  word-break: break-all;
-}
-
-.foot {
-  display: flex;
-  gap: var(--dusky-s4);
-  padding-top: var(--dusky-s4);
-  border-top: 1px solid var(--dusky-hair);
-  font-size: 0.9rem;
-}
-
-/* Three cells, hairline separated, at the length somebody reads standing up. */
-.facts {
-  display: grid;
-  gap: 0;
-  grid-template-columns: minmax(0, 1fr);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  overflow: hidden;
-}
-@media (min-width: 900px) {
-  .facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.fact {
-  padding: var(--dusky-s5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-  border-top: 1px solid var(--dusky-hair);
-}
-.fact:first-child {
-  border-top: 0;
-}
-@media (min-width: 900px) {
-  .fact {
-    border-top: 0;
-    border-left: 1px solid var(--dusky-hair);
-  }
-  .fact:first-child {
-    border-left: 0;
-  }
-}
-
-.factTitle {
-  margin: 0;
-  font-weight: 400;
-  font-size: 0.98rem;
-  letter-spacing: -0.01em;
-  color: var(--dusky-ink-strong);
-}
-
-.factBody {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--dusky-ink-dim);
+.actionsNote {
+  font-size: 0.82rem;
+  color: var(--dusky-ink-faint);
+  max-width: 44ch;
+  text-align: left;
 }

@@ -3,31 +3,34 @@
   margin: 0;
   padding: 0;
   border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .option {
-  padding: 0.3em 0.6em;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.5rem;
   border: 0;
-  border-right: 1px solid var(--dusky-hair);
   background: none;
   color: var(--dusky-ink-faint);
-  font-family: var(--dusky-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   cursor: pointer;
+  padding: 0;
 }
-.option:last-child {
-  border-right: 0;
+.option svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .option:hover {
   color: var(--dusky-ink);
 }
 .option[data-on="true"] {
   background: var(--dusky-raised);
-  color: var(--dusky-ink-strong);
+  color: var(--dusky-accent);
 }
 
 /* A fieldset needs a legend for the grouping to mean anything to a screen

@@ -1,101 +1,110 @@
+import { useState } from "react";
 import { Link } from "react-router";
+import { Callout } from "./Callout.js";
 import { Checklist } from "./Checklist.js";
-import { Derivation } from "./Derivation.js";
+import { DerivationControls, DerivationPanel, useDerivation } from "./Derivation.js";
 import styles from "./Landing.module.css";
+import { Schematic } from "./Schematic.js";
 import { SiteHeader } from "./SiteHeader.js";
-import header from "./SiteHeader.module.css";
 
 /**
- * The front door.
+ * The front door: one screen, one object, three annotations.
  *
- * One decision shapes it: the claim and the proof share a screen. The panel
- * beside the headline is a live 600 by 600 Display, the same component the
- * glasses run, and everything below it is the schema that produced what is on
- * it. A judge who reads the first sentence has already seen the argument.
+ * It is laid out as a parts drawing because that is what Dusky is about. The
+ * glasses are a schematic; the leader line runs off the display lens to a
+ * callout; and what is inside that callout is not a picture of the interface,
+ * it is the interface, running, driven by the schema in the callout below it.
  *
- * The demo needs WebMCP; the panel does not. So the thing that always works is
- * the thing above the fold, and somebody in the wrong browser meets an
- * explanation rather than a wall.
- *
- * Prose is kept short deliberately. This is a front door, not the
- * documentation: the repository holds the long version and says so.
+ * That last part is the whole reason the page exists. An annotated diagram
+ * with three paragraphs in it would be asking to be believed, which is the
+ * thing two working demos already failed to avoid.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
-const FLAG = "chrome://flags/#enable-webmcp-testing";
 
-/** Three things worth knowing, at the length somebody will actually read. */
-const FACTS = [
-  {
-    title: "The tab stays open",
-    body: "Tools run in your browser, inside the site's own document, in your session. Dusky never holds a credential, and closing the tab ends the session. That is the security model, not a limitation.",
-  },
-  {
-    title: "Code decides, models suggest",
-    body: "Whether an action stops for your approval is settled with no model, no network and no DOM. A site's own read-only claim can lower ceremony and never raise it.",
-  },
-  {
-    title: "It cannot drive everything",
-    body: "A parameter that is a nested object cannot be collected in one glance on six keys. Those tools are left off the menu rather than offered as a control that dead-ends.",
-  },
-];
+type Panel = "why" | "schema" | null;
 
 export function Landing() {
+  const [open, setOpen] = useState<Panel>(null);
+  // One machine, shown in two places. The panel in the first callout and the
+  // boxes in the third are the same session; editing one moves the other.
+  const derivation = useDerivation();
+  const toggle = (p: Panel) => setOpen((cur) => (cur === p ? null : p));
+
   return (
     <>
-      <SiteHeader>
-        <a className={header.link} href={REPO} target="_blank" rel="noreferrer">
-          Source
-        </a>
-        <Link className={header.cta} to="/demo">
-          Try it now
-        </Link>
-      </SiteHeader>
+      <SiteHeader repo={REPO} />
 
-      <div className={styles.page}>
-        <Derivation
-          intro={
-            <>
-              <h1 className={styles.claim}>A browser for a web made of tools instead of pages.</h1>
-              <p className={styles.lede}>
-                Dusky reads the actions a site publishes over WebMCP and turns them into an
-                interface for Meta Ray-Ban Display: 600 by 600, six keys, no cursor. There is no
-                per-site integration anywhere in it.
+      <main className={styles.page}>
+        <div className={styles.stage}>
+          <div className={styles.objectCol}>
+            <h1 className={styles.claim}>A browser for a web made of tools instead of pages.</h1>
+            <p className={styles.lede}>
+              Dusky reads the actions a site publishes over WebMCP and turns them into an interface
+              for Meta Ray-Ban Display. 600 by 600, six keys, no cursor, and no per-site integration
+              anywhere in it.
+            </p>
+            <Schematic />
+            <Checklist />
+          </div>
+
+          <div className={styles.calloutCol}>
+            <Callout label="The lens" pinned>
+              <DerivationPanel d={derivation} />
+              <p className={styles.caption}>
+                Live. The component the glasses run, driven by the same state machine over the same
+                compiler, answering the schema under &ldquo;How&rdquo;. Click through it.
               </p>
-              <div className={styles.actions}>
-                <Link className={styles.primary} to="/demo">
-                  Try it now, no glasses
-                </Link>
-                <a className={styles.secondary} href={REPO} target="_blank" rel="noreferrer">
-                  Read the source
-                </a>
-              </div>
-              <p className={styles.requires}>
-                The live demo needs Chrome 149 or later with <code>{FLAG}</code>, or the ChatGPT
-                desktop browser. Consuming another site&rsquo;s tools is a permission only a browser
-                can grant. The panel beside this works in any browser.
+            </Callout>
+
+            <Callout
+              label="Why"
+              teaser="Why the tab has to stay open"
+              expanded={open === "why"}
+              onToggle={() => toggle("why")}
+            >
+              <p className={styles.body}>
+                A tool does not run on Dusky&rsquo;s servers. It runs in your browser, inside the
+                partner site&rsquo;s own document, in your own logged-in session. Dusky moves intent
+                between the glasses and that tab and never moves a credential, which is why it never
+                needs one. The cost is the tab: close it and the session ends, because the
+                capability lived there and nowhere else.
               </p>
-              <Checklist />
-            </>
-          }
-        />
+              <p className={styles.body}>
+                Whether an action stops for your approval is settled by code with no model, no
+                network and no DOM in it. A site&rsquo;s own <code>readOnlyHint</code> can lower
+                ceremony and never raise it, because the site making the claim may be the one you
+                need protecting from.
+              </p>
+            </Callout>
 
-        <section className={styles.facts}>
-          {FACTS.map((f) => (
-            <article key={f.title} className={styles.fact}>
-              <h2 className={styles.factTitle}>{f.title}</h2>
-              <p className={styles.factBody}>{f.body}</p>
-            </article>
-          ))}
-        </section>
+            <Callout
+              label="How"
+              teaser="Point it at a schema it has never seen"
+              expanded={open === "schema"}
+              onToggle={() => toggle("schema")}
+            >
+              <p className={styles.body}>
+                Every box below is editable, and the lens above answers. Change a parameter from a
+                string to an enum and the composer becomes buttons while you watch. A hardcoded
+                interface cannot respond to an edit, which is the only version of this claim worth
+                anything.
+              </p>
+              <DerivationControls d={derivation} />
+            </Callout>
+          </div>
+        </div>
 
-        <footer className={styles.foot}>
-          <a href={REPO} target="_blank" rel="noreferrer">
-            Source, and the long version of all of this
-          </a>
-          <Link to="/demo">Open the demo</Link>
-        </footer>
-      </div>
+        <div className={styles.actions}>
+          <Link className={styles.primary} to="/demo">
+            Open the demo
+          </Link>
+          <span className={styles.actionsNote}>
+            No glasses, no typing. Needs Chrome 149+ with the WebMCP flag, or the ChatGPT desktop
+            browser.
+          </span>
+        </div>
+      </main>
     </>
   );
 }

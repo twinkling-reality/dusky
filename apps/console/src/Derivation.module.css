@@ -307,14 +307,15 @@
 
 /* --------------------------------------------------------------- panel */
 
+/**
+ * 600 x 600 is not negotiable, so the panel scales rather than reflows.
+ * Reflowing it would be showing a layout the glasses cannot produce.
+ */
 .stage {
-  /* 600 x 600 is not negotiable, so the panel is scaled rather than reflowed.
-     Reflowing it would be showing something the glasses cannot show. */
   width: 480px;
   height: 480px;
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
   align-self: center;
 }
@@ -324,4 +325,15 @@
   height: 600px;
   transform: scale(0.8);
   transform-origin: top left;
+}
+
+/* Narrow enough that 480 would overflow: same square, fewer pixels. */
+@media (max-width: 560px) {
+  .stage {
+    width: 330px;
+    height: 330px;
+  }
+  .panel {
+    transform: scale(0.55);
+  }
 }

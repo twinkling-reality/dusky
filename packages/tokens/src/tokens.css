@@ -9,20 +9,22 @@
  */
 
 :root {
-  /* Console, light */
-  --dusky-ground: #fbfbfa;
-  --dusky-raised: #ffffff;
-  --dusky-sunken: #f2f3f2;
-  --dusky-hair: #d9dcda;
-  --dusky-hair-soft: #e8eae8;
-  --dusky-ink: #2b3132;
-  --dusky-ink-strong: #0e1213;
-  --dusky-ink-dim: #6b7473;
-  --dusky-ink-faint: #9aa3a2;
-  --dusky-accent: #1e7c79;
-  --dusky-accent-soft: #bfe0de;
+  /* Console, light. A warm paper grey rather than a white: this surface is
+     read next to a black waveguide, and a cold white next to emitted light
+     makes the panel look grey rather than lit. */
+  --dusky-ground: #edece7;
+  --dusky-raised: #f7f6f2;
+  --dusky-sunken: #e4e2db;
+  --dusky-hair: #cecabf;
+  --dusky-hair-soft: #dedad1;
+  --dusky-ink: #2f312d;
+  --dusky-ink-strong: #141613;
+  --dusky-ink-dim: #6a6c64;
+  --dusky-ink-faint: #9a9b92;
+  --dusky-accent: #1c6b68;
+  --dusky-accent-soft: #b3d2cf;
   --dusky-ok: #2f7d51;
-  --dusky-warn: #8a6420;
+  --dusky-warn: #86601d;
   --dusky-stop: #a8443a;
 
   /* Display, never themed */
@@ -65,17 +67,17 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --dusky-ground: #0b0d0e;
-    --dusky-raised: #14181a;
-    --dusky-sunken: #090b0c;
-    --dusky-hair: #242a2c;
-    --dusky-hair-soft: #1a1f21;
-    --dusky-ink: #cbd2d4;
-    --dusky-ink-strong: #eef3f4;
-    --dusky-ink-dim: #79847f;
-    --dusky-ink-faint: #4e585a;
+    --dusky-ground: #1a1a17;
+    --dusky-raised: #23231f;
+    --dusky-sunken: #131310;
+    --dusky-hair: #34342d;
+    --dusky-hair-soft: #262622;
+    --dusky-ink: #d5d3ca;
+    --dusky-ink-strong: #f1efe8;
+    --dusky-ink-dim: #8b8a80;
+    --dusky-ink-faint: #5e5d55;
     --dusky-accent: #6fd6d2;
-    --dusky-accent-soft: #2e4e4f;
+    --dusky-accent-soft: #35514f;
     --dusky-ok: #7fcfa0;
     --dusky-warn: #d8b471;
     --dusky-stop: #db8c80;
@@ -83,17 +85,17 @@
 }
 
 :root[data-theme="dark"] {
-  --dusky-ground: #0b0d0e;
-  --dusky-raised: #14181a;
-  --dusky-sunken: #090b0c;
-  --dusky-hair: #242a2c;
-  --dusky-hair-soft: #1a1f21;
-  --dusky-ink: #cbd2d4;
-  --dusky-ink-strong: #eef3f4;
-  --dusky-ink-dim: #79847f;
-  --dusky-ink-faint: #4e585a;
+  --dusky-ground: #1a1a17;
+  --dusky-raised: #23231f;
+  --dusky-sunken: #131310;
+  --dusky-hair: #34342d;
+  --dusky-hair-soft: #262622;
+  --dusky-ink: #d5d3ca;
+  --dusky-ink-strong: #f1efe8;
+  --dusky-ink-dim: #8b8a80;
+  --dusky-ink-faint: #5e5d55;
   --dusky-accent: #6fd6d2;
-  --dusky-accent-soft: #2e4e4f;
+  --dusky-accent-soft: #35514f;
   --dusky-ok: #7fcfa0;
   --dusky-warn: #d8b471;
   --dusky-stop: #db8c80;

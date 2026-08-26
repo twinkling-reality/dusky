@@ -10,7 +10,6 @@
   /* Opaque rather than translucent: a schema editor and a 600x600 panel
      scroll under this, and a blur over either is noise. */
   background: var(--dusky-ground);
-  border-bottom: 1px solid var(--dusky-hair);
 }
 
 .wordmark {
@@ -66,4 +65,27 @@
 }
 .state[data-state="offline"] {
   color: var(--dusky-stop);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  color: var(--dusky-ink-faint);
+  border: none;
+  border-radius: 999px;
+}
+.icon:hover {
+  color: var(--dusky-ink-strong);
+}
+
+/* Visible to a screen reader, not to a layout. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
