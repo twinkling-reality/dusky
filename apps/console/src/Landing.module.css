@@ -1,161 +1,368 @@
-.page {
-  max-width: 84rem;
-  margin: 0 auto;
-  padding: 0 var(--dusky-s5) var(--dusky-s6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s4);
-  /* The sheet sits on the screen rather than at the top of a long page.
-     Minus the bar, so it centres against what is actually left. */
-  min-height: calc(100vh - 8rem);
-  justify-content: center;
-}
-
 /**
- * One sheet, ruled into cells.
+ * The front door.
  *
- * The right column is sized by the panel it holds, because 600 by 600 is the
- * one measurement in this product that is not ours to choose. Everything else
- * takes what is left.
+ * Two things stacked inside the drawn margin: a hero in two columns, and the
+ * product on a field of light under it.
+ *
+ * Nothing here is padded to the page's own edge. The nav capsule is the widest
+ * element and everything else sits within it, so the wordmark, the headline and
+ * the stage all start on one line rather than on three that nearly agree.
  */
-.sheet {
-  display: grid;
-  gap: 0;
-  grid-template-columns: minmax(0, 1fr);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  overflow: hidden;
-  background: var(--dusky-raised);
-}
-@media (min-width: 1000px) {
-  .sheet {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 33rem;
-  }
-}
-
-.saying {
-  grid-column: 1 / -1;
-  padding: var(--dusky-s7) var(--dusky-s6);
+.page {
+  max-width: var(--dusky-page);
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s4);
-  justify-content: center;
-  min-width: 0;
+  gap: var(--dusky-s6);
+  padding-top: clamp(2rem, 6vh, 4rem);
+  padding-bottom: var(--dusky-s4);
 }
-@media (min-width: 1000px) {
-  .saying {
-    grid-column: 1 / 4;
+
+/*
+ * Headline, subtitle, and the ways in.
+ *
+ * The buttons share a row with the SUBTITLE, not with the headline. The
+ * headline is the page announcing itself; the subtitle and the buttons are one
+ * sentence continuing into something you can press, and `align-items: baseline`
+ * puts their text on a single line rather than their boxes in a single band.
+ */
+.hero {
+  display: grid;
+  gap: var(--dusky-s5);
+  padding-inline: var(--dusky-s5);
+}
+@media (min-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--dusky-s7);
+    row-gap: var(--dusky-s4);
+    align-items: baseline;
+  }
+  .claim {
+    grid-column: 1;
     grid-row: 1;
   }
+  .lede {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .actions {
+    grid-column: 2;
+    grid-row: 2;
+  }
 }
 
+/* Large, and light. Archivo at 300 across four lines of display size is the
+   project's own voice; the weight the reference uses would be a different
+   product's. Width is the column's job, so there is no max-width fighting it. */
 .claim {
   margin: 0;
   font-weight: 300;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-size: clamp(2.2rem, 5.2vw, 4rem);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
   color: var(--dusky-ink-strong);
   text-wrap: balance;
-  max-width: 20ch;
 }
 
 .lede {
   margin: 0;
-  max-width: 54ch;
+  /* 60ch, not 46. The reading measure for a paragraph is not the measure for a
+     two-clause subtitle sitting under a display headline: at 46 it broke with
+     half the column still empty, which reads as the page being cramped rather
+     than as the line being long. */
+  max-width: 60ch;
+  font-size: 1.05rem;
+  line-height: 1.55;
   color: var(--dusky-ink-dim);
 }
 
-.lens {
+.actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--dusky-s3);
-  padding: var(--dusky-s4);
-  border-top: 1px solid var(--dusky-hair);
-  background: var(--dusky-sunken);
-  min-width: 0;
-}
-@media (min-width: 1000px) {
-  .lens {
-    grid-column: 4;
-    grid-row: 1 / 3;
-    border-top: 0;
-    border-left: 1px solid var(--dusky-hair);
-    justify-content: center;
-  }
 }
 
-.cellLabel {
-  font-family: var(--dusky-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
-}
-
-/* Each way in gets a cell, and the cells are the same shape whether they are
-   a link, a button, or an outbound link. */
-.action {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  align-items: flex-start;
-  text-align: left;
-  padding: var(--dusky-s5);
-  /* Reset first. One of these cells is a <button>, and a UA button border on
-     three sides survives setting only border-top. */
-  border: 0;
-  border-top: 1px solid var(--dusky-hair);
-  background: none;
-  color: inherit;
+/*
+ * Both controls are the same height, so the row has one baseline and one band.
+ * `font: inherit` before the size, so a <button> also inherits the page's
+ * line-height rather than the UA shorthand's `normal`.
+ */
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  height: 3rem;
+  border-radius: 999px;
   font: inherit;
+  font-size: 1rem;
+  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
-  position: relative;
-  min-width: 0;
-}
-@media (min-width: 1000px) {
-  .action {
-    grid-row: 2;
-    border-top: 0;
-    border-left: 1px solid var(--dusky-hair);
-  }
-  /* The three actions are the third, fourth and fifth children of the sheet.
-     `:first-of-type` looked right and was not: these are an <a>, a <button>
-     and an <a>, so it matched two of them and dropped the wrong border. */
-  .sheet > .action:nth-child(3) {
-    border-left: 0;
-  }
-}
-.action:hover {
-  background: var(--dusky-sunken);
 }
 
-.actionName {
-  font-size: 1.02rem;
-  color: var(--dusky-ink-strong);
+.primary {
+  gap: var(--dusky-s3);
+  padding: 0 0.45rem 0 1.4rem;
+  background: var(--dusky-ink-strong);
+  /* Set on every side. The stylesheet gives every <a> a bottom border in the
+     accent, and `a:hover` outranks a single class, so both states say it. */
+  border: 1px solid var(--dusky-ink-strong);
+  color: var(--dusky-surface);
+}
+.primary:hover {
+  background: var(--dusky-accent);
+  border-color: var(--dusky-accent);
 }
 
-.actionNote {
-  font-size: 0.84rem;
-  color: var(--dusky-ink-dim);
-  max-width: 34ch;
-}
-
+/* The arrow rides in a disc rather than beside the label, which is what makes
+   the pill read as a control rather than as a link that grew. */
 .arrow {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dusky-surface) 20%, transparent);
+  font-size: 0.9rem;
+}
+
+.secondary {
+  gap: var(--dusky-s2);
+  padding: 0 1.3rem;
+  background: var(--dusky-surface);
+  border: 1px solid var(--dusky-hair);
+  color: var(--dusky-ink);
+}
+.secondary:hover {
+  border-color: var(--dusky-ink-faint);
+}
+/* The one control on the page allowed to ask for attention, because it is the
+   only one that means something is broken for the person reading it. */
+.secondary[data-state="bad"] {
+  border-color: color-mix(in srgb, var(--dusky-stop) 45%, transparent);
+  background: color-mix(in srgb, var(--dusky-stop) 5%, var(--dusky-surface));
+}
+
+/* ------------------------------------------------------------------ stage */
+
+/*
+ * The dropdown's anchor.
+ *
+ * Relative only. The panel measures itself against this box, so it lands under
+ * the control that opened it however the row above has wrapped.
+ */
+.reqAnchor {
+  position: relative;
+}
+.reqAnchor > [id="requirements"] {
   position: absolute;
-  top: var(--dusky-s5);
-  right: var(--dusky-s5);
-  color: var(--dusky-accent);
+  z-index: 40;
+  top: calc(100% + 0.55rem);
+  /* Right-aligned to the button, because the button is at the right end of the
+     row and a left-aligned panel would hang off the page. */
+  right: 0;
+  width: min(27rem, calc(100vw - 3rem));
+  text-align: left;
+}
+/* Under 720px the row is at the left of the page, so the panel opens the other
+   way for the same reason it opens rightwards above it. Narrower too: the
+   anchor already sits a body padding and a hero padding in from the window, and
+   a width measured from the window alone ran the panel out through the right
+   hand rule. */
+@media (max-width: 719px) {
+  .reqAnchor > [id="requirements"] {
+    right: auto;
+    left: 0;
+    width: min(27rem, calc(100vw - 5.5rem));
+  }
 }
 
-.status {
-  padding: 0 var(--dusky-s2);
+/* The product, on a field of light. */
+.stage {
+  position: relative;
+  display: grid;
+  /* One row, explicitly sized. An `auto` row is indefinite while the grid is
+     being sized, so the picture's own `max-height: 100%` would have nothing to
+     resolve against and would render at its intrinsic size. */
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  /*
+   * Generous, because the light needs somewhere to be. The picture is NOT
+   * stretched to the box and the box is not shaped to the picture: whatever
+   * asset is in here renders at its own best size, and the field is the room
+   * left around it.
+   */
+  padding: clamp(1.25rem, 3vw, 2.75rem);
+  height: clamp(17rem, 55vh, 32rem);
+  /*
+   * Clipped at its own edge, and nothing is lost by it: the fade has already
+   * taken the field to zero there.
+   *
+   * The field was briefly allowed to bloom past this box with a wide
+   * `overflow-clip-margin` instead. Chrome counts that margin as scrollable
+   * overflow, so the page grew about fifty pixels for a decoration and the
+   * margin rules, which are as long as the document's body, stopped short of
+   * the new bottom.
+   */
+  overflow: clip;
+  /*
+   * The fade, used by the mesh and by the grain over it. Declared here so the
+   * two layers cannot drift apart and leave a seam.
+   *
+   * Two linear fades intersected, not one radial.
+   *
+   * A radial centred on the box is the obvious thing and it does not work here,
+   * because the picture is nearly as tall as the box: the bright middle of the
+   * gradient lands entirely BEHIND the picture, and what is left over at the
+   * top and bottom edges is the tail of the falloff, which is why it kept
+   * reading as "barely there" however hard the colour was pushed. Two linears
+   * hold full strength across the whole middle and spend their fade only in the
+   * outer tenth, where there is nothing to hide behind them.
+   */
+  --stage-fade-x: linear-gradient(to right, transparent, #000 11%, #000 89%, transparent);
+  --stage-fade-y: linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent);
 }
 
+/*
+ * A mesh, not a gradient. Six colour points at irregular positions and sizes,
+ * blurred until the seams are gone: the eye reads it as one field with depth in
+ * it rather than as a band sweeping corner to corner, which is what a two-stop
+ * linear looks like at this size.
+ *
+ * Every stop is a color-mix of a token this palette already declares, so the
+ * page gains depth without gaining a hue. --dusky-stop is not among them on
+ * purpose: red here means a requirement is unmet.
+ */
+.stage::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-image:
+    radial-gradient(
+      52% 58% at 14% 10%,
+      color-mix(in srgb, var(--dusky-accent) var(--dusky-wash), transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      44% 52% at 74% 6%,
+      color-mix(in srgb, var(--dusky-ok) var(--dusky-wash-soft), transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      56% 62% at 96% 46%,
+      color-mix(in srgb, var(--dusky-accent-soft) var(--dusky-wash), transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      48% 56% at 4% 68%,
+      color-mix(in srgb, var(--dusky-warn) var(--dusky-wash-soft), transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      60% 58% at 52% 98%,
+      color-mix(in srgb, var(--dusky-accent) var(--dusky-wash-soft), transparent),
+      transparent 74%
+    ),
+    radial-gradient(
+      42% 48% at 34% 42%,
+      color-mix(in srgb, var(--dusky-ok) var(--dusky-wash-soft), transparent),
+      transparent 70%
+    );
+  /* 45px, not the 60 the reference uses. Its field was a card a few hundred
+     pixels wide; this one is the width of the page, and a blur that large
+     spreads each stop until the mesh reads as one flat tint. */
+  filter: blur(45px) saturate(1.15);
+  /*
+   * The light hugs the picture and dissolves outward, so there is no rounded
+   * rectangle on this page at all.
+   *
+   * A squircle with a hard edge is a container, and a container full of colour
+   * around a smaller picture reads as a picture in the wrong sized frame. With
+   * the field masked to nothing before it reaches the edge, whatever asset sits
+   * in the middle can be any size it likes: the light is simply what is around
+   * it, and it ends where the page begins.
+   */
+  -webkit-mask-image: var(--stage-fade-x), var(--stage-fade-y);
+  mask-image: var(--stage-fade-x), var(--stage-fade-y);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  /*
+   * 18s, alternating. The field is 160% of the stage and travels 4% of that, so
+   * a full traverse is a handful of pixels: under about ten seconds the eye
+   * catches the direction and the picture reads as breathing, which is a state,
+   * and the picture is not in one. Slow enough and the light is never seen
+   * moving, only found to have moved.
+   */
+  animation: stage-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes stage-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 2%, 0) scale(1.08);
+  }
+}
+
+/*
+ * Grain over the mesh. A blurred field of colour on its own bands and reads as
+ * a cheap wash; a fine noise laid over it in `overlay` breaks the banding and
+ * gives the surface something to catch. Generated by an SVG filter in a data
+ * URI, so it costs no request and no asset.
+ */
+.stage::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  /* The same box as the mesh, so one fade fits both. */
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: var(--dusky-grain);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  /* Masked with the mesh it sits on. Grain reaching the edge on its own would
+     draw the exact rectangle the fade exists to remove. */
+  -webkit-mask-image: var(--stage-fade-x), var(--stage-fade-y);
+  mask-image: var(--stage-fade-x), var(--stage-fade-y);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage::before {
+    animation: none;
+  }
+}
+
+/*
+ * The box hugs the picture. Sized by `max-*` rather than by `object-fit`,
+ * because with `contain` the element stays the size of its grid area while the
+ * image inside it shrinks to fit: the radius then rounds empty space and the
+ * picture's own corners stay square against the wash.
+ */
+.shot {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 16px;
+  box-shadow:
+    0 2px 6px rgb(20 22 19 / 8%),
+    0 24px 60px rgb(20 22 19 / 18%);
+}
+
+/* The derivation: the schema, the panel it compiled to, and the functions in
+   between. Collapsed by default so the front door stays one screen. */
 .examples {
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-radius);
-  background: var(--dusky-raised);
   padding: var(--dusky-s5);
+  scroll-margin-top: 5rem;
 }

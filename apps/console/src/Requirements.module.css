@@ -1,0 +1,285 @@
+/**
+ * The dropdown, and the mark that stands in for it when it is shut.
+ *
+ * Positioned by whatever anchors it rather than here, so this file has no
+ * opinion about where on the page it lands and the same component can hang off
+ * a button on the front door or sit in the flow on a narrow screen.
+ *
+ * Glass, because it hangs over the top of the stage and the stage is the one
+ * surface on this page with a field of light under it.
+ */
+.panel {
+  --glass-edge: var(--dusky-hair);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+  padding: var(--dusky-s4);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--dusky-surface) 86%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-edge);
+  /*
+   * One shadow, and a highlight along the top edge.
+   *
+   * There was a third: a 3px ring in the verdict's colour, sitting just outside
+   * the border. At a glass edge that is not a glow, it is a second border a few
+   * pixels out with a gap between, which reads as a printing error rather than
+   * as depth. The border already carries the verdict.
+   */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 70%),
+    0 14px 34px rgb(20 22 19 / 12%);
+  animation: panel-in 200ms var(--dusky-ease) backwards;
+}
+
+.panel[data-state="bad"] {
+  --glass-edge: color-mix(in srgb, var(--dusky-stop) 50%, transparent);
+}
+.panel[data-state="ok"] {
+  --glass-edge: color-mix(in srgb, var(--dusky-accent) 38%, transparent);
+}
+
+/* It comes down from the control that opened it. Transform and opacity only,
+   so nothing around it reflows while it arrives. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------- header */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+  padding-bottom: var(--dusky-s3);
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+
+/*
+ * The panel says what it is at the size a title gets. It used to be a 0.64rem
+ * uppercase mono label, which is the treatment the least important text in this
+ * project gets, sitting above the most important thing on screen for whoever
+ * was reading it.
+ */
+.title {
+  margin: 0;
+  font-weight: 400;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  color: var(--dusky-ink-strong);
+}
+
+/* Met over total. A number answers "am I fine?" faster than a sentence. */
+.count {
+  margin-right: auto;
+  font-family: var(--dusky-mono);
+  font-size: 0.78rem;
+  color: var(--dusky-ink-faint);
+}
+.count[data-state="ok"] {
+  color: var(--dusky-ok);
+}
+.count[data-state="bad"] {
+  color: var(--dusky-stop);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+}
+
+/*
+ * A thin outline circle, the height of the title beside it. Nothing filled
+ * until a pointer is on it: two solid discs in the corner of a glass panel are
+ * two more objects than the panel has room for.
+ */
+.icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 50%;
+  background: none;
+  color: var(--dusky-ink-dim);
+  cursor: pointer;
+  transition:
+    background var(--dusky-motion) var(--dusky-ease),
+    color var(--dusky-motion) var(--dusky-ease),
+    border-color var(--dusky-motion) var(--dusky-ease);
+}
+.icon:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dusky-ink-strong) 7%, transparent);
+  border-color: var(--dusky-ink-faint);
+  color: var(--dusky-ink-strong);
+}
+.icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon {
+    transition: none;
+  }
+}
+
+/* ----------------------------------------------------------------- list */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* One line each, opening for the detail. */
+.item {
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+.list > li:last-child .item {
+  border-bottom: 0;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: var(--dusky-s3);
+  padding: var(--dusky-s3) 0;
+  cursor: pointer;
+  list-style: none;
+}
+.itemHead::-webkit-details-marker {
+  display: none;
+}
+
+.need {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  color: var(--dusky-ink-strong);
+}
+/* Met, so it can stop asking for attention without disappearing. */
+.item[data-state="ok"] .need {
+  color: var(--dusky-ink-dim);
+}
+
+/* The project's own chevron rather than the browser's triangle, which is the
+   one piece of default styling that announces a page was not designed. */
+.chev {
+  width: 0.38rem;
+  height: 0.38rem;
+  flex: none;
+  border-right: 1.5px solid var(--dusky-ink-faint);
+  border-bottom: 1.5px solid var(--dusky-ink-faint);
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform var(--dusky-motion) var(--dusky-ease);
+}
+.item[open] > .itemHead .chev {
+  transform: rotate(225deg) translateY(-1px);
+}
+.itemHead:hover .chev {
+  border-color: var(--dusky-ink-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chev {
+    transition: none;
+  }
+}
+
+/* Indented past the mark, so the detail hangs under the words rather than
+   under the icon. 15px is the mark's own width. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0 0 var(--dusky-s3) calc(15px + var(--dusky-s3));
+}
+
+/* Why the line is on the list at all. */
+.means {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--dusky-ink-faint);
+}
+
+/* The whole point of probing: what to actually do about it. */
+.fix {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--dusky-ink-dim);
+}
+.fix code {
+  font-family: var(--dusky-mono);
+  font-size: 0.82em;
+  color: var(--dusky-accent);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.72rem;
+  color: var(--dusky-ink-faint);
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- marks */
+
+/*
+ * One mark, two homes: beside a requirement inside the panel, and beside the
+ * word "Requirements" on the button that opens it. Same states, same shapes,
+ * same colours, so the shut panel and the open one cannot disagree.
+ *
+ * Colour lands on the stroke, because the glyphs are drawn in currentColor.
+ */
+.mark {
+  flex: none;
+  color: var(--dusky-ink-faint);
+}
+.mark[data-state="ok"] {
+  color: var(--dusky-ok);
+}
+.mark[data-state="bad"] {
+  color: var(--dusky-stop);
+}
+.mark[data-state="unknown"] {
+  color: var(--dusky-ink-faint);
+}
+/* Still working it out. Slow, because the ring is the only moving thing on the
+   page besides the light under the stage. */
+.mark[data-state="checking"] {
+  animation: mark-turn 2.4s linear infinite;
+}
+@keyframes mark-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mark[data-state="checking"] {
+    animation: none;
+  }
+}
