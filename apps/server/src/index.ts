@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, unlink } from "node:fs/promises";
 import { type AuditStore, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "@dusky/audit";
 import type { AuditEntry, ConsoleToServer, DisplayToServer } from "@dusky/contracts";
 import { CLOSE_NOT_A_CODE, isSessionCode } from "@dusky/contracts";
@@ -35,16 +35,15 @@ const SOURCE = process.env["DUSKY_SOURCE"] ?? "Verdant Market";
  */
 const auditDir = process.env["DUSKY_AUDIT_DIR"];
 const memory = new MemoryAuditStore();
-const audit: AuditStore = auditDir
-  ? new TeeAuditStore(
-      memory,
-      new FileAuditStore({
-        dir: auditDir,
-        fs: { mkdir, appendFile, readFile },
-        onError: (err) => console.warn(`dusky: audit write failed: ${err.message}`),
-      }),
-    )
-  : memory;
+/** Held separately from the tee, because expiry is a file store's business. */
+const durable = auditDir
+  ? new FileAuditStore({
+      dir: auditDir,
+      fs: { mkdir, appendFile, readFile, readdir, stat, unlink },
+      onError: (err) => console.warn(`dusky: audit write failed: ${err.message}`),
+    })
+  : null;
+const audit: AuditStore = durable ? new TeeAuditStore(memory, durable) : memory;
 console.log(
   auditDir
     ? `dusky: audit trail persisted to ${auditDir}`
@@ -77,7 +76,16 @@ app.get("/diagnostics/:id", async (c) => {
     kinds: kindsParam ? (kindsParam.split(",") as AuditEntry["kind"][]) : undefined,
     limit: Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined,
   });
-  if (entries.length === 0 && !hub.peek(id)) return c.json({ error: "no such session" }, 404);
+  // What arrived, never a claim about what happened.
+  //
+  // "No such session" was true while trails were kept forever. It stopped
+  // being true the moment they expire: a code whose week is up did exist and
+  // did things, and saying otherwise is the same class of mistake as telling a
+  // wearer a site declared no tools when nothing had connected yet. This
+  // sentence is true whether the code was never used, its trail has aged out,
+  // or nothing was ever recorded under it.
+  if (entries.length === 0 && !hub.peek(id))
+    return c.json({ error: "no trail for this code" }, 404);
   return c.json({
     id,
     live: hub.peek(id) !== undefined,
@@ -136,6 +144,34 @@ const sweeper = setInterval(() => {
   if (gone > 0) console.log(`dusky: forgot ${gone} idle session${gone === 1 ? "" : "s"}`);
 }, SWEEP_MS);
 sweeper.unref?.();
+
+/**
+ * How often to expire audit trails on disk.
+ *
+ * Hourly, not on the session sweeper's five minutes: a week-long window does
+ * not need checking twelve times an hour. Also once at boot, because this
+ * relay is restarted by a deploy far more often than it is left running long
+ * enough for an interval to matter.
+ *
+ * Only the file store has anything to reclaim. In memory the trail is already
+ * bounded, by `MemoryAuditStore` itself.
+ */
+const TRAIL_SWEEP_MS = 60 * 60_000;
+if (durable) {
+  const expireTrails = () => {
+    durable
+      .sweep()
+      .then((gone) => {
+        if (gone > 0) console.log(`dusky: expired ${gone} audit trail${gone === 1 ? "" : "s"}`);
+      })
+      // `sweep` reports its own failures and resolves. This is here so that
+      // stopping being true cannot take the relay down with it.
+      .catch((err: unknown) => console.warn(`dusky: audit sweep failed: ${String(err)}`));
+  };
+  const trailSweeper = setInterval(expireTrails, TRAIL_SWEEP_MS);
+  trailSweeper.unref?.();
+  expireTrails();
+}
 
 function onConnection(ws: WebSocket, role: Role, url: URL): void {
   let sessionId: string | null = null;
