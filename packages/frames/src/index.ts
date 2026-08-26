@@ -412,6 +412,27 @@ function safeParse(raw: string): unknown {
   }
 }
 
+/** Exact keys that conventionally hold an identifier, in preference order. */
+const ID_KEYS = ["id", "sku", "key", "uid", "slug", "value"];
+
+/**
+ * The field in an object that identifies it, if it has one.
+ *
+ * A suffix rule rather than a list of nouns. `product_id` used to be an entry
+ * in ID_KEYS, which is a shop-shaped word sitting in the one file that must
+ * not know what kind of site it is looking at. It had also never once matched,
+ * because both test sites return a plain `id`, so it was a guess about a
+ * vocabulary rather than knowledge of a convention.
+ *
+ * `<something>_id` IS the convention, and stating it that way covers
+ * `reservation_id`, `slot_id`, `booking_id` and every site nobody has written
+ * yet, without naming a single domain.
+ */
+function idKeyOf(o: Record<string, unknown>): string | undefined {
+  const usable = (k: string) => typeof o[k] === "string" || typeof o[k] === "number";
+  return ID_KEYS.find(usable) ?? Object.keys(o).find((k) => /_id$/i.test(k) && usable(k));
+}
+
 /**
  * Turn an arbitrary tool result into candidate choices for a later parameter.
  *
@@ -435,7 +456,6 @@ export function candidatesFromResult(raw: string, limit = 8): Choice[] {
       : null;
   if (!arr) return [];
 
-  const ID_KEYS = ["id", "product_id", "sku", "key", "uid", "slug", "value"];
   const LABEL_KEYS = ["name", "title", "label", "summary", "text", "description"];
   const META_KEYS = ["price", "amount", "cost", "total", "count", "date", "status"];
 
@@ -443,7 +463,7 @@ export function candidatesFromResult(raw: string, limit = 8): Choice[] {
   for (const item of arr.slice(0, limit)) {
     const o = asRecord(item);
     if (!o) continue;
-    const idKey = ID_KEYS.find((k) => typeof o[k] === "string" || typeof o[k] === "number");
+    const idKey = idKeyOf(o);
     const labelKey = LABEL_KEYS.find((k) => typeof o[k] === "string");
     if (!idKey || !labelKey) continue;
     const metaKey = META_KEYS.find((k) => o[k] !== undefined && o[k] !== null);

@@ -107,6 +107,27 @@ describe("results become the next frame's choices", () => {
     ]);
   });
 
+  it("reads any <something>_id, from a site nobody has written", () => {
+    // A suffix is the convention. Naming the nouns would mean the compiler
+    // knew what kind of site it was looking at, which is the one thing it
+    // must never know.
+    const raw = JSON.stringify({
+      departures: [
+        { flight_id: "BA117", title: "London to New York", status: "on time" },
+        { flight_id: "BA112", title: "London to Boston", status: "delayed" },
+      ],
+    });
+    expect(candidatesFromResult(raw)).toEqual([
+      { id: "BA117", label: "London to New York", meta: "on time" },
+      { id: "BA112", label: "London to Boston", meta: "delayed" },
+    ]);
+  });
+
+  it("prefers a plain id when an object carries both", () => {
+    const raw = JSON.stringify([{ id: "ao-m-1930", booking_id: "AO-4417", name: "7:30 PM" }]);
+    expect(candidatesFromResult(raw)[0]?.id).toBe("ao-m-1930");
+  });
+
   it("returns nothing rather than inventing structure", () => {
     expect(candidatesFromResult("not json")).toEqual([]);
     expect(candidatesFromResult(JSON.stringify({ ok: true }))).toEqual([]);
