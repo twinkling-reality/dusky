@@ -5,6 +5,7 @@ import type {
   ServerToConsole,
   ToolDescriptor,
 } from "@dusky/contracts";
+import { CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { isWebMcpAvailable, registerTools, WebMcpBridge } from "@dusky/webmcp";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { duskyTools } from "./duskyTools.js";
@@ -18,7 +19,12 @@ import { duskyTools } from "./duskyTools.js";
  * credentials.
  */
 
-export type LinkState = "connecting" | "open" | "reconnecting" | "offline";
+/**
+ * `superseded` is terminal on purpose. Another window claimed this pairing
+ * code, and reconnecting would claim it back, which is the fight rather than
+ * the recovery. It reads out beside the code in the header.
+ */
+export type LinkState = "connecting" | "open" | "reconnecting" | "offline" | "superseded";
 
 export interface ConsoleLink {
   link: LinkState;
@@ -30,6 +36,14 @@ export interface ConsoleLink {
 }
 
 const RECONNECT_MS = [250, 500, 1000, 2000, 4000] as const;
+
+/**
+ * How long a connection has to last before it counts as having worked.
+ *
+ * Backoff reset the moment a socket opened, so a connection that opened and
+ * died immediately retried at 250ms forever and never escalated.
+ */
+const STABLE_MS = 5_000;
 
 /** An agent request that never comes back must not hang a tool call forever. */
 const AGENT_REPLY_TIMEOUT_MS = 15_000;
@@ -107,6 +121,7 @@ export function useConsoleLink(
     // nobody owns. See the matching note in the Display's useRelay.
     let disposed = false;
     let attempts = 0;
+    let openedAt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     // Pointing Dusky at a different source re-runs this effect. The previous
@@ -127,7 +142,7 @@ export function useConsoleLink(
 
       sock.onopen = () => {
         if (disposed) return;
-        attempts = 0;
+        openedAt = Date.now();
         setLink("open");
         send({ t: "hello", sessionId, client: "console" });
       };
@@ -184,8 +199,20 @@ export function useConsoleLink(
         })();
       };
 
-      sock.onclose = () => {
+      sock.onclose = (ev) => {
         if (disposed) return;
+
+        // Another tab is holding this session. Taking it back would evict them,
+        // they would reconnect and evict us, and the wearer's screen would be
+        // rebuilt on every exchange for as long as both tabs stayed open.
+        if (ev.code === CLOSE_SUPERSEDED) {
+          setLink("superseded");
+          return;
+        }
+
+        if (openedAt !== 0 && Date.now() - openedAt > STABLE_MS) attempts = 0;
+        openedAt = 0;
+
         const i = Math.min(attempts, RECONNECT_MS.length - 1);
         attempts += 1;
         setLink(attempts > RECONNECT_MS.length ? "offline" : "reconnecting");

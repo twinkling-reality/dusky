@@ -55,7 +55,13 @@ export function App() {
     [relay],
   );
 
-  const frame = relay.frame ?? pairingFrame(sessionId, relay.link);
+  // Superseded overrides whatever was last on screen. Keeping the old frame
+  // would leave the wearer looking at a live-seeming panel whose every control
+  // now belongs to a session being driven somewhere else.
+  const frame =
+    relay.link === "superseded"
+      ? supersededFrame()
+      : (relay.frame ?? pairingFrame(sessionId, relay.link));
 
   return (
     <div className={styles.root}>
@@ -70,13 +76,33 @@ export function App() {
       {/* Gesture acknowledged, work still in flight. Local, never networked. */}
       {pendingChoice !== null && <div className={styles.pending} aria-live="polite" />}
 
-      {relay.link !== "open" && (
+      {relay.link !== "open" && relay.link !== "superseded" && (
         <div className={styles.link} data-state={relay.link}>
           {relay.link === "offline" ? "no connection" : "reconnecting"}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Shown when something else claimed this session.
+ *
+ * No retry, deliberately. Reconnecting here would evict whatever took over,
+ * which would then reconnect and evict this, which is exactly the exchange
+ * that used to rebuild the wearer's screen several times a second. There is
+ * genuinely nothing to do on this device, so it says so rather than offering
+ * a control that would restart the fight.
+ */
+function supersededFrame(): DisplayFrame {
+  return {
+    kind: "error",
+    source: "Dusky",
+    title: "Another window took over",
+    detail: "This session is being shown somewhere else. Close that one to use it here.",
+    retryable: false,
+    choices: [],
+  };
 }
 
 /** Shown before a console has paired: one glance, one number. */

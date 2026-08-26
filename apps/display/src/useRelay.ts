@@ -1,4 +1,5 @@
 import type { DisplayFrame, DisplayToServer, ServerToDisplay, TaskState } from "@dusky/contracts";
+import { CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -10,7 +11,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * than an error screen, up until the point where we genuinely cannot reach it.
  */
 
-export type LinkState = "connecting" | "open" | "reconnecting" | "offline";
+/**
+ * `superseded` is terminal on purpose. Something else took this session, and
+ * reconnecting would take it back, which is how two clients on one pairing
+ * code used to trade the session between them several times a second.
+ */
+export type LinkState = "connecting" | "open" | "reconnecting" | "offline" | "superseded";
 
 export interface Relay {
   link: LinkState;
@@ -47,6 +53,16 @@ const RESUME_STALE_MS = 10_000;
 /** How long that proof gets to arrive before we give up on the socket. */
 const PROBE_MS = 3_000;
 
+/**
+ * How long a connection has to last before it counts as having worked.
+ *
+ * Backoff used to reset the moment a socket opened, so a connection that
+ * opened and died immediately retried at 250ms forever and never escalated.
+ * Escalation only means anything if a flap is distinguishable from a session
+ * that ran for an hour and then dropped.
+ */
+const STABLE_MS = 5_000;
+
 export function useRelay(url: string, sessionId: string): Relay {
   const [link, setLink] = useState<LinkState>("connecting");
   const [frame, setFrame] = useState<DisplayFrame | null>(null);
@@ -75,6 +91,7 @@ export function useRelay(url: string, sessionId: string): Relay {
     // reason `disposed` is: a ref survives into the next mount and lets a
     // dead socket's handlers act on the live one's behalf.
     let lastInbound = 0;
+    let openedAt = 0;
 
     const stopBeat = () => {
       if (beat !== undefined) clearInterval(beat);
@@ -88,8 +105,8 @@ export function useRelay(url: string, sessionId: string): Relay {
 
       sock.onopen = () => {
         if (disposed) return;
-        attempts = 0;
-        lastInbound = Date.now();
+        openedAt = Date.now();
+        lastInbound = openedAt;
         setLink("open");
         sock.send(
           JSON.stringify({ t: "hello", sessionId, client: "display" } satisfies DisplayToServer),
@@ -129,9 +146,22 @@ export function useRelay(url: string, sessionId: string): Relay {
         // either; its whole job was to arrive.
       };
 
-      sock.onclose = () => {
+      sock.onclose = (ev) => {
         stopBeat();
         if (disposed) return;
+
+        // Something else is driving this session now. Taking it back is not
+        // recovery, it is the other half of a fight.
+        if (ev.code === CLOSE_SUPERSEDED) {
+          setLink("superseded");
+          return;
+        }
+
+        // A connection that lasted earns a fresh start. One that did not keeps
+        // the count, so a flap escalates instead of hammering.
+        if (openedAt !== 0 && Date.now() - openedAt > STABLE_MS) attempts = 0;
+        openedAt = 0;
+
         const i = Math.min(attempts, RECONNECT_MS.length - 1);
         const delay = RECONNECT_MS[i]!;
         attempts += 1;

@@ -70,3 +70,38 @@ test("one socket may claim one session, not a new one per message", async () => 
   expect(await sessionCount(), "one connection minted several sessions").toBe(before + 1);
   sock.close();
 });
+
+test("two windows on one code do not fight over the wearer's screen", async ({ context }) => {
+  const code = freshCode();
+
+  const display = await context.newPage();
+  const frames: number[] = [];
+  display.on("websocket", (ws) => {
+    ws.on("framereceived", (f) => {
+      try {
+        if ((JSON.parse(String(f.payload)) as { t?: string }).t === "frame") frames.push(1);
+      } catch {
+        /* not ours */
+      }
+    });
+  });
+  await display.goto(`http://localhost:7802/?session=${code}`);
+
+  const first = await context.newPage();
+  await first.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
+  await display.waitForTimeout(1_500);
+
+  // A judge opening the pre-paired link a second time, which is one click.
+  const second = await context.newPage();
+  await second.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
+  await display.waitForTimeout(1_500);
+
+  // Every console attach re-runs discovery and pushes a frame. If the two
+  // windows are trading the session between them, this window is where it
+  // shows up: the wearer's panel rebuilt several times a second, forever.
+  const settled = frames.length;
+  await display.waitForTimeout(5_000);
+  const churn = frames.length - settled;
+
+  expect(churn, `the wearer's screen was rebuilt ${churn} times while idle`).toBeLessThan(5);
+});
