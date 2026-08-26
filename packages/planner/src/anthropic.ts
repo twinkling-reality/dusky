@@ -19,11 +19,18 @@
  * 2.5s timeout can occupy 7.5s of a wearer's attention. Retrying is the tier
  * escalation's job, and it is accounted for in the planner's budget.
  *
- * NO PROMPT-CACHE BREAKPOINT. The system prompts here are a few hundred tokens
- * and the minimum cacheable prefix is about 1024, so a `cache_control` marker
- * would cache nothing while implying otherwise. The savings this planner
- * actually gets come from the shortlist and the compiled-card cache. Add a
- * breakpoint when a prompt grows past the minimum, not before.
+ * NO PROMPT-CACHE BREAKPOINT, and the threshold is per-model rather than one
+ * number: 4096 tokens on claude-haiku-4-5, 512 on claude-opus-5. The system
+ * prompts here are a few hundred tokens, so a `cache_control` marker would
+ * cache nothing on the fast tier while implying otherwise.
+ *
+ * Fixing that ceiling is not enough on its own. Caching is a PREFIX match and
+ * the volatile request line is rendered before the cards, so the stable part
+ * is not a prefix; the shortlist also varies per intent, so the cards are not
+ * stable across turns either. Caching would need the whole registry in
+ * `system` with no shortlist, which at these card sizes needs roughly 55 tools
+ * to clear the fast tier's floor. The demo sites declare 7. The savings this
+ * planner actually gets come from the shortlist and the compiled-card cache.
  *
  * Written against @anthropic-ai/sdk 0.120.0. The request shape was verified
  * against that package's shipped type declarations. It has NOT been executed
@@ -86,7 +93,20 @@ export interface TierConfig {
  * standing still waiting for a frame. Raise it if evaluation says otherwise.
  */
 const FAST: TierConfig = { model: "claude-haiku-4-5", maxTokens: 512 };
-const CAREFUL: TierConfig = { model: "claude-opus-5", effort: "low", maxTokens: 512 };
+/**
+ * `maxTokens` here is NOT the size of the answer. On claude-opus-5 thinking is
+ * on by default when `thinking` is omitted, unlike opus-4-8 and opus-4-7, and
+ * `max_tokens` is a hard cap on thinking PLUS response text. The answer is a
+ * few dozen tokens, so a 512 ceiling left almost nothing for thinking: the
+ * model hit the cap, `stop_reason` came back `max_tokens`, and the branch
+ * below read that as the model declining. The careful tier abstained on
+ * exactly the low-confidence and consequential picks it exists to handle, and
+ * it did so silently, because an abstention is recorded as an abstention.
+ *
+ * Billing is on tokens generated, not on the ceiling, so the headroom is free
+ * unless it is used. Do not lower this to save money; it does not.
+ */
+const CAREFUL: TierConfig = { model: "claude-opus-5", effort: "low", maxTokens: 4096 };
 
 export interface AnthropicModelClientOptions {
   /** Supply your own configured client, or let the SDK read the environment. */
