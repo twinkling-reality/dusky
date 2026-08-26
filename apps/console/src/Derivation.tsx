@@ -3,7 +3,7 @@ import { factsFromResult, isOperable, label, outcomeFromResult, parameters } fro
 import { FrameView } from "@dusky/lens";
 import { gate } from "@dusky/policy";
 import { Session, type ToolRunner } from "@dusky/session";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./Derivation.module.css";
 import { CONTRAST, PRESETS, type Preset, type Side } from "./presets.js";
 
