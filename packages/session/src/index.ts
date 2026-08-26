@@ -93,6 +93,9 @@ export interface SessionOptions {
   onTransition?: (frame: DisplayFrame) => void;
 }
 
+/** A lookup that saves typing must not cost more than the typing would. */
+const RESOLVER_BUDGET_MS = 6_000;
+
 /* ------------------------------------------------------------------ state */
 
 interface Pending {
@@ -487,9 +490,23 @@ export class Session {
               detail: { path: "planResolver", accepted: true, args },
             });
             try {
-              const raw = await this.o.runner.invoke(resolver.origin, resolver.name, args);
-              this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
-              candidates = candidatesFromResult(raw);
+              // Shorter than an action's budget on purpose: this is a lookup
+              // meant to save the wearer some typing, and it is better to ask
+              // them than to hold a frame while a site thinks about it.
+              const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, RESOLVER_BUDGET_MS);
+              const out = await this.invokeWithin(resolver.origin, resolver.name, args, budget);
+              if (out.timedOut) {
+                this.audit({
+                  kind: "error",
+                  toolName: resolver.name,
+                  origin: resolver.origin,
+                  detail: { reason: "resolver timeout" },
+                });
+                candidates = [];
+              } else {
+                this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
+                candidates = candidatesFromResult(out.raw);
+              }
             } catch {
               candidates = [];
             }
@@ -544,6 +561,45 @@ export class Session {
     return this.execute();
   }
 
+  /**
+   * Invoke with a deadline this machine controls.
+   *
+   * We must RACE rather than merely abort. WebMCP's AbortSignal is not honored
+   * today (WPT executeTool-abort 0/5), so awaiting a site that ignores the
+   * signal strands the caller forever. The signal is still passed, for the day
+   * that changes.
+   *
+   * Shared, because the resolver path used to await `invoke` with no deadline
+   * at all and fall through to the relay's 20s backstop, stacked on top of the
+   * planner's own budget, on one frame. That path is also the one that runs
+   * with no human in front of it.
+   */
+  private async invokeWithin(
+    origin: string,
+    name: string,
+    args: Record<string, unknown>,
+    budgetMs: number,
+  ): Promise<{ timedOut: true } | { timedOut: false; raw: string }> {
+    const ctrl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<{ timedOut: true }>((resolve) => {
+      timer = setTimeout(() => {
+        ctrl.abort();
+        resolve({ timedOut: true });
+      }, budgetMs);
+    });
+    try {
+      return await Promise.race([
+        this.o.runner
+          .invoke(origin, name, args, ctrl.signal)
+          .then((raw) => ({ timedOut: false as const, raw })),
+        deadline,
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   private async execute(): Promise<DisplayFrame> {
     const p = this.pending;
     if (!p) return this.frame;
@@ -566,28 +622,11 @@ export class Session {
 
     this.show(workingFrame(this.o.source, p.tool));
 
-    const ctrl = new AbortController();
     const budget = this.o.invokeTimeoutMs ?? 15_000;
     const retryable = gate(p.tool).consequence === "read";
 
-    // We must RACE rather than merely abort. WebMCP's AbortSignal is not
-    // honored today (WPT executeTool-abort 0/5), so a site that ignores the
-    // signal would otherwise strand the wearer on a working frame forever.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<{ timedOut: true }>((resolve) => {
-      timer = setTimeout(() => {
-        ctrl.abort();
-        resolve({ timedOut: true });
-      }, budget);
-    });
-
     try {
-      const outcome = await Promise.race([
-        this.o.runner
-          .invoke(p.tool.origin, p.tool.name, p.args, ctrl.signal)
-          .then((raw) => ({ timedOut: false as const, raw })),
-        deadline,
-      ]);
+      const outcome = await this.invokeWithin(p.tool.origin, p.tool.name, p.args, budget);
 
       // The wearer walked away while this was in flight. It still ran, and it
       // is still worth recording, but the screen belongs to whatever they are
@@ -644,7 +683,6 @@ export class Session {
         this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
       }
     } finally {
-      if (timer !== undefined) clearTimeout(timer);
       // Released on every exit, including the timeout, because the error frame
       // for a read offers a retry and that retry has to be able to run. Only
       // reads are ever offered one, so releasing here cannot resurrect the

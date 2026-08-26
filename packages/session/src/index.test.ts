@@ -1053,3 +1053,34 @@ describe("going back while something is already running", () => {
     expect(f.kind, "an ordinary escape stopped being an escape").toBe("idle");
   });
 });
+
+describe("a lookup that never answers", () => {
+  /**
+   * The resolver runs a read-only tool unattended to turn "type a product id"
+   * into a menu. It is the one path AGENTS.md identifies as running with no
+   * human in front of it, and it was the only invoke in the machine with no
+   * deadline of its own: it fell through to the relay's 20s backstop, on top
+   * of the planner's own budget, on a single frame.
+   */
+  it("gives up and asks the wearer instead of holding the frame", async () => {
+    const s = new Session({
+      source: "Verdant Market",
+      runner: {
+        discover: async () => [SEARCH, ADD],
+        // Never settles, which is what a site that ignores an abort looks like.
+        invoke: () => new Promise<string>(() => {}),
+      },
+      planner: {
+        pickTool: async () => null,
+        planResolver: async () => ({ name: "search_products", args: { query: "oat" } }),
+      },
+      invokeTimeoutMs: 50,
+    });
+
+    await s.start();
+    const f = await s.handle("https://shop.test add_to_cart");
+
+    // Asked, not stranded: the composer is still a way forward.
+    expect(f.kind).toBe("choose");
+  });
+});
