@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * The glasses OS translates Neural Band pinches and temple captouch swipes
  * into ordinary keyboard events, so this hook is deliberately just a keyboard
- * handler. That is also why the same build runs unmodified in Chrome: a judge
- * pressing arrow keys is using the identical code path as the wearer.
+ * handler. That is also why the same build runs unmodified in Chrome: someone
+ * pressing arrow keys at a desk exercises the identical code path as the wearer.
  *
  * Focus is managed explicitly rather than left to the browser. React can
  * reorder or replace DOM nodes between frames, and `document.activeElement`

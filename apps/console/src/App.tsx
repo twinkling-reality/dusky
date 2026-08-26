@@ -9,8 +9,8 @@ import { useConsoleLink } from "./useConsoleLink.js";
  *
  * This is not the product's centre of gravity, and it should not try to be.
  * Its job is to hold the partner site in an allow="tools" frame, execute what
- * the session asks for, and show a judge exactly what happened so nothing has
- * to be taken on trust.
+ * the session asks for, and show exactly what happened so nothing has to be
+ * taken on trust.
  */
 
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/console";

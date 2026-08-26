@@ -2,9 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 /**
  * WebMCP is not on by default in any stable browser, so the whole suite runs
- * against the locally installed Chrome with the testing flag enabled. This is
- * the same setup the challenge tells judges to use, which means CI exercises
- * the judge's environment rather than an approximation of it.
+ * against the locally installed Chrome with the testing flag enabled. That is
+ * the documented way to turn WebMCP on, so CI exercises a real user's browser
+ * rather than an approximation of it.
  */
 export default defineConfig({
   testDir: "./e2e",

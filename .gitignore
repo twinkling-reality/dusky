@@ -8,3 +8,7 @@ dist/
 test-results/
 playwright-report/
 .turbo/
+
+# Internal working notes, deliberately not published
+NOTES.local.md
+*.local.md

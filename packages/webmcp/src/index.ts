@@ -43,7 +43,7 @@ export function isWebMcpAvailable(): boolean {
   return ctx() !== null;
 }
 
-/** Guidance we show a judge or user whose browser is not set up. */
+/** Shown when the current browser cannot reach WebMCP. */
 export const ENABLE_HINT =
   "WebMCP is not enabled in this browser. Use the ChatGPT desktop app's built-in " +
   "browser, or Chrome 149+ with chrome://flags/#enable-webmcp-testing.";
