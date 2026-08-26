@@ -434,3 +434,59 @@ describe("a second window on the same pairing code", () => {
     expect(first.closedWith?.code).toBe(4001);
   });
 });
+
+describe("keeping the wearer's place", () => {
+  /**
+   * `frameId` drives `frameKey` on the Display, and `useDpad` resets focus to
+   * the top of the list whenever it changes. That is correct for a frame that
+   * changed and wrong for one that did not: a reconnect replays the current
+   * frame, minted a fresh id for identical content, and moved the wearer's
+   * selection out from under them.
+   *
+   * FIELD-NOTES records the StrictMode reconnect STORM being fixed. The reset
+   * on a single honest reconnect survived it, and the relay redeploy in that
+   * same file drops every socket for about forty seconds.
+   */
+  it("replays a frame under the id it already had", async () => {
+    const built = await paired({ withDisplay: false });
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+
+    const idsOf = (sock: FakeSocket) =>
+      sock.sent
+        .map((t) => JSON.parse(t) as { t: string; frameId?: string })
+        .filter((m) => m.t === "frame")
+        .map((m) => m.frameId);
+
+    const before = idsOf(display).at(-1);
+    expect(before).toBeDefined();
+
+    // The socket drops and comes back with nothing having happened.
+    built.a.detachDisplay(display as unknown as Sock);
+    const again = new FakeSocket();
+    built.a.attachDisplay(again as unknown as Sock);
+
+    expect(idsOf(again).at(-1), "an unchanged frame arrived as a new one").toBe(before);
+  });
+
+  it("still mints a new id when the frame actually changes", async () => {
+    const built = await paired({ withDisplay: false });
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+
+    const idsOf = () =>
+      display.sent
+        .map((t) => JSON.parse(t) as { t: string; frameId?: string })
+        .filter((m) => m.t === "frame")
+        .map((m) => m.frameId);
+
+    const before = idsOf().at(-1);
+    await built.a.onDisplayMessage({
+      t: "choose",
+      frameId: before ?? "0",
+      choiceId: "https://shop.test search_products",
+    } as never);
+
+    expect(idsOf().at(-1), "a changed frame reused an id").not.toBe(before);
+  });
+});

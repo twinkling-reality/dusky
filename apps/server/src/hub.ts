@@ -114,6 +114,8 @@ export class SessionActor {
   private session: Session;
   private frameId = "0";
   private seq = 0;
+  /** The last frame actually sent, so a replay can keep its id. */
+  private lastSent: string | null = null;
   private readonly hasPlanner: boolean;
   private readonly record: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
 
@@ -170,15 +172,31 @@ export class SessionActor {
     this.display.send(JSON.stringify(msg));
   }
 
-  /** Push the current frame. Called after every transition and on reconnect. */
+  /**
+   * Push the current frame. Called after every transition and on reconnect.
+   *
+   * The id identifies the FRAME, not the number of times one has been sent.
+   * `frameId` becomes `frameKey` on the Display and `useDpad` resets focus to
+   * the top of the list whenever it changes, which is right for a frame that
+   * changed and wrong for one that did not. A reconnect replays the current
+   * frame, and minting a fresh id for identical content moved the wearer's
+   * selection out from under them for no reason. FIELD-NOTES records a relay
+   * redeploy dropping every socket for about forty seconds, so this is not a
+   * rare path.
+   */
   private pushFrame(): void {
-    this.seq += 1;
-    this.frameId = String(this.seq);
+    const frame = this.session.current();
+    const encoded = JSON.stringify(frame);
+    if (encoded !== this.lastSent) {
+      this.seq += 1;
+      this.frameId = String(this.seq);
+      this.lastSent = encoded;
+    }
     this.toDisplay({
       t: "frame",
       frameId: this.frameId,
-      state: stateFor(this.session.current().kind),
-      frame: this.session.current(),
+      state: stateFor(frame.kind),
+      frame,
     });
   }
 
