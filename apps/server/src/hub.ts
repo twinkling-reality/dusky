@@ -422,7 +422,9 @@ export class SessionActor {
       case "hello":
         return;
       case "tools":
-        this.runner.settle(msg.requestId, msg.tools);
+        // Symmetric with `invoked` below, which has always forwarded its
+        // error. This one silently discarded it.
+        this.runner.settle(msg.requestId, msg.tools, msg.error);
         return;
       case "invoked":
         if (msg.ok) this.runner.settle(msg.requestId, msg.value);

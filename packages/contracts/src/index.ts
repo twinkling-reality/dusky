@@ -153,7 +153,17 @@ export type ServerToConsole =
 
 export type ConsoleToServer =
   | { t: "hello"; sessionId: string; client: "console" }
-  | { t: "tools"; requestId: string; tools: ToolDescriptor[] }
+  /**
+   * The answer to a `discover`.
+   *
+   * `error` is what makes "we could not look" different from "there was
+   * nothing to see". Without it the console had to launder a thrown bridge
+   * into an empty list, and the relay could not tell the two apart, so a
+   * browser without WebMCP produced "This source declared no usable tools" on
+   * the wearer's lens: a confident statement about a site, from a failure that
+   * never reached one.
+   */
+  | { t: "tools"; requestId: string; tools: ToolDescriptor[]; error?: string }
   | { t: "invoked"; requestId: string; ok: true; value: string }
   | { t: "invoked"; requestId: string; ok: false; error: string }
   /** Fired from ontoolchange so the Display can refresh without polling. */

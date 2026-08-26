@@ -351,3 +351,49 @@ describe("the wearer's screen before a browser has paired", () => {
     expect(display.sent.length, "a paired session went deaf").toBeGreaterThan(0);
   });
 });
+
+describe("what the wearer is told when discovery fails", () => {
+  /**
+   * "This source declared no usable tools" is a statement about a SITE. The
+   * console reaches that wording for reasons that have nothing to do with the
+   * site: WebMCP missing from the browser, the bridge throwing, an iframe that
+   * never loaded. FIELD-NOTES has a section on the last time the glasses said
+   * something untrue about a source, and this is the same sentence arriving by
+   * a different door.
+   */
+  const consoleThatCannotDiscover = (reason: string) => {
+    const a = new SessionActor("ABCDEF", "Verdant Market");
+    const sock = new FakeSocket();
+    const raw = sock.send.bind(sock);
+    sock.send = (text: string) => {
+      raw(text);
+      const msg = JSON.parse(text) as { t: string; requestId?: string };
+      if (msg.t === "discover" && msg.requestId) {
+        queueMicrotask(() => {
+          void a.onConsoleMessage({
+            t: "tools",
+            requestId: msg.requestId as string,
+            tools: [],
+            error: reason,
+          } as never);
+        });
+      }
+    };
+    return { a, sock };
+  };
+
+  it("says the source could not be reached, not that it offered nothing", async () => {
+    const { a, sock } = consoleThatCannotDiscover("WebMCP is not available in this browser");
+    const display = new FakeSocket();
+    a.attachDisplay(display as unknown as Sock);
+    await a.attachConsole(sock as unknown as Sock, ["https://shop.test"]);
+
+    const frames = display.sent
+      .map((t) => JSON.parse(t) as { t: string; frame?: { kind: string; note?: string } })
+      .filter((m) => m.t === "frame");
+    const last = frames.at(-1)?.frame;
+
+    expect(last?.kind, "a failure to look was reported as an empty shop").toBe("error");
+    expect(JSON.stringify(last)).not.toContain("declared no usable tools");
+  });
+});

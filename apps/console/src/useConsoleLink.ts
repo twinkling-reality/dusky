@@ -159,8 +159,12 @@ export function useConsoleLink(
               note(`getTools({fromOrigins}) -> ${found.length} tools`);
               send({ t: "tools", requestId: msg.requestId, tools: found });
             } catch (err) {
-              note(errText(err));
-              send({ t: "tools", requestId: msg.requestId, tools: [] });
+              // The reason used to go only into this panel's activity log,
+              // which is on a screen the wearer is not looking at, while the
+              // glasses were told the site had nothing to offer.
+              const reason = errText(err);
+              note(reason);
+              send({ t: "tools", requestId: msg.requestId, tools: [], error: reason });
             }
             return;
           }
