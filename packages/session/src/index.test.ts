@@ -521,3 +521,68 @@ describe("speaking from the glasses", () => {
     expect(f.choices.map((c) => c.id)).toContain("__compose");
   });
 });
+
+/**
+ * Everything the Display can send is text: a choice id, or whatever the
+ * on-glasses composer committed. What reaches the SITE has to be what that
+ * site declared it would receive.
+ *
+ * This went unnoticed while every parameter in the repository was a bare
+ * string. A second source with an integer enum and a boolean is what made it
+ * visible, which is the whole reason a second source exists.
+ */
+describe("argument types reaching a site", () => {
+  const BOOK = tool({
+    name: "book_table",
+    description: "Hold a table under a booking",
+    inputSchema: {
+      type: "object",
+      properties: {
+        party_size: { type: "integer", enum: [1, 2, 3, 4], description: "How many?" },
+        outdoor_seating: { type: "boolean", description: "Sit outside?" },
+        seats_label: { type: "string", description: "Anything else?" },
+      },
+      required: ["party_size", "outdoor_seating", "seats_label"],
+    },
+  });
+
+  async function argsFor(answers: string[]): Promise<Record<string, unknown>> {
+    let sent: Record<string, unknown> = {};
+    const runner: ToolRunner = {
+      discover: async () => [BOOK],
+      invoke: async (_o, _n, args) => {
+        sent = args;
+        return JSON.stringify({ ok: true, reservation_id: "AO-4417" });
+      },
+    };
+    const s = new Session({ source: "Amber & Oak", runner });
+    await s.start();
+    await s.handle("book_table");
+    for (const a of answers) {
+      // A choice id and a composed string arrive by different doors, and both
+      // have to end up as the declared type.
+      if (a.startsWith("text:")) await s.submitText(a.slice(5));
+      else await s.handle(a);
+    }
+    await s.handle("__confirm");
+    return sent;
+  }
+
+  it("sends an integer enum as the declared number, not as its label", async () => {
+    const args = await argsFor(["2", "false", "text:by the window"]);
+    expect(args["party_size"]).toBe(2);
+  });
+
+  it("sends a declared boolean as a boolean", async () => {
+    const args = await argsFor(["2", "false", "text:by the window"]);
+    expect(args["outdoor_seating"]).toBe(false);
+  });
+
+  it("leaves a string parameter alone even when it reads like a literal", async () => {
+    // "true" is a perfectly ordinary string. Only a parameter the site
+    // declared as boolean may be turned into one.
+    const args = await argsFor(["2", "true", "text:true"]);
+    expect(args["seats_label"]).toBe("true");
+    expect(args["outdoor_seating"]).toBe(true);
+  });
+});

@@ -80,10 +80,28 @@ function normalizeAnnotations(raw: RegisteredToolLike["annotations"]) {
   };
 }
 
+/**
+ * A blank title is an ABSENT title.
+ *
+ * Chrome returns `title: ""` for a tool registered without one rather than
+ * omitting the field, verified against 151.0.7922.174 on 2026-08-26 by
+ * registering a tool with no title at all. Anything downstream reaching for
+ * `title ?? name` then gets the empty string, because `??` only catches null
+ * and undefined, and renders nothing where a name should be. `label()` in
+ * @dusky/frames already guarded against this; the console did not, and showed
+ * a nameless row. Normalizing here keeps the knowledge in the one file that is
+ * allowed to hold it.
+ */
+function normalizeTitle(raw: unknown): string | undefined {
+  const t = typeof raw === "string" ? raw.trim() : "";
+  return t === "" ? undefined : t;
+}
+
 function toDescriptor(t: RegisteredToolLike): ToolDescriptor {
+  const title = normalizeTitle(t.title);
   return {
     name: t.name,
-    title: t.title,
+    ...(title !== undefined ? { title } : {}),
     description: t.description ?? "",
     origin: t.origin,
     inputSchema: normalizeSchema(t.inputSchema),

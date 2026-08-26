@@ -29,6 +29,7 @@ import {
   label,
   nextMissingParam,
   outcomeFromResult,
+  type ParamSpec,
   parameters,
   paramFrame,
   resultFrame,
@@ -263,7 +264,7 @@ export class Session {
 
     // Selecting a value for the parameter currently on screen.
     if (this.pending?.awaiting) {
-      this.pending.args[this.pending.awaiting] = coerce(choiceId);
+      this.pending.args[this.pending.awaiting] = coerce(choiceId, this.awaitingParam());
       this.pending.awaiting = undefined;
       this.page = 0;
       return this.advance();
@@ -278,11 +279,18 @@ export class Session {
   /** Free text committed by the on-glasses composer. */
   async submitText(value: string): Promise<DisplayFrame> {
     if (this.pending?.awaiting) {
-      this.pending.args[this.pending.awaiting] = value;
+      this.pending.args[this.pending.awaiting] = coerce(value, this.awaitingParam());
       this.pending.awaiting = undefined;
       return this.advance();
     }
     return this.submitIntent(value);
+  }
+
+  /** The declared spec for the parameter currently on screen, if there is one. */
+  private awaitingParam(): ParamSpec | undefined {
+    const p = this.pending;
+    if (!p?.awaiting) return undefined;
+    return parameters(p.tool).find((x) => x.name === p.awaiting);
   }
 
   private repaint(): DisplayFrame {
@@ -481,9 +489,37 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function coerce(v: string): unknown {
-  if (v === "true") return true;
-  if (v === "false") return false;
+/**
+ * Turn a choice id or a composed string into the value the SITE declared.
+ *
+ * Everything arriving from the Display is text: a choice id, or whatever the
+ * on-glasses composer committed. A site declaring `"type": "integer"` and
+ * handed `"2"` has been given a value that violates its own schema, and a site
+ * that validates its input would be right to refuse it. Only the declared
+ * schema is consulted here, so this stays true of a site nobody has seen.
+ *
+ * An enum returns the declared member itself rather than a parsed copy, which
+ * is how an integer enum survives the round trip with no type guessing at all.
+ * Found by pointing Dusky at a second source: every parameter on the first one
+ * was a bare string, so nothing here had ever been asked to preserve a type.
+ */
+function coerce(v: string, param?: ParamSpec): unknown {
+  if (param?.kind === "enum") {
+    const values = Array.isArray(param.schema["enum"]) ? (param.schema["enum"] as unknown[]) : [];
+    const declared = values.find((x) => String(x) === v);
+    if (declared !== undefined) return declared;
+  }
+  // A string parameter whose value happens to read "true" is a string. Only a
+  // parameter the site declared as boolean, or one we cannot see a spec for,
+  // gets the literal treatment.
+  if (param === undefined || param.kind === "boolean") {
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  if (param?.kind === "number" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
   return v;
 }
 

@@ -128,6 +128,47 @@ Caught by probing the browser rather than trusting the filter. `WebMcpBridge`
 now accepts answers only from the origins it asked about, which is correct
 regardless of whether Chrome changes.
 
+### Chrome returns `title: ""` rather than omitting an absent title
+
+Every tool Verdant Market registers declares a `title`, so for as long as it was
+the only source, nothing ever asked what an absent one looks like. Amber & Oak
+declares a title on one tool out of three, on purpose, and two rows in the
+console immediately rendered with no name at all: a leading index, a
+description, and a gate chip, with a hole where the name goes.
+
+`title ?? name` is the natural way to write that fallback and it does not work,
+because `??` only catches null and undefined. An empty string is neither.
+
+`label()` in `packages/frames` was already correct, because it happens to test
+`tool.title?.trim()` for truthiness rather than for existence, so the glasses
+were fine the whole time and only the console was broken. That is worth noting:
+the same latent bug was fixed in one place and live in another, and nothing
+connected them. It is normalized once now, in `packages/webmcp`, which is the
+only file allowed to know what browsers actually do.
+
+### Every value a Display can send is a string
+
+The glasses can send exactly two things: a choice id, and whatever the composer
+committed. Both are text. Verdant Market declares nothing but bare strings, so
+that was invisible and correct at the same time.
+
+Amber & Oak declares `party_size` as `{"type": "integer", "enum": [1,2,3,4]}`.
+A wearer tapping the second button sent the string `"2"` to a site that had
+declared it would receive a number. Nothing broke, because the site coerces
+what it is given, the way any site handling a browser API should. A site that
+validated its own schema would have been entitled to refuse the call, and would
+have been right to.
+
+`coerce` now consults the declared parameter. An enum returns the DECLARED
+member rather than a parsed copy of the label, which handles an integer enum
+with no type guessing at all. It also fixed a second thing on the way in: a
+string parameter whose value happens to read `"true"` was being turned into a
+boolean, because the old version tested the text and had no schema to consult.
+
+Both of these are the same lesson in different clothes. A single test source
+teaches you that your code runs. It cannot tell you which of your branches have
+never executed.
+
 ### `messages.parse()` throws rather than returning null
 
 The Anthropic SDK's return type suggests a null `parsed_output` when content
