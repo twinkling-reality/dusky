@@ -12,3 +12,5 @@ playwright-report/
 # Internal working notes, deliberately not published
 NOTES.local.md
 *.local.md
+.vercel
+.env*
