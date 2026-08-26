@@ -1,0 +1,30 @@
+# The Dusky session relay.
+#
+# Render is used because the relay holds WebSockets, which serverless hosts
+# cannot. Vercel is correct for the three static surfaces and wrong for this
+# one. Railway and Fly run the same commands if you prefer either.
+#
+# Nothing here holds a partner site's credentials and nothing here can invoke a
+# tool. Tool execution happens in the user's own browser, by design.
+services:
+  - type: web
+    name: dusky-relay
+    runtime: node
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    # tsx is a runtime dependency of this service, not a dev tool, so a
+    # production install keeps it. `--prod` skips everything else.
+    buildCommand: corepack enable && pnpm install --prod --frozen-lockfile
+    startCommand: pnpm --filter @dusky/app-server start
+    envVars:
+      # Render supplies PORT and the server reads it.
+      - key: DUSKY_SOURCE
+        value: Verdant Market
+      # Turn the planner on to enable spoken requests and send_task_to_display.
+      # Leave it off and Dusky is menu-driven, which is fully usable.
+      - key: DUSKY_PLANNER
+        value: "on"
+      # Set in the dashboard, never in this file.
+      - key: ANTHROPIC_API_KEY
+        sync: false
