@@ -265,7 +265,17 @@ export function idleFrame(
       ? canSpeak
         ? "Tap to speak, or choose an action"
         : "Choose an action"
-      : "This source declared no usable tools",
+      : // What reached us, never what the site chose.
+        //
+        // This used to read "This source declared no usable tools", which is a
+        // confident claim about somebody else's page and is only one of the
+        // reasons a menu comes back empty. The site may have declared plenty
+        // and not named this origin in `exposedTo`; its page may not have
+        // registered yet; the browser may not speak WebMCP at all. None of
+        // those are distinguishable from here, so the sentence has to be true
+        // in all of them. "Offered" is about what arrived, which is the only
+        // thing this code actually observed.
+        "This source has not offered any actions",
     choices,
   };
 }

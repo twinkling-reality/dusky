@@ -384,3 +384,26 @@ describe("saying what you want", () => {
     expect(meta(3)).toBe("1/3");
   });
 });
+
+describe("a menu with nothing on it", () => {
+  /**
+   * Zero tools reaching Dusky is not the same fact as a site having declared
+   * none. The site may have declared plenty and simply not named this origin
+   * in `exposedTo`, or its page may not have registered yet. None of that is
+   * distinguishable from here, so whatever the panel says has to be true in
+   * every one of those cases.
+   */
+  it("does not claim to know what the source declared", () => {
+    const f = idleFrame("Verdant Market", [], 0, false);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    const said = `${f.title} ${f.note ?? ""}`;
+    expect(said, "the panel asserted something it cannot know").not.toMatch(/declared/i);
+  });
+
+  it("still says plainly that there is nothing to do", () => {
+    const f = idleFrame("Verdant Market", [], 0, false);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices).toEqual([]);
+    expect(f.note).toBeTruthy();
+  });
+});
