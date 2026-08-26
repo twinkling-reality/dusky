@@ -430,3 +430,25 @@ describe("proposing a resolver, which runs with no human in front of it", () => 
     expect(seen).toHaveLength(0);
   });
 });
+
+describe("a model client that does not honour its deadline", () => {
+  /**
+   * `ModelRequest.timeoutMs` is documented as a hard wall-clock ceiling, and
+   * the shipped adapter does honour it. But `ModelClient` is a PORT: another
+   * implementation, or a future one, reaches this code without going anywhere
+   * near `anthropic.ts`. The budget was trust-based, which is precisely the
+   * arrangement `Session.execute` refuses for tool invocation, and for the
+   * same reason.
+   */
+  it("gives up on its own rather than waiting to be released", async () => {
+    const planner = new ModelPlanner({
+      client: { decide: () => new Promise<never>(() => {}) },
+      budgetMs: 60,
+      fastTimeoutMs: 30,
+      carefulTimeoutMs: 30,
+    });
+
+    const picked = await planner.pickTool("find oat milk", [SEARCH]);
+    expect(picked, "a planner that never returns is a planner nobody can use").toBeNull();
+  });
+});

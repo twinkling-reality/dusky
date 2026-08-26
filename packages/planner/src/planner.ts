@@ -411,6 +411,34 @@ export class ModelPlanner {
     return escalateOnConsequential && gate(a.tool).consequence !== "read";
   }
 
+  /**
+   * Ask a model, and own the deadline rather than asking for it.
+   *
+   * `timeoutMs` is documented on `ModelRequest` as a hard wall-clock ceiling,
+   * and the adapter in this package does honour it. `ModelClient` is a PORT
+   * though, so another implementation reaches here without going near that
+   * file, and a budget that only holds while somebody else remembers to
+   * enforce it is not a budget. `Session.execute` refuses exactly this trust
+   * for tool invocation; there is no reason to extend it here.
+   *
+   * Rejecting lands in the caller's existing catch, which records a failure
+   * and returns the wearer to the menu.
+   */
+  private async decideWithin(req: ModelRequest): Promise<Decision> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("the model did not answer in time")),
+        req.timeoutMs,
+      );
+    });
+    try {
+      return await Promise.race([this.o.client.decide(req), deadline]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   private async ask(
     path: PlanPath,
     tier: Tier,
@@ -427,7 +455,7 @@ export class ModelPlanner {
 
     let decision: Decision;
     try {
-      decision = await this.o.client.decide({ tier, system, user, timeoutMs });
+      decision = await this.decideWithin({ tier, system, user, timeoutMs });
     } catch (err) {
       this.emit({
         kind: "failed",
