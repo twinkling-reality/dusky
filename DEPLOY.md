@@ -90,10 +90,20 @@ Each is a separate Vercel project from the same repository.
   packages live in `packages/`, so the build fails without it.
 - Build command `pnpm build`, output `dist`. Vite is detected automatically.
 
-**The console needs an SPA rewrite.** `/demo` is a client-side route, so the
-host has to serve `index.html` for every path. `vercel/console.json` carries
-the rewrite; without it a link straight to the demo returns a 404, which is a
-bad first thing to hand anybody. `pnpm test:prod` checks both paths.
+**The console needs an SPA rewrite, and it has to be somewhere Vercel reads.**
+`/demo` is a client-side route, so the host must serve `index.html` for every
+path or a link straight to the demo returns a 404. Vercel reads `vercel.json`
+from the project's **Root Directory**, which for this project is `apps/console`,
+so the rewrite lives in `apps/console/vercel.json`.
+
+Note the discrepancy: the files in `vercel/` use repo-root-relative paths
+(`apps/console/dist`), which only makes sense if the Root Directory is the
+repository root. Nothing in this repository reads them, so they are reference
+copies rather than configuration. If a project's Root Directory really is the
+repo root, the rewrite has to move to a `vercel.json` there instead.
+
+Either way `pnpm test:prod` checks that both `/` and `/demo` return the app,
+so a misplaced rewrite fails loudly rather than waiting for a judge to find it.
 
 **Turn deployment protection off for the Display.** Vercel's authentication
 sits in front of the page, and the glasses cannot log in. Meta's own

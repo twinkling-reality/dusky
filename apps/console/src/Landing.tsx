@@ -17,7 +17,7 @@ import styles from "./Landing.module.css";
  * something breaks.
  */
 
-const REPO = "https://github.com/glendonchin/dusky";
+const REPO = "https://github.com/twinkling-reality/dusky";
 const FLAG = "chrome://flags/#enable-webmcp-testing";
 
 export function Landing() {
