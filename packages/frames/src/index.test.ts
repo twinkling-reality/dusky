@@ -1,0 +1,147 @@
+import type { ToolDescriptor } from "@dusky/contracts";
+import { describe, expect, it } from "vitest";
+import {
+  candidatesFromResult,
+  confirmFrame,
+  idleFrame,
+  isOperable,
+  MAX_CHOICES,
+  nextMissingParam,
+  parameters,
+  paramFrame,
+} from "./index.js";
+
+const tool = (p: Partial<ToolDescriptor>): ToolDescriptor => ({
+  name: "x",
+  description: "",
+  origin: "https://shop.test",
+  inputSchema: null,
+  annotations: { readOnlyHint: false, untrustedContentHint: false },
+  ...p,
+});
+
+/**
+ * The load-bearing test for the whole product thesis: a tool this codebase has
+ * never seen, from a site nobody integrated, must still render.
+ */
+describe("a never-before-seen tool", () => {
+  const invented = tool({
+    name: "schedule_pickup",
+    description: "Schedule a parcel pickup",
+    inputSchema: {
+      type: "object",
+      properties: {
+        window: {
+          type: "string",
+          enum: ["morning", "afternoon", "evening"],
+          description: "Pickup window?",
+        },
+        fragile: { type: "boolean" },
+      },
+      required: ["window"],
+    },
+  });
+
+  it("is operable on a six-key display", () => {
+    expect(isOperable(invented)).toBe(true);
+  });
+
+  it("derives its parameters from the schema alone", () => {
+    const ps = parameters(invented);
+    expect(ps.map((p) => [p.name, p.kind, p.required])).toEqual([
+      ["window", "enum", true],
+      ["fragile", "boolean", false],
+    ]);
+  });
+
+  it("turns an enum into one choice per value, using the schema description", () => {
+    const p = nextMissingParam(invented, {})!;
+    const f = paramFrame("Parcels", invented, p);
+    expect(f.kind).toBe("choose");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.title).toBe("Pickup window?");
+    expect(f.choices.map((c) => c.id)).toEqual(["morning", "afternoon", "evening"]);
+  });
+
+  it("stops asking once required parameters are filled", () => {
+    expect(nextMissingParam(invented, { window: "morning" })).toBeNull();
+  });
+});
+
+describe("display constraints", () => {
+  it("never emits more choices than fit on a 600x600 waveguide", () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      tool({ name: `tool_${i}`, annotations: { readOnlyHint: true, untrustedContentHint: false } }),
+    );
+    const f = idleFrame("Big Source", many);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices.length).toBeLessThanOrEqual(MAX_CHOICES);
+    expect(f.choices.at(-1)!.id).toBe("__more");
+  });
+
+  it("hides tools it cannot honestly drive rather than faking a frame", () => {
+    const nested = tool({
+      name: "bulk_upload",
+      inputSchema: { type: "object", properties: { rows: { type: "array" } }, required: ["rows"] },
+    });
+    expect(isOperable(nested)).toBe(false);
+    const f = idleFrame("Src", [nested]);
+    if (f.kind !== "idle") throw new Error("unreachable");
+    expect(f.choices).toHaveLength(0);
+  });
+});
+
+describe("results become the next frame's choices", () => {
+  it("extracts candidates from an arbitrary tool result", () => {
+    const raw = JSON.stringify({
+      results: [
+        { id: "oat-1", name: "Organic oat milk", price: 4.29 },
+        { id: "oat-2", name: "Barista oat milk", price: 5.1 },
+      ],
+    });
+    expect(candidatesFromResult(raw)).toEqual([
+      { id: "oat-1", label: "Organic oat milk", meta: "$4.29" },
+      { id: "oat-2", label: "Barista oat milk", meta: "$5.10" },
+    ]);
+  });
+
+  it("returns nothing rather than inventing structure", () => {
+    expect(candidatesFromResult("not json")).toEqual([]);
+    expect(candidatesFromResult(JSON.stringify({ ok: true }))).toEqual([]);
+  });
+
+  it("fills a bare string parameter from a prior read result", () => {
+    const add = tool({
+      name: "add_to_cart",
+      inputSchema: {
+        type: "object",
+        properties: { product_id: { type: "string" } },
+        required: ["product_id"],
+      },
+    });
+    const p = nextMissingParam(add, {})!;
+    expect(p.kind).toBe("text");
+    const f = paramFrame(
+      "Shop",
+      add,
+      p,
+      candidatesFromResult(
+        JSON.stringify([{ id: "oat-1", name: "Organic oat milk", price: 4.29 }]),
+      ),
+    );
+    if (f.kind !== "choose") throw new Error("unreachable");
+    // Not a composer prompt: real choices, derived from the earlier result.
+    expect(f.choices[0]).toEqual({ id: "oat-1", label: "Organic oat milk", meta: "$4.29" });
+  });
+});
+
+describe("the gate", () => {
+  it("offers confirm and cancel, with cancel marked dangerous", () => {
+    const f = confirmFrame("Shop", tool({ name: "add_to_cart" }), "Organic oat milk", "$4.29");
+    if (f.kind !== "confirm") throw new Error("unreachable");
+    expect(f.target).toBe("Organic oat milk");
+    expect(f.consequence).toBe("$4.29");
+    expect(f.choices.map((c) => c.id)).toEqual(["__confirm", "__cancel"]);
+    expect(f.choices[1]!.tone).toBe("danger");
+  });
+});
