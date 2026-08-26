@@ -3,7 +3,7 @@ import { factsFromResult, isOperable, label, outcomeFromResult, parameters } fro
 import { FrameView } from "@dusky/lens";
 import { gate } from "@dusky/policy";
 import { Session, type ToolRunner } from "@dusky/session";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./Derivation.module.css";
 import { PRESETS, type Preset } from "./presets.js";
 
@@ -78,7 +78,16 @@ function parseTool(text: string, origin: string): Parsed {
   };
 }
 
-export function Derivation() {
+/**
+ * `intro` is the page's own opening copy, rendered beside the panel.
+ *
+ * The panel is the most characteristic thing Dusky has: a 600 by 600 square
+ * that cannot scroll. Putting it next to the claim, rather than below several
+ * screens of prose, means the proof starts where the reader does, and the page
+ * carries one real panel instead of a decorative one on top and a working one
+ * further down.
+ */
+export function Derivation({ intro }: { intro?: ReactNode }) {
   const [preset, setPreset] = useState<Preset>(PRESETS[0] as Preset);
   const [toolText, setToolText] = useState(preset.tool);
   const [resultText, setResultText] = useState(preset.result);
@@ -136,15 +145,42 @@ export function Derivation() {
 
   return (
     <section className={styles.wrap}>
-      <header className={styles.head}>
-        <h2 className={styles.h2}>What the site declared, and what Dusky made of it</h2>
-        <p className={styles.lede}>
-          The panel on the right is the component the glasses run, driven by the same state machine,
-          over the same compiler. Nothing is drawn for this page. Change the schema and watch the
-          screens change: that is the entire claim, and it costs you no trust.
-        </p>
-      </header>
+      <div className={styles.lead}>
+        <div className={styles.introCell}>{intro}</div>
+        <div className={styles.stageCell}>
+          <h2 className={styles.h3}>
+            On the glasses
+            <span className={styles.tag}>600 x 600, live</span>
+          </h2>
+          <div className={styles.stage}>
+            {frame && (
+              <div className={styles.panel}>
+                {/* keyboard={false}: the D-pad listener sits on `document`, and
+                    a widget swallowing every arrow key would break the page
+                    around it. Click the choices instead. */}
+                <FrameView
+                  frame={frame}
+                  frameKey={frameKey}
+                  keyboard={false}
+                  headingLevel={2}
+                  onChoose={choose}
+                  onBack={back}
+                  onText={text}
+                />
+              </div>
+            )}
+          </div>
+          <p className={styles.foot}>
+            Click through it. Same component the glasses run, same state machine, same compiler,
+            with a tool runner that answers from the box below instead of from a network.
+          </p>
+        </div>
+      </div>
 
+      <h2 className={styles.h3}>
+        Point it at a schema
+        <span className={styles.tag}>every box below is editable</span>
+      </h2>
       <div className={styles.presets}>
         {PRESETS.map((p) => (
           <button
@@ -251,35 +287,6 @@ export function Derivation() {
               </li>
             )}
           </ul>
-        </div>
-
-        <div className={styles.col}>
-          <h3 className={styles.h3}>
-            On the glasses
-            <span className={styles.tag}>600 x 600, shown at 80%</span>
-          </h3>
-          <div className={styles.stage}>
-            {frame && (
-              <div className={styles.panel}>
-                {/* keyboard={false}: the D-pad listener sits on `document`, and
-                    a widget swallowing every arrow key would break the page
-                    around it. Click the choices instead. */}
-                <FrameView
-                  frame={frame}
-                  frameKey={frameKey}
-                  keyboard={false}
-                  headingLevel={2}
-                  onChoose={choose}
-                  onBack={back}
-                  onText={text}
-                />
-              </div>
-            )}
-          </div>
-          <p className={styles.foot}>
-            Click through it. Anything the policy layer gated stops for a confirmation here exactly
-            as it would on someone's face, because it is the same code deciding.
-          </p>
         </div>
       </div>
     </section>

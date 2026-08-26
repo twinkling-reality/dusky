@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import styles from "./SiteHeader.module.css";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 /**
  * The one bar that is always there.
@@ -16,7 +17,10 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
       <Link to="/" className={styles.wordmark}>
         Dusky
       </Link>
-      <nav className={styles.nav}>{children}</nav>
+      <nav className={styles.nav}>
+        <ThemeToggle />
+        {children}
+      </nav>
     </header>
   );
 }

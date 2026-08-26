@@ -19,8 +19,33 @@ test("the front door states the browser requirement before anything breaks", asy
   await expect(page.getByRole("heading", { level: 1 })).toContainText("web made of tools");
   // Stated up front, next to the pitch, rather than discovered on failure.
   await expect(page.getByText("chrome://flags/#enable-webmcp-testing").first()).toBeVisible();
-  // And the argument itself is on the front page, where it needs no WebMCP.
-  await expect(page.getByText("What the site declared, and what Dusky made of it")).toBeVisible();
+  // The argument shares the screen with the claim, and needs no WebMCP: a
+  // live 600x600 panel beside the headline, driven by the schema below it.
+  await expect(page.locator("div[data-kind]")).toBeVisible();
+  await expect(page.getByText("Point it at a schema")).toBeVisible();
+});
+
+test("the theme can be chosen rather than inherited from the machine", async ({ page }) => {
+  await page.goto(SITE);
+  const root = page.locator("html");
+
+  // Nothing set: the palette follows the operating system, which is what
+  // prefers-color-scheme is for.
+  await expect(root).not.toHaveAttribute("data-theme", /.+/);
+
+  await page.getByRole("button", { name: "Light" }).click();
+  await expect(root).toHaveAttribute("data-theme", "light");
+
+  await page.getByRole("button", { name: "Dark" }).click();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+
+  // And it survives a reload, applied before first paint so there is no frame
+  // of the wrong palette on the way in.
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+
+  await page.getByRole("button", { name: "Auto" }).click();
+  await expect(root).not.toHaveAttribute("data-theme", /.+/);
 });
 
 test("the checklist probes this browser and collapses when it is happy", async ({ page }) => {

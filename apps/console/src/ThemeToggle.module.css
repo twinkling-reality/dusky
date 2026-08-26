@@ -1,0 +1,42 @@
+.group {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  overflow: hidden;
+}
+
+.option {
+  padding: 0.3em 0.6em;
+  border: 0;
+  border-right: 1px solid var(--dusky-hair);
+  background: none;
+  color: var(--dusky-ink-faint);
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.option:last-child {
+  border-right: 0;
+}
+.option:hover {
+  color: var(--dusky-ink);
+}
+.option[data-on="true"] {
+  background: var(--dusky-raised);
+  color: var(--dusky-ink-strong);
+}
+
+/* A fieldset needs a legend for the grouping to mean anything to a screen
+   reader; the bar has no room to print the word. */
+.legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

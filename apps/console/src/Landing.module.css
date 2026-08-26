@@ -7,13 +7,6 @@
   gap: var(--dusky-s6);
 }
 
-.hero {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s4);
-  max-width: 72ch;
-}
-
 .claim {
   margin: 0;
   font-weight: 200;
@@ -78,47 +71,59 @@
   word-break: break-all;
 }
 
-.prose {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s3);
-  max-width: 72ch;
-}
-.prose p {
-  margin: 0;
-  color: var(--dusky-ink-dim);
-}
-.prose code {
-  font-family: var(--dusky-mono);
-  font-size: 0.86em;
-  color: var(--dusky-accent);
-}
-
-.h2 {
-  margin: var(--dusky-s4) 0 0;
-  font-weight: 300;
-  font-size: 1.25rem;
-  letter-spacing: -0.02em;
-  color: var(--dusky-ink-strong);
-}
-
-.claims {
-  margin: 0;
-  padding-left: 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-  color: var(--dusky-ink-dim);
-}
-.claims strong {
-  color: var(--dusky-ink);
-  font-weight: 400;
-}
-
 .foot {
   display: flex;
   gap: var(--dusky-s4);
   padding-top: var(--dusky-s4);
   border-top: 1px solid var(--dusky-hair);
   font-size: 0.9rem;
+}
+
+/* Three cells, hairline separated, at the length somebody reads standing up. */
+.facts {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  overflow: hidden;
+}
+@media (min-width: 900px) {
+  .facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.fact {
+  padding: var(--dusky-s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s2);
+  border-top: 1px solid var(--dusky-hair);
+}
+.fact:first-child {
+  border-top: 0;
+}
+@media (min-width: 900px) {
+  .fact {
+    border-top: 0;
+    border-left: 1px solid var(--dusky-hair);
+  }
+  .fact:first-child {
+    border-left: 0;
+  }
+}
+
+.factTitle {
+  margin: 0;
+  font-weight: 400;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  color: var(--dusky-ink-strong);
+}
+
+.factBody {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--dusky-ink-dim);
 }
