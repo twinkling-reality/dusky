@@ -8,14 +8,19 @@ import { expect, type Page, test } from "@playwright/test";
  * correct, which fails for entirely different reasons: a `ws://` URL an HTTPS
  * page refuses to open, an `exposedTo` origin that is off by a trailing slash,
  * an environment variable that never reached a Vite build, a relay that builds
- * but does not boot.
+ * but does not boot, a surface nobody ever deployed at all.
  *
  * Every one of those looks identical from the wearer's side: an empty menu.
+ *
+ * That last one was not hypothetical. Amber & Oak had no coverage here, and
+ * `dusky-reservations.vercel.app` answered DEPLOYMENT_NOT_FOUND while this
+ * suite passed, because a claim nothing asserts is a claim nothing can catch.
  */
 
 const DISPLAY = "https://dusky-display.vercel.app";
 const CONSOLE = "https://dusky-console.vercel.app";
 const MARKET = "https://dusky-market.vercel.app";
+const RESERVATIONS = "https://dusky-reservations.vercel.app";
 const RELAY = "https://dusky-relay.onrender.com";
 
 /**
@@ -27,9 +32,12 @@ const RELAY = "https://dusky-relay.onrender.com";
  */
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
 const stamp = Date.now();
-const CODE = `PRD${[0, 1, 2]
+const suffix = [0, 1, 2]
   .map((i) => ALPHABET[Math.floor(stamp / ALPHABET.length ** i) % ALPHABET.length])
-  .join("")}`;
+  .join("");
+const CODE = `PRD${suffix}`;
+/** A second one, because a session holds exactly one source at a time. */
+const CODE_B = `RES${suffix}`;
 
 async function focusChoice(page: Page, label: RegExp) {
   for (let i = 0; i < 10; i += 1) {
@@ -50,7 +58,11 @@ test("the relay is reachable and healthy", async ({ request }) => {
 test("every surface is public, with no login wall in front of the glasses", async ({ request }) => {
   // Vercel protects deployments by default and the glasses cannot log in, so
   // this is the check that catches a project someone re-protected later.
-  for (const url of [DISPLAY, CONSOLE, MARKET]) {
+  // A project that was never deployed answers 404 rather than a login page, so
+  // this loop catches both. It is the cheapest place either failure can be
+  // found, and every surface belongs in it or the surface left out is the one
+  // that breaks.
+  for (const url of [DISPLAY, CONSOLE, MARKET, RESERVATIONS]) {
     const res = await request.get(url);
     expect(res.status(), `${url} should be reachable`).toBe(200);
     expect(await res.text(), `${url} should not be a Vercel login page`).not.toContain(
@@ -92,6 +104,54 @@ test("the deployed console discovers the deployed market cross-origin", async ({
   // mixed into what the wearer sees.
   await expect(page.getByText("registered for this browser agent")).toBeVisible();
   await expect(page.getByText("send_task_to_display")).toHaveCount(0);
+});
+
+/**
+ * The console holds the partner site in an iframe, and which URL it holds is
+ * baked in at BUILD time by Vite. `sources.ts` falls back to
+ * `http://localhost:7804` when `VITE_RESERVATIONS_URL` is absent, which is
+ * correct for a developer and catastrophic on an HTTPS page: the browser
+ * blocks it as mixed content and the wearer gets an empty menu with no
+ * indication why.
+ *
+ * Nothing else in this suite can see that, because the fallback is a perfectly
+ * valid string and the build succeeds.
+ */
+test("the console's second source points at a deployment, not at a laptop", async ({ page }) => {
+  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+
+  const src = await page.locator('iframe[title="Amber & Oak"]').getAttribute("src");
+  expect(
+    new URL(src ?? "about:blank").origin,
+    "VITE_RESERVATIONS_URL never reached the console's build",
+  ).toBe(RESERVATIONS);
+});
+
+/**
+ * The claim the second source exists to support, checked against the
+ * deployment rather than against four dev servers.
+ *
+ * The market's `exposedTo` being correct says nothing about this one: they are
+ * separate projects, separately built, each naming `dusky-console` by hand. A
+ * trailing slash or an `http://` in either produces zero tools here and a menu
+ * that looks exactly like a site with nothing to offer.
+ */
+test("the deployed console discovers the deployed restaurant cross-origin", async ({ page }) => {
+  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+  await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
+
+  const actions = page.getByTestId("actions");
+  await expect(actions.locator("li")).toHaveCount(3);
+
+  // Amber & Oak declares a title on one tool out of three, deliberately. The
+  // other two are listed under their raw names, which is what Chrome returning
+  // `title: ""` rather than omitting it used to turn into a blank row.
+  await expect(actions.getByText("Find a table")).toBeVisible();
+  await expect(actions.getByText("book_table")).toBeVisible();
+  await expect(actions.getByText("change_reservation")).toBeVisible();
+
+  // Nothing from the other source has leaked into this session.
+  await expect(actions.getByText("Add to cart")).toHaveCount(0);
 });
 
 test("a gesture on the deployed Display changes the deployed market", async ({ browser }) => {
