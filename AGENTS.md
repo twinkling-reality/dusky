@@ -32,8 +32,12 @@ session. Dusky moves intent, never credentials.
    Everything the wearer sees is derived from tool schemas in `packages/frames`.
 2. **The model proposes, code disposes.** Whether a human must confirm is
    decided in `packages/policy`, which has no model, no network and no DOM.
-   A `Planner` may only suggest; `Session` enforces. There is a test asserting a
-   planner cannot launder a consequential tool through the resolver path.
+   A `Planner` may only suggest; `Session` enforces. A proposal is checked
+   against the candidates actually offered, and its arguments against the
+   tool's own schema, in `packages/planner` AND again in `packages/session`.
+   There are tests asserting a planner cannot launder a consequential tool
+   through the resolver path, cannot name a tool it was not offered, and cannot
+   smuggle an undeclared argument into an invocation. See "The planner" below.
 3. **Success is asserted from a returned tool result, never from having called.**
 4. **An annotation may lower ceremony, never raise it.** `readOnlyHint` is a
    hint from a party that may be hostile, and Chrome passes only 1 of 4 WPT
@@ -42,6 +46,85 @@ session. Dusky moves intent, never credentials.
    not "did not happen".
 6. **`packages/policy` must stay dependency-free.** If it ever imports the agent
    or a transport, the deterministic guarantee is gone.
+
+## The planner, and why it cannot widen anything
+
+`packages/planner` implements the `Planner` port that `packages/session`
+defines. It is optional at runtime and off by default: set `DUSKY_PLANNER=on`
+to enable it. Without it Dusky is menu-driven and fully usable, which is why a
+model outage, a missing credential or a rate limit costs a wearer latency
+rather than a dead end. The round-trip test passes either way.
+
+The credential is read in `apps/server/src/planner.ts` and never leaves that
+process. The Display and the console are never handed one.
+
+**Three costs shape it.**
+
+- *Tokens.* A model never sees a tool registry. `rank.ts` scores tools against
+  the request with no model, and only the top few reach a prompt. `cards.ts`
+  compiles each tool into a few lines, cached by tool version, so a task that
+  takes many turns compiles each tool once.
+- *Latency.* One `pickTool` or `planResolver` has a total budget. Escalation
+  spends from that same budget rather than doubling it, and SDK retries are
+  turned off so a 2.5s timeout cannot become 7.5s underneath us.
+- *Being wrong.* A cheap model answers first. A stronger one is asked when the
+  first is unsure, names something that was not on offer, or reaches for a tool
+  the wearer would have to pay for. If the second tier will not stand behind an
+  answer, the planner returns nothing and the wearer gets the menu.
+
+Some requests need no model at all. When the winning tool takes no arguments
+and wins its ranking outright, the planner answers directly. It never fills an
+argument by lexical similarity, because a wrong argument is exactly what a
+model is there to avoid.
+
+**What is enforced in code rather than asked of the model.** Every one of these
+has a test, and they are the reason a misbehaving model, a hostile site or both
+together cannot widen what the machine will do.
+
+- A name the model returns must match a candidate it was actually offered.
+  Anything else is refused and recorded.
+- A name two origins both registered is refused as ambiguous, so a site cannot
+  hijack a familiar tool name by registering it too.
+- A resolver must be read-only, checked in `packages/planner` AND again in
+  `packages/session`. The planner does not rely on the session's filter: a
+  guarantee that only holds while two files agree is not a guarantee. This is
+  the one path where a proposal runs with no human in front of it.
+- Arguments are filtered against the tool's own schema in both packages, so an
+  invented `force` or `confirm` cannot ride along into an invocation and bypass
+  the gate without anyone touching the gate. Values outside a declared enum are
+  dropped rather than passed through.
+- A planner that throws lands the wearer on the menu. It is assistance, never
+  a dependency.
+
+**Tool text is untrusted input going into a prompt.** Everything on a card
+except `origin` was written by a third-party site. `safeText` strips control
+characters, collapses all whitespace to single spaces and strips quotes before
+delimiting, so a description cannot open a new line and impersonate a card
+field, forge a second card, or close its own delimiter. A hostile description
+can still argue with the model, which no escaping prevents. That is survivable
+because nothing the model says is trusted: `packages/policy` decides ceremony
+and never reads a description for that purpose, and a card states the ceremony
+policy assigned rather than the one the site claims.
+
+Ranking treats the same text as adversarial. Name evidence outweighs prose, and
+description evidence is capped, so keyword stuffing can win a shortlist slot on
+a request nothing else matches but can never outrank a genuine name match.
+
+**Verified by execution, and what was not.** `packages/planner/src/anthropic.ts`
+is the only file that knows a model provider exists. Its request shape was
+checked against `@anthropic-ai/sdk` 0.120.0 by running it against a stub that
+speaks the Messages API wire format, which is what
+`packages/planner/src/anthropic.test.ts` does on every CI run without needing a
+credential. That test found one thing worth knowing: `messages.parse()` THROWS
+when content does not satisfy the schema rather than returning a null
+`parsed_output`, whatever its return type suggests. An unreadable answer is
+treated as the model declining; a typed `APIError` is rethrown so the planner
+records a real failure and escalates.
+
+Not verified: no request in this repository has ever reached the live API,
+because tests here run without credentials. Model choice, tier defaults and the
+`effort` setting are reasoned, not measured. Treat their latency and accuracy
+as unmeasured until evals exist.
 
 ## Browser reality, verified 2026-08-25 against Chrome 151.0.7922.174
 
@@ -112,6 +195,9 @@ pnpm test:e2e    # round trip in real Chrome with the flag
 pnpm typecheck
 pnpm lint
 ```
+
+The planner is off unless `DUSKY_PLANNER=on` is set on the relay, alongside a
+credential the Anthropic SDK can resolve. Everything passes without one.
 
 `e2e/roundtrip.spec.ts` is the load-bearing test. If it passes, Dusky works. Run
 it before claiming anything works.

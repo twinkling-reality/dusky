@@ -12,6 +12,7 @@
   "dependencies": {
     "@dusky/contracts": "workspace:*",
     "@dusky/frames": "workspace:*",
+    "@dusky/planner": "workspace:*",
     "@dusky/policy": "workspace:*",
     "@dusky/session": "workspace:*",
     "@hono/node-server": "^1.14.0",

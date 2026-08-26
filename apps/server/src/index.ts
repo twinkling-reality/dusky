@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { Hub } from "./hub.js";
+import { plannerFactory } from "./planner.js";
 
 /**
  * The Dusky session relay.
@@ -19,7 +20,7 @@ import { Hub } from "./hub.js";
 const PORT = Number(process.env["PORT"] ?? 7900);
 const SOURCE = process.env["DUSKY_SOURCE"] ?? "Verdant Market";
 
-const hub = new Hub();
+const hub = new Hub(plannerFactory());
 const app = new Hono();
 
 app.use("*", cors({ origin: (o) => o ?? "*", credentials: false }));

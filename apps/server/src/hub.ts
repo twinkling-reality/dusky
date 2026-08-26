@@ -9,6 +9,7 @@ import type {
 } from "@dusky/contracts";
 import { Session, type ToolRunner } from "@dusky/session";
 import type { WebSocket } from "ws";
+import type { PlannerFactory } from "./planner.js";
 
 /**
  * The session hub.
@@ -111,15 +112,20 @@ export class SessionActor {
   constructor(
     readonly id: string,
     private readonly source: string,
+    makePlanner?: PlannerFactory,
   ) {
+    const record = (e: Omit<AuditEntry, "at" | "sessionId">) => {
+      this.audit.push({ ...e, at: new Date().toISOString(), sessionId: this.id });
+      if (this.audit.length > 500) this.audit.shift();
+    };
     this.runner = new RemoteToolRunner((msg) => this.toConsole(msg));
     this.session = new Session({
       source: this.source,
       runner: this.runner,
-      onAudit: (e) => {
-        this.audit.push({ ...e, at: new Date().toISOString(), sessionId: this.id });
-        if (this.audit.length > 500) this.audit.shift();
-      },
+      // One planner per session, so its proposals and refusals land in this
+      // wearer's audit trail rather than a shared one.
+      planner: makePlanner?.(record),
+      onAudit: record,
     });
   }
 
@@ -232,10 +238,12 @@ function stateFor(kind: string) {
 export class Hub {
   private sessions = new Map<string, SessionActor>();
 
+  constructor(private readonly makePlanner?: PlannerFactory) {}
+
   get(id: string, source: string): SessionActor {
     let s = this.sessions.get(id);
     if (!s) {
-      s = new SessionActor(id, source);
+      s = new SessionActor(id, source, this.makePlanner);
       this.sessions.set(id, s);
     }
     return s;
