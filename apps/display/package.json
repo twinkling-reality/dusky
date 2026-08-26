@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "@dusky/contracts": "workspace:*",
-    "@dusky/tokens": "workspace:*"
+    "@dusky/lens": "workspace:*",
+    "@dusky/tokens": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

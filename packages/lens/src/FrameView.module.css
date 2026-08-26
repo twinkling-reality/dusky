@@ -1,3 +1,10 @@
+/**
+ * Self-contained on purpose. The Display's own stylesheet used to supply the
+ * font, weight and colour through `body`, which was fine while this component
+ * only ever ran on a page that WAS the panel. It now also mounts inside an
+ * ordinary document, and a panel that borrowed a website's body rules would
+ * not be the thing the wearer sees.
+ */
 .screen {
   width: 600px;
   height: 600px;
@@ -6,6 +13,21 @@
   flex-direction: column;
   gap: 22px;
   background: var(--emit-ground);
+  color: var(--emit-body);
+  font-family: var(--dusky-sans);
+  /* A thin stroke on an additive panel is fewer lit pixels, which is exactly
+     the wrong trade when the background is an uncontrolled room. */
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* No cursor exists on the glasses, so nothing inside should imply one. */
+.screen button,
+.screen input {
+  font: inherit;
+  color: inherit;
 }
 
 .top {

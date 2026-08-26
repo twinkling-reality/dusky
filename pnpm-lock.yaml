@@ -81,6 +81,9 @@ importers:
       '@dusky/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@dusky/lens':
+        specifier: workspace:*
+        version: link:../../packages/lens
       '@dusky/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
@@ -223,6 +226,22 @@ importers:
       '@dusky/policy':
         specifier: workspace:*
         version: link:../policy
+
+  packages/lens:
+    dependencies:
+      '@dusky/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      vite:
+        specifier: ^7.0.0
+        version: 7.3.6(@types/node@22.20.1)(tsx@4.23.12)
 
   packages/planner:
     dependencies:

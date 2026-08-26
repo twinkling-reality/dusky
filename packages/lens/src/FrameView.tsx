@@ -20,18 +20,28 @@ interface Props {
   onChoose: (choiceId: string) => void;
   onBack: () => void;
   onText?: (value: string) => void;
+  /**
+   * Whether this panel owns the arrow keys.
+   *
+   * True on the glasses and in the Display tab, where the panel IS the page.
+   * False when a panel is embedded in an ordinary document, because the D-pad
+   * listener sits on `document` and a preview widget silently swallowing
+   * every arrow key would break the page around it.
+   */
+  keyboard?: boolean;
 }
 
 function choicesOf(frame: DisplayFrame): Choice[] {
   return "choices" in frame ? frame.choices : [];
 }
 
-export function FrameView({ frame, frameKey, onChoose, onBack, onText }: Props) {
+export function FrameView({ frame, frameKey, onChoose, onBack, onText, keyboard = true }: Props) {
   const choices = choicesOf(frame);
 
   const { index, register } = useDpad({
     count: choices.length,
     frameKey,
+    enabled: keyboard,
     onSelect: (i) => {
       const c = choices[i];
       if (c) onChoose(c.id);

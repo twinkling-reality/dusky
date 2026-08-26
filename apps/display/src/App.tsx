@@ -1,7 +1,7 @@
 import type { DisplayFrame } from "@dusky/contracts";
+import { FrameView } from "@dusky/lens";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
-import { FrameView } from "./FrameView.js";
 import { useRelay } from "./useRelay.js";
 
 /**
