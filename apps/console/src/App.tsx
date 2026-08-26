@@ -25,7 +25,7 @@ export function App() {
   // from the tool schemas that site registers, not from which entry this is.
   const source = useMemo(() => sourceFromQuery(location.search), []);
   const origins = useMemo(() => [new URL(source.url).origin], [source]);
-  const link = useConsoleLink(RELAY_URL, paired ?? "", origins, paired !== null);
+  const link = useConsoleLink(RELAY_URL, paired ?? "", origins, paired !== null, source.name);
 
   return (
     <div className={styles.page}>

@@ -39,6 +39,7 @@ export function useConsoleLink(
   sessionId: string,
   partnerOrigins: string[],
   ready: boolean,
+  sourceName: string,
 ): ConsoleLink {
   const [link, setLink] = useState<LinkState>("connecting");
   const [tools, setTools] = useState<ToolDescriptor[]>([]);
@@ -102,7 +103,12 @@ export function useConsoleLink(
 
     const connect = () => {
       if (disposed) return;
-      const url = `${relayUrl}?origins=${encodeURIComponent(partnerOrigins.join(","))}`;
+      // The relay is told which site this console is holding, because it has
+      // no way to find out. The label is what a wearer reads in the frame's
+      // eyebrow; the origins are what actually decide anything.
+      const url =
+        `${relayUrl}?origins=${encodeURIComponent(partnerOrigins.join(","))}` +
+        `&source=${encodeURIComponent(sourceName)}`;
       const sock = new WebSocket(url);
       ws.current = sock;
 
@@ -188,7 +194,7 @@ export function useConsoleLink(
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, partnerOrigins, ready, note, send]);
+  }, [relayUrl, sessionId, partnerOrigins, ready, sourceName, note, send]);
 
   /**
    * Register Dusky's own tools, so an agent in this browser can drive the

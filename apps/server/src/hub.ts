@@ -116,8 +116,8 @@ export class SessionActor {
 
   constructor(
     readonly id: string,
-    private readonly source: string,
-    makePlanner?: PlannerFactory,
+    private source: string,
+    private readonly makePlanner?: PlannerFactory,
     private readonly audit?: AuditStore,
   ) {
     // The trail goes to a store rather than an array on this object, so it
@@ -128,13 +128,17 @@ export class SessionActor {
     this.record = record;
     this.hasPlanner = makePlanner !== undefined;
     this.runner = new RemoteToolRunner((msg) => this.toConsole(msg));
-    this.session = new Session({
+    this.session = this.makeSession();
+  }
+
+  private makeSession(): Session {
+    return new Session({
       source: this.source,
       runner: this.runner,
       // One planner per session, so its proposals and refusals land in this
       // wearer's audit trail rather than a shared one.
-      planner: makePlanner?.(record),
-      onAudit: record,
+      planner: this.makePlanner?.(this.record),
+      onAudit: this.record,
       // Every frame the machine produces goes to the glasses as it happens,
       // not just the one a call happens to settle on. Working and thinking
       // frames only exist for the wearer if they are transmitted while the
@@ -192,10 +196,31 @@ export class SessionActor {
     if (this.display === sock) this.display = null;
   }
 
-  async attachConsole(sock: WebSocket, origins: string[]): Promise<void> {
+  /**
+   * A console has arrived, holding some partner site.
+   *
+   * The source label comes with it, because the console is the surface that
+   * actually has the site loaded and the relay does not. `DUSKY_SOURCE` stays
+   * as the fallback for a deployment that only ever points at one place.
+   *
+   * The label is COSMETIC and carries no authority. It is not consulted by the
+   * gate, it is not what the audit trail records, and no frame behaves
+   * differently because of it: the unspoofable fact about where a tool came
+   * from is its origin, which the browser supplies and which appears on every
+   * audit entry. It is sanitized on the way in for the same reason a tool
+   * description is, since it ends up rendered on a lens.
+   */
+  async attachConsole(sock: WebSocket, origins: string[], source?: string): Promise<void> {
     this.consoleSock?.close();
     this.consoleSock = sock;
     this.runner.origins = origins;
+    const named = displayLabel(source);
+    if (named && named !== this.source) {
+      this.source = named;
+      // The machine holds its source at construction, and a different source
+      // is a different task anyway, so this restarts rather than mutates.
+      this.session = this.makeSession();
+    }
     await this.session.start();
   }
 
@@ -359,6 +384,25 @@ export class SessionActor {
       }
     }
   }
+}
+
+/**
+ * Clean a source label enough to put it in front of someone's eye.
+ *
+ * Control characters cannot open a new line on a 600x600 panel with no
+ * scrolling, and an unbounded string would push the rest of the frame off it.
+ * Returns undefined for anything that is not usable, so the caller keeps
+ * whatever it already had.
+ */
+function displayLabel(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const clean = raw
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean === "") return undefined;
+  return clean.length > 40 ? clean.slice(0, 40) : clean;
 }
 
 function stateFor(kind: string) {

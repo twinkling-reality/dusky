@@ -14,10 +14,6 @@ import { expect, type Page, test } from "@playwright/test";
  * because every parameter over there is a bare string: a string enum, an
  * integer enum, and a boolean. Each produces a different frame, derived from
  * the schema alone.
- *
- * NOTE: the frame's source eyebrow still reads whatever DUSKY_SOURCE says,
- * because the label has not yet been made to travel with the console
- * handshake. Nothing here asserts it.
  */
 
 async function focusChoice(page: Page, label: RegExp | string) {
@@ -87,6 +83,10 @@ test("an enum in the schema becomes buttons, with no code in between", async ({ 
   await expect(displayPage.getByRole("button", { name: /Find a table/ })).toBeVisible();
   await expect(displayPage.getByRole("button", { name: /Book table/ })).toBeVisible();
   await expect(displayPage.getByRole("button", { name: /Change reservation/ })).toBeVisible();
+
+  // And the wearer is told which site this is. The relay cannot know that on
+  // its own, so the label travels with the console that holds the site.
+  await expect(displayPage.getByText("Amber & Oak")).toBeVisible();
 
   await focusChoice(displayPage, /Find a table/);
   await displayPage.keyboard.press("Enter");

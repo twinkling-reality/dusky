@@ -99,7 +99,7 @@ would rather they were.
 
 | Surface | Variable | Value |
 | --- | --- | --- |
-| relay | `DUSKY_SOURCE` | `Verdant Market` |
+| relay | `DUSKY_SOURCE` | fallback label only; a console names its own source on connect |
 | relay | `DUSKY_PLANNER` | `on` to enable spoken requests, omit for menu-only |
 | relay | `ANTHROPIC_API_KEY` | required only when the planner is on |
 | relay | `DUSKY_AUDIT_DIR` | a directory that outlives the container, or unset for memory only |

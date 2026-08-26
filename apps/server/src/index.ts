@@ -20,6 +20,7 @@ import { plannerFactory } from "./planner.js";
  */
 
 const PORT = Number(process.env["PORT"] ?? 7900);
+/** Fallback only. A console that names its source overrides this on connect. */
 const SOURCE = process.env["DUSKY_SOURCE"] ?? "Verdant Market";
 
 /**
@@ -130,7 +131,8 @@ function onConnection(ws: WebSocket, role: Role, url: URL): void {
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean);
-          await actor.attachConsole(ws, origins);
+          // The console knows which site it is holding; this process does not.
+          await actor.attachConsole(ws, origins, url.searchParams.get("source") ?? undefined);
         }
         return;
       }

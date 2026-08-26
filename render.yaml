@@ -36,6 +36,9 @@ services:
       # Render supplies PORT and the server reads it.
       - key: DUSKY_AUDIT_DIR
         value: /var/data/audit
+      # A fallback only. The console names the site it is actually holding
+      # when it connects, which is the only way one relay can serve more than
+      # one source without telling the wearer the wrong name.
       - key: DUSKY_SOURCE
         value: Verdant Market
       # Turn the planner on to enable spoken requests and send_task_to_display.

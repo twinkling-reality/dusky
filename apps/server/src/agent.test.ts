@@ -247,3 +247,58 @@ describe("what the glasses show before a browser pairs", () => {
     expect(frames.some((f) => f.t === "frame")).toBe(true);
   });
 });
+
+/**
+ * The wearer has to be told which site they are acting on, and the relay is
+ * the one surface that cannot find out for itself: the console is what has
+ * the partner site loaded.
+ *
+ * The label is cosmetic and grants nothing. What it must not do is lie by
+ * omission, which is what a server-global `DUSKY_SOURCE` did the moment a
+ * second source existed: the glasses read VERDANT MARKET while a restaurant's
+ * tools were on the menu.
+ */
+describe("the source label a wearer reads", () => {
+  it("comes from the console that is holding the site", async () => {
+    const built = actor();
+    await built.a.attachConsole(
+      built.consoleSock as unknown as Sock,
+      ["https://shop.test"],
+      "Amber & Oak",
+    );
+    built.a.attachDisplay(new FakeSocket() as unknown as Sock);
+    expect(built.a.current().source).toBe("Amber & Oak");
+  });
+
+  it("keeps the deployment's own default when a console names nothing", async () => {
+    const { a } = await paired();
+    expect(a.current().source).toBe("Verdant Market");
+  });
+
+  it("cannot put control characters or an unbounded string on a 600x600 panel", async () => {
+    const built = actor();
+    await built.a.attachConsole(
+      built.consoleSock as unknown as Sock,
+      ["https://shop.test"],
+      `Ev\u0000il\nShop ${"x".repeat(80)}`,
+    );
+    const shown = built.a.current().source;
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: asserting they are gone
+    expect(shown).not.toMatch(/[\u0000-\u001f]/);
+    expect(shown.length).toBeLessThanOrEqual(40);
+  });
+
+  it("is not what decides anything: the gate still reads the tool", async () => {
+    const built = actor();
+    await built.a.attachConsole(
+      built.consoleSock as unknown as Sock,
+      ["https://shop.test"],
+      "Totally Harmless Reader",
+    );
+    built.a.attachDisplay(new FakeSocket() as unknown as Sock);
+    const r = await ask(built.a, { op: "actions" });
+    if (!r.ok) throw new Error("unreachable");
+    const actions = r.value["actions"] as { name: string; needsApproval: boolean }[];
+    expect(actions.find((x) => x.name === "add_to_cart")?.needsApproval).toBe(true);
+  });
+});
