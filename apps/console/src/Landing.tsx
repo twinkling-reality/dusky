@@ -95,10 +95,18 @@ export function Landing() {
             and reads to a stranger as "supports nothing", so the claim is
             made by naming two unrelated sites on one code path instead.
           */}
-          <h1 className={styles.claim}>Turn web actions into augmented reality.</h1>
+          {/*
+            NOT "augmented reality". Meta Ray-Ban Display has no camera and
+            nothing it shows is world-locked or spatially anchored: it is a
+            fixed 600x600 additive panel driven by six keys. AGENTS.md and
+            README.md both say so, which made the claim one this repository
+            disproves two files away. That is the same failure as "Use
+            websites from your glasses", which these rules were written after.
+          */}
+          <h1 className={styles.claim}>The website decides what your glasses show.</h1>
           <p className={styles.lede}>
-            Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for
-            AR displays.
+            Dusky asks a site what it can do, then builds the screens for Meta Ray-Ban Display from
+            the answer. A shop and a restaurant run on the same code.
           </p>
 
           {/*
