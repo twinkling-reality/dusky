@@ -223,6 +223,23 @@ Worth listing separately: these were all live in a passing test suite.
   The general lesson is that a message can be true when it is written and
   become a lie when a new code path reaches it. The fix that matters is
   wording that cannot be false, not another guard.
+- **Two tabs on one pairing code rebuilt the wearer's screen four times a
+  second, forever.** One session holds one console, and attaching a second
+  closes the first. That rule was fine; the loser not being able to tell was
+  not. It saw an ordinary close, reconnected after 250ms, and evicted the
+  winner, which did the same back. Measured at 20 frame pushes in 5 idle
+  seconds. Reachable by one click, because the demo link carries the code, so a
+  reload into a duplicate tab is enough.
+
+  Two things had to be true for it to run away. The relay could not say WHY it
+  closed a socket, which a 4000-range close code fixes. And backoff reset the
+  moment a socket OPENED, so a connection that opened and died immediately
+  retried at the first delay forever and never escalated: the escalation
+  existed but could not be reached. A connection now has to last five seconds
+  before it counts as having worked.
+
+  Worth generalising: a retry ladder that resets on connect rather than on
+  success is not a retry ladder, it is a fixed delay wearing one.
 - **"Tap to speak" had nothing to tap.** The composer was only ever produced by
   the parameter-collection frame, so the planner's entry point was unreachable
   from the glasses and could only be driven by an agent.
