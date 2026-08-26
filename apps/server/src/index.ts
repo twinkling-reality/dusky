@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { type AuditStore, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "@dusky/audit";
 import type { AuditEntry, ConsoleToServer, DisplayToServer } from "@dusky/contracts";
+import { isSessionCode } from "@dusky/contracts";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -55,7 +56,7 @@ const app = new Hono();
 
 app.use("*", cors({ origin: (o) => o ?? "*", credentials: false }));
 
-app.get("/health", (c) => c.json({ ok: true, sessions: hub.list().length }));
+app.get("/health", (c) => c.json({ ok: true, sessions: hub.size() }));
 
 /**
  * Developer diagnostics. Deliberately separate from the wearer experience.
@@ -123,6 +124,19 @@ server.on("upgrade", (req, socket, head) => {
  */
 const HEARTBEAT_MS = 30_000;
 
+/**
+ * How often to forget sessions nothing is connected to.
+ *
+ * Frequent enough that a burst of invented codes is reclaimed rather than
+ * accumulated, rare enough to be free. The TTL itself lives on the Hub.
+ */
+const SWEEP_MS = 5 * 60_000;
+const sweeper = setInterval(() => {
+  const gone = hub.sweep();
+  if (gone > 0) console.log(`dusky: forgot ${gone} idle session${gone === 1 ? "" : "s"}`);
+}, SWEEP_MS);
+sweeper.unref?.();
+
 function onConnection(ws: WebSocket, role: Role, url: URL): void {
   let sessionId: string | null = null;
 
@@ -154,7 +168,21 @@ function onConnection(ws: WebSocket, role: Role, url: URL): void {
       // The first message must be a hello, which is what binds this socket to
       // a session. Anything before that is ignored rather than trusted.
       if (msg.t === "hello") {
-        sessionId = msg.sessionId.toUpperCase();
+        // One hello per socket. Re-sending it minted a fresh session actor
+        // every time, from a single connection, with nothing anywhere to slow
+        // that down.
+        if (sessionId !== null) return;
+
+        // A pairing code, or nothing. This used to accept any string of any
+        // length and create a session for it, which made the key space of a
+        // map that never emptied into "whatever a stranger types".
+        const claimed = msg.sessionId.trim().toUpperCase();
+        if (!isSessionCode(claimed)) {
+          ws.close(4400, "not a pairing code");
+          return;
+        }
+
+        sessionId = claimed;
         const actor = hub.get(sessionId, SOURCE);
         if (role === "display") {
           actor.attachDisplay(ws);
