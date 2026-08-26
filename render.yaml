@@ -15,7 +15,12 @@ services:
     healthCheckPath: /health
     # tsx is a runtime dependency of this service, not a dev tool, so a
     # production install keeps it. `--prod` skips everything else.
-    buildCommand: corepack enable && pnpm install --prod --frozen-lockfile
+    # NOT `corepack enable`. Render's builder already ships pnpm at
+    # /usr/bin/pnpm and mounts that path read-only, so corepack dies with
+    # EROFS trying to replace a binary that was already there. Verified by
+    # failing twice on 2026-08-26. Printing the version keeps the next
+    # lockfile-mismatch failure readable from the build log alone.
+    buildCommand: pnpm --version && pnpm install --prod --frozen-lockfile
     startCommand: pnpm --filter @dusky/app-server start
     envVars:
       # Render supplies PORT and the server reads it.
