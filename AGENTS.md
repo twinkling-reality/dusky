@@ -204,8 +204,26 @@ records a real failure and escalates.
 
 Not verified: no request in this repository has ever reached the live API,
 because tests here run without credentials. Model choice, tier defaults and the
-`effort` setting are reasoned, not measured. Treat their latency and accuracy
-as unmeasured until evals exist.
+`effort` setting are still reasoned rather than measured, and their latency and
+accuracy should be read that way.
+
+One of the four numbers is no longer a guess. `eval.fixtures.ts` and
+`eval.test.ts` measure shortlist recall over nineteen spoken requests against
+eleven tools from four domains, with no model and no credential, because
+ranking is deterministic. At the shipped size of six the right tool is on the
+list 13 times out of 19; at eight it is 14; with every slot free it is 19. That
+last figure used to be 17, and finding out why is what the eval was for: the
+shortlist returned ONLY the tools with a nonzero score, so three matches meant
+three cards even when six slots were free, and the right tool could be excluded
+at every size. Fixed in `shortlist`.
+
+Read the 13 carefully. It is not planner accuracy, because a model is what
+happens next, and it is not an argument for a bigger shortlist, because going
+to eight buys one request. It says the binding constraint is the RANKER: "find
+me some oat milk" puts `find_times` above `search_products`, on the strength of
+the word "find" being in one name and nothing matching in the other. That is
+the case the model tier exists for. It is also the number to beat before
+anybody spends effort on the shortlist size.
 
 ## Dusky as a provider
 

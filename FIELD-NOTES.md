@@ -240,6 +240,17 @@ Worth listing separately: these were all live in a passing test suite.
 
   Worth generalising: a retry ladder that resets on connect rather than on
   success is not a retry ladder, it is a fixed delay wearing one.
+- **A shortlist with six slots was sending three cards.** `shortlist` returned
+  only the tools scoring above zero whenever any tool did, so a request that
+  matched three tools produced a list of three even though the cap was six. The
+  right tool could therefore be excluded at EVERY size, which no amount of
+  raising the limit would have fixed and which reading the function did not
+  make obvious.
+
+  It took an eval to see it. Recall over the whole registry should be perfect
+  by definition, because every tool fits; it was 17 out of 19. That gap is the
+  entire finding, and it was invisible while the number was a guess rather than
+  a measurement.
 - **"Tap to speak" had nothing to tap.** The composer was only ever produced by
   the parameter-collection frame, so the planner's entry point was unreachable
   from the glasses and could only be driven by an agent.
