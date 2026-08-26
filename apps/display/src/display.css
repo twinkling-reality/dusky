@@ -1,0 +1,41 @@
+/**
+ * The Display runs on an additive waveguide: a black pixel emits nothing and
+ * is transparent against the room. Never theme this surface, never invert it,
+ * and never give the page a light background.
+ */
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  width: 600px;
+  height: 600px;
+  overflow: hidden;
+  background: var(--emit-ground);
+}
+body {
+  color: var(--emit-body);
+  font-family: var(--dusky-sans);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+}
+/* No cursor exists on the glasses, so nothing should imply one. */
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+/* An accessibility override has to outrank component styles, so !important is
+   correct here rather than a smell. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat component rules */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat component rules */
+    transition: none !important;
+  }
+}
