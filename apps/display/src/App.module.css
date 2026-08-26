@@ -28,12 +28,30 @@
   }
 }
 
+/*
+ * The one element that tells a wearer their panel may be stale.
+ *
+ * It used to sit at top/right 44/40, which is exactly where the frame's own
+ * status word sits, so the moment the link degraded "RECONNECTING" painted
+ * over "WORKING" in overlapping uppercase mono. Giving it a background is not
+ * a fix on this hardware: the ground colour emits nothing, so it occludes
+ * nothing. It has to be somewhere else.
+ *
+ * The panel reserves 44px of bottom padding that no frame ever draws into,
+ * which is the only space here that is free by construction.
+ *
+ * 17px, matching the header. It was 14px, under Meta's documented 16px floor,
+ * on the element whose whole job is to be readable when nothing else can be
+ * trusted.
+ */
 .link {
   position: absolute;
-  top: 44px;
+  left: 40px;
   right: 40px;
+  bottom: 12px;
+  text-align: right;
   font-family: var(--dusky-mono);
-  font-size: 14px;
+  font-size: 17px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--emit-warn);
