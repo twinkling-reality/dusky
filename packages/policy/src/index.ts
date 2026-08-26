@@ -80,6 +80,36 @@ function haystack(tool: ToolDescriptor): string {
   return `${tool.name} ${tool.title ?? ""} ${tool.description}`.toLowerCase();
 }
 
+/**
+ * The parameter names and descriptions a site declared.
+ *
+ * A tool can describe itself blandly, claim `readOnlyHint`, and put what it
+ * actually does in its schema: `apply_changes`, "Applies pending changes.",
+ * with a `delete_everything` boolean. Nothing looked there, so it classified
+ * as a read and ran with no human in front of it. A site is not obliged to
+ * name itself honestly, which is the whole reason the annotation is treated as
+ * a claim rather than a permission slip; the schema is the same kind of
+ * evidence and was being ignored.
+ *
+ * Read by hand rather than through `parameters()` in `packages/frames`,
+ * because this package must not grow a dependency. It needs the keys and their
+ * descriptions, nothing else.
+ */
+function paramText(tool: ToolDescriptor): string {
+  const props = tool.inputSchema?.["properties"];
+  if (typeof props !== "object" || props === null) return "";
+
+  const parts: string[] = [];
+  for (const [key, spec] of Object.entries(props as Record<string, unknown>)) {
+    parts.push(key);
+    if (typeof spec === "object" && spec !== null) {
+      const described = (spec as Record<string, unknown>)["description"];
+      if (typeof described === "string") parts.push(described);
+    }
+  }
+  return parts.join(" ").toLowerCase();
+}
+
 function matches(text: string, needles: readonly string[]): boolean {
   return needles.some((n) => text.includes(n));
 }
@@ -101,10 +131,22 @@ export function classifyDetailed(tool: ToolDescriptor): Classification {
   const text = haystack(tool);
   const claimsReadOnly = tool.annotations.readOnlyHint === true;
 
-  if (matches(text, HARD_DESTRUCTIVE)) {
+  // The schema joins the HARD checks only.
+  //
+  // A parameter is weaker evidence about what a TOOL does than the tool's own
+  // name. A hard verb names an action outright and is worth acting on wherever
+  // it appears; a soft verb names a DOMAIN and needs the tool's own naming
+  // behind it, or a search with a `remove_duplicates` flag would stop for a
+  // human. That asymmetry is the same one ranking already uses: name evidence
+  // outweighs prose.
+  //
+  // This can only ever raise ceremony, never lower it, so rule 4 holds.
+  const declared = `${text} ${paramText(tool)}`;
+
+  if (matches(declared, HARD_DESTRUCTIVE)) {
     return { consequence: "destructive", overrodeAnnotation: claimsReadOnly };
   }
-  if (matches(text, HARD_FINANCIAL)) {
+  if (matches(declared, HARD_FINANCIAL)) {
     return { consequence: "financial", overrodeAnnotation: claimsReadOnly };
   }
 
