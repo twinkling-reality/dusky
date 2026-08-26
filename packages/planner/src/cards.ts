@@ -33,6 +33,9 @@ import { classify } from "@dusky/policy";
 const MAX_DESCRIPTION = 240;
 const MAX_PARAM_DESCRIPTION = 96;
 const MAX_ENUM_VALUES = 8;
+/** Identifiers appear unquoted, so they are capped shorter than prose. */
+const MAX_NAME = 64;
+const MAX_ENUM_VALUE = 48;
 
 /**
  * Render site-authored text as a single-line, quoted value.
@@ -40,15 +43,30 @@ const MAX_ENUM_VALUES = 8;
  * Quotes are stripped from the text before wrapping, which is what stops a
  * description from closing its own delimiter and writing instructions after.
  */
-export function safeText(raw: string, max: number): string {
+/**
+ * Flatten site-supplied text to a single line that cannot be card structure.
+ *
+ * Used directly for the fields that appear UNQUOTED: the tool name, the
+ * parameter names, the enum values. Those were interpolated raw, and the name
+ * is the field a card leads with, so a newline in it started a new record as
+ * far as the model was concerned: a site could publish one tool and be read as
+ * two, the second one claiming whatever it liked about its own ceremony.
+ *
+ * Quoting them instead is not an option, because the format the model reads
+ * distinguishes identifiers from prose by exactly that.
+ */
+function flatten(raw: string, max: number): string {
   const flat = raw
     // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .replace(/"/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const clipped = flat.length > max ? `${flat.slice(0, max).trimEnd()}...` : flat;
-  return `"${clipped}"`;
+  return flat.length > max ? `${flat.slice(0, max).trimEnd()}...` : flat;
+}
+
+export function safeText(raw: string, max: number): string {
+  return `"${flatten(raw, max)}"`;
 }
 
 /** How much ceremony this tool costs the wearer, in the model's terms. */
@@ -58,12 +76,12 @@ function ceremony(tool: ToolDescriptor): string {
 }
 
 function renderParam(p: ParamSpec): string {
-  const bits = [`${p.name}: ${p.kind}`];
+  const bits = [`${flatten(p.name, MAX_NAME)}: ${p.kind}`];
   if (p.required) bits.push("required");
   if (p.kind === "unsupported") bits.push("cannot be collected on the display");
   const en = p.schema["enum"];
   if (Array.isArray(en) && en.length > 0) {
-    const shown = en.slice(0, MAX_ENUM_VALUES).map((v) => String(v));
+    const shown = en.slice(0, MAX_ENUM_VALUES).map((v) => flatten(String(v), MAX_ENUM_VALUE));
     bits.push(`one of ${shown.join(", ")}${en.length > shown.length ? ", ..." : ""}`);
   }
   const head = `  - ${bits.join(", ")}`;
@@ -77,7 +95,11 @@ function renderParam(p: ParamSpec): string {
  * rather than the site, so it is the only identity here that cannot be forged.
  */
 export function renderCard(tool: ToolDescriptor): string {
-  const lines = [`- tool: ${tool.name}`, `  from: ${tool.origin}`, `  ${ceremony(tool)}`];
+  const lines = [
+    `- tool: ${flatten(tool.name, MAX_NAME)}`,
+    `  from: ${tool.origin}`,
+    `  ${ceremony(tool)}`,
+  ];
   if (tool.title?.trim()) lines.push(`  titled ${safeText(tool.title, MAX_DESCRIPTION)}`);
   lines.push(`  says ${safeText(tool.description, MAX_DESCRIPTION)}`);
   const params = parameters(tool);
