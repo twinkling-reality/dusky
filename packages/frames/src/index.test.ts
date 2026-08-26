@@ -11,6 +11,7 @@ import {
   outcomeFromResult,
   parameters,
   paramFrame,
+  textFromResult,
   toolId,
 } from "./index.js";
 
@@ -468,5 +469,56 @@ describe("site text on a panel that cannot scroll", () => {
   it("still bounds an absurd identifier rather than trusting it", () => {
     const facts = factsFromResult(JSON.stringify({ ref: "A".repeat(400) }));
     expect((facts[0]?.value ?? "").length).toBeLessThanOrEqual(70);
+  });
+});
+
+describe("the result envelope the protocol itself defines", () => {
+  /**
+   * MCP results commonly arrive as `{content: [{type: "text", text: "..."}]}`.
+   * That envelope is the PROTOCOL's shape, not any site's vocabulary, so
+   * reading it is not the per-site branch rule 1 forbids: no site named those
+   * keys, the specification did, and every site that speaks it uses the same
+   * ones. The test market and the test restaurant do not use it at all, which
+   * is exactly why nothing here noticed.
+   *
+   * Left unread, a booking confirmation rendered as "Content / 1 item", which
+   * is worse than showing nothing: legible, confident and wrong, with the
+   * sentence the wearer needed thrown away to produce it.
+   */
+  it("reads the sentence out of a content envelope", () => {
+    const raw = JSON.stringify({
+      content: [{ type: "text", text: "Table booked for Friday 7pm, reference AB12." }],
+    });
+    expect(textFromResult(raw)).toContain("AB12");
+    // And nothing key-value, so the panel shows the sentence full width.
+    expect(factsFromResult(raw)).toEqual([]);
+  });
+
+  it("reads more than one block", () => {
+    const raw = JSON.stringify({
+      content: [
+        { type: "text", text: "Booked." },
+        { type: "text", text: "Reference AB12." },
+      ],
+    });
+    expect(textFromResult(raw)).toContain("AB12");
+  });
+
+  it("reads a plain sentence a site answered with", () => {
+    expect(textFromResult("Your table is held.")).toBe("Your table is held.");
+    expect(textFromResult(JSON.stringify({ message: "Your table is held." }))).toBe(
+      "Your table is held.",
+    );
+  });
+
+  it("has nothing to say about a shape it cannot read", () => {
+    expect(textFromResult(JSON.stringify({ a: { x: 1 }, b: { y: 2 } }))).toBeNull();
+  });
+
+  it("leaves a site's own structured result alone", () => {
+    const facts = factsFromResult(
+      JSON.stringify({ ok: true, reservation_id: "RSV-9", party_size: 4 }),
+    );
+    expect(facts.map((f) => f.label)).toEqual(["Reservation id", "Party size"]);
   });
 });

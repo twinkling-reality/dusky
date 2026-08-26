@@ -533,12 +533,68 @@ function factValue(key: string, value: unknown): string | null {
  * one glance; given a shape it cannot read, it produces nothing and the caller
  * falls back to the raw text rather than inventing structure.
  */
+/**
+ * A sentence the site meant a person to read, if there is one.
+ *
+ * Three shapes, in order. The result envelope the PROTOCOL defines,
+ * `{content: [{type: "text", text: "..."}]}`, which is not a per-site branch:
+ * no site chose those keys, the specification did, and every site speaking it
+ * uses the same ones. Then a top-level `message` or `text`. Then plain words,
+ * for a site that answered with prose rather than JSON.
+ *
+ * `null` means there is nothing here a person can read at a glance, which is
+ * a better thing to know than to paper over: the caller used to flatten the
+ * raw JSON instead, so a wearer got braces and quotes on a waveguide.
+ */
+export function textFromResult(raw: string): string | null {
+  const parsed = safeParse(raw);
+  const rec = asRecord(parsed);
+
+  if (!rec) {
+    // A JSON string is still a sentence.
+    if (typeof parsed === "string") return parsed.trim() === "" ? null : parsed.trim();
+    // `safeParse` answers `null` both for "not JSON" and for a literal null,
+    // and neither of those is a fact, so only unparseable text falls through
+    // to being read as prose.
+    if (parsed !== null) return null;
+    const flat = raw.replace(/\s+/g, " ").trim();
+    return flat === "" || flat === "null" ? null : flat;
+  }
+
+  const said = contentText(rec);
+  if (said.length > 0) return said.join(" ");
+
+  for (const key of ["message", "text", "summary"]) {
+    const v = rec[key];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return null;
+}
+
+/** The text blocks of a protocol content envelope, if this is one. */
+function contentText(rec: Record<string, unknown>): string[] {
+  const content = rec["content"];
+  if (!Array.isArray(content)) return [];
+  const out: string[] = [];
+  for (const item of content) {
+    if (typeof item !== "object" || item === null) continue;
+    const text = (item as Record<string, unknown>)["text"];
+    if (typeof text === "string" && text.trim() !== "") out.push(text.trim());
+  }
+  return out;
+}
+
 export function factsFromResult(raw: string, limit = 4): Fact[] {
   const rec = asRecord(safeParse(raw));
   if (!rec) return [];
 
   // A result that is a single wrapper around one object, `{"product": {...}}`,
   // is describing that object. Read through it rather than reporting nothing.
+  // A protocol content envelope carries a sentence, not fields. Counting its
+  // blocks produced "Content / 1 item" and threw the sentence away.
+  // `textFromResult` reads it; there is nothing key-value to add here.
+  if (contentText(rec).length > 0) return [];
+
   const entries = Object.entries(rec);
   const inner = entries.length === 1 && entries[0] ? asRecord(entries[0][1] as unknown) : null;
   const source = inner ?? rec;

@@ -33,6 +33,7 @@ import {
   parameters,
   paramFrame,
   resultFrame,
+  textFromResult,
   toolId,
   valueForParam,
   workingFrame,
@@ -663,11 +664,15 @@ export class Session {
           detail: { ok: said.ok, ...(abandoned ? { abandoned: true } : {}) },
         });
         if (abandoned) return this.frame;
+        // Facts are what the panel renders when it has them; the detail line
+        // is the fallback for when it does not. Computing both means the
+        // fallback only has to be honest about the case it is actually for.
+        const facts = factsFromResult(outcome.raw);
         this.show(
           resultFrame(this.o.source, `${label(p.tool)} ${said.ok ? "done" : "did not work"}`, {
             ok: said.ok,
-            detail: said.message ?? summarize(outcome.raw),
-            facts: factsFromResult(outcome.raw),
+            detail: said.message ?? (facts.length > 0 ? undefined : summarize(outcome.raw)),
+            facts,
           }),
         );
         this.pending = null;
@@ -794,7 +799,16 @@ function describeArgs(args: Record<string, unknown>): string {
  * truncated JSON. Structure now comes from `factsFromResult`, which knows no
  * site, and this only runs when even that finds nothing to show.
  */
+/**
+ * The line under a result, when there were no facts to show instead.
+ *
+ * This used to flatten whatever the site returned and clip it at 80, so a
+ * shape with no readable fields put braces and quotes on a waveguide. JSON is
+ * not an answer to somebody wearing glasses, and it is not actionable even if
+ * they can make it out.
+ */
 function summarize(raw: string): string {
-  const flat = raw.replace(/\s+/g, " ").trim();
-  return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat;
+  const said = textFromResult(raw);
+  if (said === null) return "The site answered, but not in anything readable here.";
+  return said.length > 80 ? `${said.slice(0, 77)}...` : said;
 }

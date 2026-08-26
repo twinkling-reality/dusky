@@ -97,7 +97,9 @@ describe("the confirmation gate", () => {
     expect(f.kind).toBe("result");
     if (f.kind !== "result") throw new Error("unreachable");
     // Reported from the site's own returned value, not from having called.
-    expect(f.detail).toContain("Organic oat milk");
+    // The facts are what the panel renders; the detail line is the fallback
+    // for a result with nothing key-value in it.
+    expect(f.facts?.map((x) => x.value).join(" ")).toContain("Organic oat milk");
   });
 
   it("cancels without invoking", async () => {
