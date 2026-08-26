@@ -1,4 +1,5 @@
-import type { ToolDescriptor } from "@dusky/contracts";
+import type { Choice, ToolDescriptor } from "@dusky/contracts";
+import { classify } from "@dusky/policy";
 import { describe, expect, it } from "vitest";
 import {
   candidatesFromResult,
@@ -383,6 +384,217 @@ describe("saying what you want", () => {
     expect(meta(1)).toBe("2/3");
     expect(meta(2)).toBe("3/3");
     expect(meta(3)).toBe("1/3");
+  });
+});
+
+/**
+ * The order the wearer's menu is in.
+ *
+ * `getTools` ordering is the browser's business, so a menu built by mapping
+ * over discovery is a menu that can come back different on a reload of the
+ * same shop. Every assertion here is about what a wearer can actually reach
+ * and in what order, which is why it pages through the frames rather than
+ * reaching for the comparator behind them: the comparator is an implementation
+ * detail and the sequence of rows is the product.
+ */
+describe("the order of the wearer's menu", () => {
+  const readOnly = { readOnlyHint: true, untrustedContentHint: false } as const;
+
+  /** Every tool row a wearer can page to, in the order they can page to it. */
+  const menuChoices = (tools: ToolDescriptor[], canSpeak = false): Choice[] => {
+    const out: Choice[] = [];
+    const seen = new Set<string>();
+    for (let page = 0; page < 64; page += 1) {
+      const f = idleFrame("Src", tools, page, canSpeak);
+      if (f.kind !== "idle") throw new Error("unreachable");
+      let wrapped = false;
+      for (const c of f.choices) {
+        if (c.id === "__more" || c.id === "__compose") continue;
+        // Pagination wraps, so a repeat is the end of the list.
+        if (seen.has(c.id)) {
+          wrapped = true;
+          break;
+        }
+        seen.add(c.id);
+        out.push(c);
+      }
+      if (wrapped || !f.choices.some((c) => c.id === "__more")) break;
+    }
+    return out;
+  };
+
+  const menuLabels = (tools: ToolDescriptor[], canSpeak = false): string[] =>
+    menuChoices(tools, canSpeak).map((c) => c.label);
+
+  /**
+   * Four sites nobody in this repository built, on purpose.
+   *
+   * A single first-party source teaches you that the code runs and cannot tell
+   * you which branches never execute, which is the lesson `apps/reservations`
+   * was added for. These reach all four consequence classes and not one of
+   * them is a shop.
+   *
+   * Declared here rather than imported from the corpus in `packages/planner`,
+   * because `@dusky/planner` depends on `@dusky/frames` and that edge does not
+   * run the other way. The corpus is used from the side that may import it, in
+   * `packages/planner/src/menu-order.test.ts`.
+   */
+  const ELSEWHERE: ToolDescriptor[] = [
+    tool({
+      origin: "https://bank.test",
+      name: "transfer_funds",
+      description: "Move money between two accounts.",
+    }),
+    tool({
+      origin: "https://bank.test",
+      name: "account_balance",
+      title: "Balance",
+      description: "What is in the account right now.",
+      annotations: readOnly,
+    }),
+    tool({
+      origin: "https://clinic.test",
+      name: "delete_record",
+      description: "Erase a patient record permanently.",
+    }),
+    tool({
+      origin: "https://clinic.test",
+      name: "list_appointments",
+      description: "Appointments already in the diary.",
+      annotations: readOnly,
+    }),
+    tool({
+      origin: "https://helpdesk.test",
+      name: "reply_to_ticket",
+      description: "Answer a support ticket.",
+    }),
+    tool({
+      origin: "https://library.test",
+      name: "search_catalogue",
+      title: "Search the catalogue",
+      description: "Look for a book by title or author.",
+      annotations: readOnly,
+    }),
+    tool({
+      origin: "https://library.test",
+      name: "renew_loan",
+      description: "Extend a loan by two weeks.",
+    }),
+  ];
+
+  const CEREMONY = { read: 0, write: 1, financial: 2, destructive: 3 } as const;
+  const toolFor = (id: string): ToolDescriptor => {
+    const hit = ELSEWHERE.find((t) => toolId(t) === id);
+    if (!hit) throw new Error(`no tool for ${id}`);
+    return hit;
+  };
+
+  it("does not change when the browser hands the same tools back in another order", () => {
+    const forwards = menuChoices(ELSEWHERE).map((c) => c.id);
+    expect(forwards, "every operable tool stays reachable").toHaveLength(ELSEWHERE.length);
+
+    const rotate = (n: number) => [...ELSEWHERE.slice(n), ...ELSEWHERE.slice(0, n)];
+    for (let n = 1; n < ELSEWHERE.length; n += 1) {
+      expect(
+        menuChoices(rotate(n)).map((c) => c.id),
+        `rotated by ${n}`,
+      ).toEqual(forwards);
+    }
+    expect(
+      menuChoices([...ELSEWHERE].reverse()).map((c) => c.id),
+      "reversed",
+    ).toEqual(forwards);
+  });
+
+  /**
+   * `useDpad` focuses choice zero on every new frame, so the first row is one
+   * Enter away from whatever happens to be sitting there. What sits there used
+   * to be whichever tool the browser listed first.
+   */
+  it("puts a read under the wearer's thumb, whatever discovery returned first", () => {
+    for (const led of ELSEWHERE) {
+      const f = idleFrame("Src", [led, ...ELSEWHERE.filter((t) => t !== led)], 0, true);
+      if (f.kind !== "idle") throw new Error("unreachable");
+      const top = toolFor(f.choices[0]?.id ?? "");
+      expect(classify(top), `discovery led with ${led.name}`).toBe("read");
+    }
+  });
+
+  it("never offers a consequential row above a read", () => {
+    const ranks = menuChoices(ELSEWHERE).map((c) => CEREMONY[classify(toolFor(c.id))]);
+    expect(
+      new Set(ranks).size,
+      "the fixtures must reach all four classes or this asserts nothing",
+    ).toBe(4);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+  });
+
+  it("orders by what a press costs before it orders by the alphabet", () => {
+    // The case alphabetical gets backwards: sorted by name the consequence
+    // arrives above the question. This bookshop does not exist either.
+    const shop = [
+      tool({
+        origin: "https://bookshop.test",
+        name: "add_to_basket",
+        description: "Put a book in the basket.",
+      }),
+      tool({
+        origin: "https://bookshop.test",
+        name: "search_books",
+        description: "Find a book by title or author.",
+        annotations: readOnly,
+      }),
+    ];
+    expect(menuLabels(shop)).toEqual(["Search books", "Add to basket"]);
+  });
+
+  /**
+   * A site writes its own name and title and therefore owns its own tiebreak.
+   * It does not own its bucket, so the most a well-chosen title can buy is a
+   * better slot among things that cost the same.
+   */
+  it("cannot be given a better slot by the title a site chose", () => {
+    const vault = [
+      tool({
+        origin: "https://vault.test",
+        name: "delete_everything",
+        title: "Aaa",
+        description: "Erase the vault.",
+      }),
+      tool({
+        origin: "https://vault.test",
+        name: "status",
+        title: "Zzz",
+        description: "What is in the vault.",
+        annotations: readOnly,
+      }),
+    ];
+    expect(menuLabels(vault)).toEqual(["Zzz", "Aaa"]);
+  });
+
+  /**
+   * Colliding rows are labelled with their host so a wearer can tell them
+   * apart. That only helps if both are on the same screen.
+   */
+  it("keeps two sources offering the same name next to each other", () => {
+    const rival = (origin: string) =>
+      tool({
+        origin,
+        name: "checkout",
+        title: "Checkout",
+        description: "Pay for what is in the basket.",
+      });
+    const rows = menuLabels([
+      rival("https://a.test"),
+      tool({
+        origin: "https://c.test",
+        name: "billing",
+        title: "Billing",
+        description: "Charge the card on file.",
+      }),
+      rival("https://b.test"),
+    ]);
+    expect(rows).toEqual(["Billing", "Checkout (a.test)", "Checkout (b.test)"]);
   });
 });
 

@@ -13,6 +13,7 @@
  */
 
 import type { Choice, DisplayFrame, Fact, JsonSchema, ToolDescriptor } from "@dusky/contracts";
+import { type Consequence, classify } from "@dusky/policy";
 
 /**
  * 600x600 cannot scroll, and Meta requires 88px interactive targets. With a
@@ -227,6 +228,100 @@ function paginate(
 /* --------------------------------------------------------------- builders */
 
 /**
+ * The order the wearer's menu is in, which is a decision and not a sort call.
+ *
+ * The rows used to come out in whatever order `getTools` returned. AGENTS.md
+ * says that ordering is the browser's business and never to depend on it, and
+ * this menu depended on it completely: the same shop could produce a different
+ * menu on a reload, so there was nothing for a wearer to learn. At four tools
+ * that is invisible. At twenty it is ten screens, because pagination spends a
+ * slot on "More" and the composer spends another, and `useDpad` focuses row
+ * zero of every frame, so whichever tool happened to land first was one Enter
+ * away from being started.
+ *
+ * An idle menu has no intent behind it, so there is nothing to rank against
+ * and anything calling itself relevance here is guessing. What IS available is
+ * what a press would COST, which `packages/policy` already decides from the
+ * tool's own text and schema, deterministically, with no model and no
+ * knowledge of any site. Ordering by that is the whole change. This file adds
+ * no lexicon of its own and learns nothing new about language, because the
+ * classification it sorts by already exists and is already tested.
+ *
+ * Reads first, then writes, then money, then destruction. Four things follow:
+ *
+ *  - Row zero, the one under the wearer's thumb, is a read whenever the source
+ *    offers one. Nothing that spends or deletes is ever the default press.
+ *  - The menu TEACHES the gate. Rows near the top run when you pick them; rows
+ *    near the bottom stop and ask. On a panel with no cursor, no hover and no
+ *    room for a chip on every line, order is the only channel that fact has,
+ *    and because it is the same function `Session` consults, what the order
+ *    implies is true rather than decorative.
+ *  - It matches the order a person works in. You look before you act, which is
+ *    exactly the sequence alphabetical inverts: sorted by name the consequence
+ *    arrives above the question that should have preceded it.
+ *  - Presses to reach a tool rise with what the tool costs. That friction is
+ *    proportional to what is at stake rather than arbitrary, which is the only
+ *    kind worth having, and the composer sits on every page for a wearer who
+ *    already knows what they want.
+ *
+ * Ties break on the label, folded with `toLowerCase` and compared by code unit
+ * rather than by locale, because a menu that depends on where the glasses
+ * think they are is not deterministic either. Alphabetical is a poor primary
+ * key and a good secondary one: inside a bucket it is how a wearer predicts
+ * which page a name is on, which is the entire problem at twenty tools.
+ * Remaining ties break on `toolId`, which is unique by construction, so this
+ * is a total order and a stable sort never has to fall back on the browser's.
+ *
+ * A site writes its own name and title and therefore owns its own tiebreak. It
+ * does not own its bucket, so the most a well-chosen title can buy is a better
+ * slot among things that cost the same. Calling a destructive tool "Aaa" moves
+ * it nowhere.
+ *
+ * Three alternatives were rejected, and the reasons are the argument:
+ *
+ *  - Alphabetical alone. Deterministic, and says nothing. It would have fixed
+ *    the reload and left the shop's `add_to_basket` above its `search_books`.
+ *  - Zero-argument tools first. One press to something useful, but "cheap to
+ *    invoke" is a proxy for "close at hand", never for "wanted", and it buries
+ *    every tool that does real work behind every tool that does very little.
+ *  - Ranking against the last intent. The idle menu after a finished task is
+ *    the common case and by then the intent is spent. It also costs the exact
+ *    property this is buying: a menu that depends on history is one that
+ *    differs between two wearers on the same site, and between Tuesday and
+ *    Wednesday for one of them.
+ *
+ * This is not relevance ranking and must not grow into one. It is a total
+ * order over a classification that was already there.
+ */
+const CEREMONY: Record<Consequence, number> = {
+  read: 0,
+  write: 1,
+  financial: 2,
+  destructive: 3,
+};
+
+/** Locale-independent, so the same tools order the same on any runtime. */
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function menuOrder(tools: readonly ToolDescriptor[]): ToolDescriptor[] {
+  // Classify once each rather than once per comparison: `classify` normalizes
+  // several strings, and this runs on every frame the menu is pushed.
+  return tools
+    .map((tool) => ({ tool, cost: CEREMONY[classify(tool)], name: label(tool).toLowerCase() }))
+    .sort(
+      (a, b) =>
+        a.cost - b.cost ||
+        compare(a.name, b.name) ||
+        // Two rows called the same thing land next to each other, which is
+        // what makes the host suffix `menuLabel` adds worth reading.
+        compare(toolId(a.tool), toolId(b.tool)),
+    )
+    .map((entry) => entry.tool);
+}
+
+/**
  * The menu: everything this source can currently do. Fully tool-derived.
  *
  * `canSpeak` adds the affordance for saying what you want rather than picking
@@ -249,7 +344,7 @@ export function idleFrame(
    */
   note?: string,
 ): DisplayFrame {
-  const operable = tools.filter(isOperable);
+  const operable = menuOrder(tools.filter(isOperable));
   const all: Choice[] = operable.map((t, i) => ({
     id: toolId(t),
     label: menuLabel(t, operable),
