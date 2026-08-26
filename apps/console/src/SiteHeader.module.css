@@ -1,12 +1,62 @@
+/**
+ * A capsule floating on the drawn margin, not a strip across the top of it.
+ *
+ * Opaque in the page's own surface rather than a lighter one: there is a single
+ * background colour in this palette, and the bar reads as raised because it
+ * INTERRUPTS the top rule, not because it is a different grey. Its height and
+ * top margin are what --dusky-rule-top is set against, so the rule crosses at
+ * the capsule's middle. Change one and the other stops lining up.
+ */
 .bar {
+  /*
+   * Sticky, and it stays a capsule rather than becoming a strip: the whole
+   * point of the shape is that it is a thing sitting ON the page, and a bar
+   * that goes full width the moment you scroll has admitted it was a strip all
+   * along.
+   */
+  position: sticky;
+  top: var(--dusky-s3);
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--dusky-s5);
-  padding: var(--dusky-s4) var(--dusky-s5);
-  max-width: 84rem;
-  margin: 0 auto;
+  height: 3.5rem;
+  padding: 0 var(--dusky-s5);
+  max-width: var(--dusky-page);
+  margin-inline: auto;
   width: 100%;
+  background: var(--dusky-surface);
+  border: 1px solid var(--dusky-hair-soft);
+  border-radius: 999px;
+}
+
+/*
+ * Lifted off the page as soon as the page moves under it, and the lift is tied
+ * to the scroll position rather than to a class a listener adds: no JavaScript,
+ * no layout read on every frame, and it interpolates instead of snapping. The
+ * @supports is the whole fallback. Without scroll-driven animations the bar is
+ * simply always at rest, which is what it looks like now.
+ */
+@supports (animation-timeline: scroll()) {
+  .bar {
+    animation: bar-lift linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 5rem;
+  }
+
+  @keyframes bar-lift {
+    to {
+      border-color: var(--dusky-hair);
+      box-shadow: 0 8px 26px rgb(20 22 19 / 9%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bar {
+      animation: none;
+    }
+  }
 }
 
 /* The name of the product, at the size a name gets. Not an eyebrow. */

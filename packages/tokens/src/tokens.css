@@ -13,12 +13,20 @@
      are drawn to match rather than inverted underneath us. */
   color-scheme: light;
 
-  /* Console, light. A warm paper grey rather than a white: this surface is
-     read next to a black waveguide, and a cold white next to emitted light
-     makes the panel look grey rather than lit. */
-  --dusky-ground: #edece7;
-  --dusky-raised: #f7f6f2;
-  --dusky-sunken: #e4e2db;
+  /*
+   * Console, light. ONE surface colour, not three.
+   *
+   * A warm paper grey rather than a white: this surface is read next to a
+   * black waveguide, and a cold white next to emitted light makes the panel
+   * look grey rather than lit.
+   *
+   * There used to be a ground, a raised and a sunken. Nothing on the console
+   * is actually raised or sunken: it is a sheet with rules drawn on it, and
+   * three greys meant a cell's depth depended on which stylesheet reached it
+   * first. Depth now comes from the hairline alone, which is one decision
+   * instead of a stack of them.
+   */
+  --dusky-surface: #f2f1ec;
   --dusky-hair: #cecabf;
   --dusky-hair-soft: #dedad1;
   --dusky-ink: #2f312d;
@@ -67,4 +75,54 @@
   --dusky-s6: 2rem;
   --dusky-s7: 3rem;
   --dusky-radius: 3px;
+
+  /* One measure for every page on the console, so the persistent bar lines up
+     with whatever is under it instead of being wider on one route than the
+     next.
+     
+     90rem, not 72. At 72 a 1440 laptop spent 150px of each margin on nothing
+     and the hero's left column was narrow enough to wrap a two-clause subtitle
+     early, which read as the page being cramped rather than as the line being
+     long. The drawn margin is what holds the page off the edge now; the measure
+     does not have to do it as well. */
+  --dusky-page: 90rem;
+
+  /*
+   * The drawn margin.
+   *
+   * Two vertical rules and one horizontal rule, sitting OUTSIDE the reading
+   * measure rather than on it. A frame drawn at the same width as the text is
+   * not a margin, it is a box, and every line of prose then starts hard against
+   * a hairline. The gap between --dusky-frame-inset and --dusky-page is the
+   * margin itself.
+   */
+  --dusky-frame-inset: clamp(1rem, 3vw, 3.5rem);
+  /* The height the top rule crosses at, which is the vertical middle of the
+     nav capsule. The capsule is opaque, so the rule breaks behind it, and that
+     break is the only reason the bar reads as floating on the drawing rather
+     than as another line of it. */
+  --dusky-rule-top: 2.5rem;
+
+  /*
+   * The stage: a field of light under the product.
+   *
+   * These are strengths rather than colours. Every stop in the mesh is a
+   * color-mix of a token already declared above at one of these two, so the
+   * page gains depth without gaining a palette. --dusky-stop is deliberately
+   * not among them: red on this page means a requirement is unmet, and a hue
+   * that carries a verdict cannot also be decoration.
+   */
+  --dusky-wash: 72%;
+  --dusky-wash-soft: 46%;
+  /* Fine noise over the wash. A blurred field of colour on its own bands and
+     reads as a cheap gradient; grain breaks the banding and gives the surface
+     something to catch. */
+  --dusky-grain: 0.18;
+
+  /* The sheet's corner is 3px because it is a ruled cell. The stage is a
+     picture on a field of light and takes a picture's corner. */
+  --dusky-radius-lg: 22px;
+
+  --dusky-motion: 180ms;
+  --dusky-ease: cubic-bezier(0.2, 0, 0, 1);
 }
