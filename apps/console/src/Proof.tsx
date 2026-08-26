@@ -95,9 +95,9 @@ export function Proof() {
           </p>
         </article>
 
-        <div className={styles.wide}>
+        <figure className={styles.wide}>
           <Sandbox />
-        </div>
+        </figure>
       </main>
     </>
   );

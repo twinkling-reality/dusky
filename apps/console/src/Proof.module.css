@@ -66,7 +66,7 @@
  */
 .wide {
   width: min(58rem, 100%);
-  margin-inline: auto;
+  margin: 2.2em auto 0;
 }
 
 /* Named for anything that cannot see the page, and not taking a line from
