@@ -60,6 +60,66 @@ const HARD_FINANCIAL = [
 const SOFT_FINANCIAL = ["cart", "basket", "order", "booking", "reserve", "billing", "tip"];
 const SOFT_DESTRUCTIVE = ["remove", "drop", "clear", "discard", "archive"];
 
+/**
+ * Verbs that name a change, checked against the FIRST word of a tool's name.
+ *
+ * These exist to catch a claim that contradicts itself. `readOnlyHint` is
+ * honoured before the soft lexicons are ever consulted, so with the hint
+ * present those lists protect nothing: `place_order` claiming to change
+ * nothing classified as a read, ran with no confirmation, and qualified as a
+ * resolver, which is the one path that runs with nobody watching.
+ *
+ * Letting the soft lists override the hint is the wrong fix, and the comment
+ * above says why: `cart` is in `add_to_cart` and `review_cart` alike. Those
+ * lists mix two kinds of word. `cart`, `basket` and `booking` name a SUBJECT
+ * and appear in reads and writes equally; these name a MUTATION.
+ *
+ * Matched against the leading word only, and as a whole word, because an
+ * identifier is conventionally verb-first. That is what keeps a bookshop's
+ * `search_books` a read while `book_table` is not, and `get_address` a read
+ * while `add_item` is not. Substring matching over the whole card fails both.
+ */
+const MUTATION_VERBS = new Set([
+  "add",
+  "apply",
+  "archive",
+  "book",
+  "broadcast",
+  "cancel",
+  "clear",
+  "create",
+  "discard",
+  "drop",
+  "empty",
+  "invite",
+  "move",
+  "place",
+  "publish",
+  "remove",
+  "reserve",
+  "send",
+  "set",
+  "submit",
+  "update",
+]);
+
+/**
+ * Whether the first word of a name is a verb that names a change.
+ *
+ * Splits on separators and on camelCase, so `placeOrder` and `place_order`
+ * read the same. Plurals and past tense count; `-ing` deliberately does not,
+ * because that is how these verbs become nouns and `review_booking` is a read.
+ */
+function namesAMutation(name: string): boolean {
+  const first = fold(name.replace(/([a-z])([A-Z])/g, "$1 $2"))
+    .split(/[^a-z]+/)
+    .filter(Boolean)[0];
+  if (!first) return false;
+  if (MUTATION_VERBS.has(first)) return true;
+  const stem = first.replace(/(es|ed|s)$/, "");
+  return stem !== first && MUTATION_VERBS.has(stem);
+}
+
 /** Sending or publishing on the user's behalf is consequential even if free. */
 const OUTWARD = [
   "send",
@@ -218,7 +278,13 @@ export function classifyDetailed(tool: ToolDescriptor): Classification {
   // A claim made in text that is trying to look like other text is not a claim
   // worth honouring.
   const spelled = `${tool.name} ${tool.title ?? ""} ${tool.description}`;
-  const claimsReadOnly = tool.annotations.readOnlyHint === true && !mixesLatinAlikeScripts(spelled);
+  const claimsReadOnly =
+    tool.annotations.readOnlyHint === true &&
+    !mixesLatinAlikeScripts(spelled) &&
+    // A tool that claims to change nothing while its own name says otherwise
+    // is contradicting itself, and a self-contradictory claim is not one to
+    // honour. This only ever raises ceremony.
+    !namesAMutation(tool.name);
 
   // The schema joins the HARD checks only.
   //

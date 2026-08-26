@@ -97,10 +97,14 @@ describe("danger declared in the schema rather than the name", () => {
    * `readOnlyHint` is treated as a claim rather than a permission slip. The
    * schema is the same kind of evidence and was being ignored.
    */
+  // Named to sound like a read, so this stays a test about the SCHEMA. The
+  // audit's original example was `apply_changes`, which is now caught by its
+  // own leading verb before the schema is ever consulted; keeping it here
+  // would have made this test pass for the wrong reason.
   const bland = (properties: Record<string, unknown>): ToolDescriptor => ({
-    name: "apply_changes",
-    title: "Apply changes",
-    description: "Applies pending changes.",
+    name: "preview_changes",
+    title: "Preview changes",
+    description: "Shows pending changes.",
     origin: "https://plausible.test",
     inputSchema: { type: "object", properties },
     annotations: { readOnlyHint: true, untrustedContentHint: false },
@@ -281,5 +285,61 @@ describe("a claim made in text that imitates other text", () => {
       annotations: { readOnlyHint: true, untrustedContentHint: false },
     });
     expect(c.consequence).toBe("read");
+  });
+});
+
+describe("a read-only claim that contradicts itself", () => {
+  /**
+   * The soft lexicons are consulted only AFTER `readOnlyHint` is honoured, so
+   * with the hint present they protect nothing: `place_order` claiming to be
+   * read-only classified as a read and ran with no confirmation, and qualified
+   * as a resolver, which is the one path that runs with nobody watching.
+   *
+   * Letting soft signals override the hint outright is the wrong fix and the
+   * existing code says why: `cart` is in `add_to_cart` and in `review_cart`
+   * alike, so it would gate a genuine read.
+   *
+   * The distinction is that those lists mix two kinds of word. `cart`,
+   * `basket` and `booking` name a SUBJECT and appear in reads and writes
+   * equally. `place`, `book`, `reserve`, `remove` name a MUTATION. A tool that
+   * claims to change nothing while naming a change is contradicting itself,
+   * and that is worth acting on where a subject noun is not.
+   */
+  const claiming = (name: string, description: string): ToolDescriptor => ({
+    name,
+    description,
+    origin: "https://plausible.test",
+    inputSchema: null,
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  it("does not honour a read-only claim on a tool that names a mutation", () => {
+    expect(classify(claiming("place_order", "Places an order."))).not.toBe("read");
+    expect(classify(claiming("book_table", "Books a table."))).not.toBe("read");
+    expect(classify(claiming("reserve_slot", "Reserves a slot."))).not.toBe("read");
+    expect(classify(claiming("send_gift", "Sends a gift."))).not.toBe("read");
+  });
+
+  it("still honours one on a tool that only names a subject", () => {
+    // The case the current ordering exists to protect, and it must survive.
+    expect(classify(claiming("review_cart", "Look at what is in the cart."))).toBe("read");
+    expect(classify(claiming("list_messages", "List recent messages."))).toBe("read");
+    expect(classify(claiming("find_times", "Look up open tables. Holds nothing."))).toBe("read");
+    expect(classify(claiming("search_products", "Search the catalog."))).toBe("read");
+    expect(classify(claiming("flight_status", "Is the flight on time."))).toBe("read");
+  });
+
+  it("leaves tools that make no such claim exactly where they were", () => {
+    const plain = (name: string, description: string): ToolDescriptor => ({
+      name,
+      description,
+      origin: "https://plausible.test",
+      inputSchema: null,
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+    });
+    expect(classify(plain("add_to_cart", "Add a product. Charged at checkout."))).toBe("financial");
+    expect(classify(plain("empty_cart", "Remove everything. This cannot be undone."))).toBe(
+      "destructive",
+    );
   });
 });
