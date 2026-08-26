@@ -27,44 +27,52 @@ async function focusChoice(page: Page, label: RegExp | string) {
   throw new Error(`never focused a choice matching ${String(label)}`);
 }
 
-/** Pair a console holding Amber & Oak rather than the market. */
+/**
+ * Pair a console holding Amber & Oak rather than the market.
+ *
+ * `mode=glasses` because these tests open their own Display page, and a
+ * session takes exactly one Display.
+ */
 async function pair(page: Page, code: string) {
-  await page.goto(`http://localhost:7803/?session=${code}&source=reservations`);
-  await page.getByLabel("Pairing code from your glasses").fill(code);
-  await page.getByRole("button", { name: "Pair" }).click();
+  await page.goto(`http://localhost:7803/demo?session=${code}&source=reservations&mode=glasses`);
 }
 
 test("the console discovers a second, unrelated site cross-origin", async ({ page }) => {
-  await pair(page, "RES001");
+  await pair(page, "RESVAA");
 
   // Three tools, and only because Amber & Oak named this origin in exposedTo.
-  await expect(page.getByText("Available actions")).toBeVisible();
-  await expect(page.locator("li", { hasText: "http://localhost:7804" })).toHaveCount(3);
+  const actions = page.getByTestId("actions");
+  await expect(actions.locator("li")).toHaveCount(3);
+  // A different origin from the market's, reached by the same bridge.
+  await expect(page.getByText("http://localhost:7804")).toBeVisible();
 
   // The console shows what the site actually registered. One tool supplied a
   // title, the other two did not and are listed under their raw names. A tool
   // with no title used to render a blank row here, because Chrome returns an
   // empty string rather than omitting the field.
-  await expect(page.getByText("Find a table")).toBeVisible();
-  await expect(page.getByText("book_table")).toBeVisible();
-  await expect(page.getByText("change_reservation")).toBeVisible();
+  await expect(page.getByTestId("actions").getByText("Find a table")).toBeVisible();
+  await expect(page.getByTestId("actions").getByText("book_table")).toBeVisible();
+  await expect(page.getByTestId("actions").getByText("change_reservation")).toBeVisible();
 });
 
 test("policy classifies a site it has never seen, from the schema alone", async ({ page }) => {
-  await pair(page, "RES002");
+  await pair(page, "RESVAB");
 
   // readOnlyHint honored: looking up tables changes nothing.
-  const find = page.locator("li", { hasText: "Find a table" }).first();
+  const find = page.getByTestId("actions").locator("li", { hasText: "Find a table" }).first();
   await expect(find.locator("text=read")).toBeVisible();
 
   // Not read-only, and "booking" is a domain word the policy already knew.
   // No rule was added for this site.
-  const book = page.locator("li", { hasText: "book_table" }).first();
+  const book = page.getByTestId("actions").locator("li", { hasText: "book_table" }).first();
   await expect(book.locator("text=gated")).toBeVisible();
 
   // Default deny: nothing in change_reservation matches any lexicon, so it is
   // treated as a state change rather than waved through.
-  const change = page.locator("li", { hasText: "change_reservation" }).first();
+  const change = page
+    .getByTestId("actions")
+    .locator("li", { hasText: "change_reservation" })
+    .first();
   await expect(change.locator("text=gated")).toBeVisible();
 });
 
@@ -72,10 +80,10 @@ test("an enum in the schema becomes buttons, with no code in between", async ({ 
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RES003");
+  await pair(consolePage, "RESVAC");
   await expect(consolePage.getByText("Find a table")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RES003");
+  await displayPage.goto("http://localhost:7802/?session=RESVAC");
 
   // The menu is three tools deep, and the words come from two different
   // places: the site supplied a title for one, and `label()` derived the
@@ -117,10 +125,10 @@ test("a booking runs, stops for a human, and reports the site's own words", asyn
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RES004");
+  await pair(consolePage, "RESVAD");
   await expect(consolePage.getByText("book_table")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RES004");
+  await displayPage.goto("http://localhost:7802/?session=RESVAD");
   await expect(displayPage.getByRole("button", { name: /Book table/ })).toBeVisible();
 
   await focusChoice(displayPage, /Book table/);
@@ -179,10 +187,10 @@ test("a returned error is reported as a failure, not as a success", async ({ bro
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RES005");
+  await pair(consolePage, "RESVAE");
   await expect(consolePage.getByText("change_reservation")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RES005");
+  await displayPage.goto("http://localhost:7802/?session=RESVAE");
   await focusChoice(displayPage, /Change reservation/);
   await displayPage.keyboard.press("Enter");
 

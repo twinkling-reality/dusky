@@ -21,6 +21,15 @@ interface Props {
   onBack: () => void;
   onText?: (value: string) => void;
   /**
+   * The heading level for the frame's title.
+   *
+   * `1` is right on the glasses and in the Display tab, where the panel is
+   * the whole document. Embedded in an ordinary page it is not: a second
+   * `h1` competes with the page's own, and anyone navigating by headings
+   * lands in the middle of a widget.
+   */
+  headingLevel?: 1 | 2;
+  /**
    * Whether this panel owns the arrow keys.
    *
    * True on the glasses and in the Display tab, where the panel IS the page.
@@ -35,8 +44,17 @@ function choicesOf(frame: DisplayFrame): Choice[] {
   return "choices" in frame ? frame.choices : [];
 }
 
-export function FrameView({ frame, frameKey, onChoose, onBack, onText, keyboard = true }: Props) {
+export function FrameView({
+  frame,
+  frameKey,
+  onChoose,
+  onBack,
+  onText,
+  keyboard = true,
+  headingLevel = 1,
+}: Props) {
   const choices = choicesOf(frame);
+  const Title = headingLevel === 1 ? "h1" : "h2";
 
   const { index, register } = useDpad({
     count: choices.length,
@@ -58,19 +76,19 @@ export function FrameView({ frame, frameKey, onChoose, onBack, onText, keyboard 
 
       <div className={styles.body}>
         {frame.kind === "working" ? (
-          <h1 className={styles.title}>
+          <Title className={styles.title}>
             <span className={styles.pulse} aria-hidden="true" />
             {frame.title}
-          </h1>
+          </Title>
         ) : frame.kind === "result" ? (
-          <h1 className={styles.title}>
+          <Title className={styles.title}>
             <span className={frame.ok ? styles.ok : styles.bad} aria-hidden="true">
               {frame.ok ? "✓" : "✗"}
             </span>{" "}
             {frame.title}
-          </h1>
+          </Title>
         ) : (
-          <h1 className={styles.title}>{frame.title}</h1>
+          <Title className={styles.title}>{frame.title}</Title>
         )}
 
         {frame.kind === "confirm" && (

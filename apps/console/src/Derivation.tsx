@@ -268,6 +268,7 @@ export function Derivation() {
                   frame={frame}
                   frameKey={frameKey}
                   keyboard={false}
+                  headingLevel={2}
                   onChoose={choose}
                   onBack={back}
                   onText={text}

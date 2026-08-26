@@ -1,0 +1,132 @@
+.page {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: var(--dusky-s6) var(--dusky-s5) var(--dusky-s7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s6);
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s4);
+  max-width: 72ch;
+}
+
+.wordmark {
+  font-family: var(--dusky-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+}
+
+.claim {
+  margin: 0;
+  font-weight: 200;
+  font-size: clamp(1.9rem, 4.2vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--dusky-ink-strong);
+  text-wrap: balance;
+}
+
+.lede {
+  margin: 0;
+  font-size: 1.02rem;
+  color: var(--dusky-ink-dim);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dusky-s3);
+  align-items: center;
+}
+
+.primary {
+  display: inline-block;
+  padding: 0.7em 1.4em;
+  border: 1px solid var(--dusky-accent);
+  border-radius: var(--dusky-radius);
+  background: var(--dusky-accent);
+  color: var(--dusky-ground);
+  font-size: 0.98rem;
+  text-decoration: none;
+}
+.primary:hover {
+  filter: brightness(1.08);
+}
+
+.secondary {
+  display: inline-block;
+  padding: 0.7em 1.4em;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  color: var(--dusky-ink);
+  text-decoration: none;
+}
+.secondary:hover {
+  border-color: var(--dusky-accent-soft);
+}
+
+/* Stated beside the pitch, not discovered when something breaks. */
+.requires {
+  margin: 0;
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border-left: 2px solid var(--dusky-accent-soft);
+  font-size: 0.9rem;
+  color: var(--dusky-ink-dim);
+}
+.requires code {
+  font-family: var(--dusky-mono);
+  font-size: 0.86em;
+  color: var(--dusky-accent);
+  word-break: break-all;
+}
+
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+  max-width: 72ch;
+}
+.prose p {
+  margin: 0;
+  color: var(--dusky-ink-dim);
+}
+.prose code {
+  font-family: var(--dusky-mono);
+  font-size: 0.86em;
+  color: var(--dusky-accent);
+}
+
+.h2 {
+  margin: var(--dusky-s4) 0 0;
+  font-weight: 300;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: var(--dusky-ink-strong);
+}
+
+.claims {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s2);
+  color: var(--dusky-ink-dim);
+}
+.claims strong {
+  color: var(--dusky-ink);
+  font-weight: 400;
+}
+
+.foot {
+  display: flex;
+  gap: var(--dusky-s4);
+  padding-top: var(--dusky-s4);
+  border-top: 1px solid var(--dusky-hair);
+  font-size: 0.9rem;
+}

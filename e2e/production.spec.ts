@@ -18,8 +18,18 @@ const CONSOLE = "https://dusky-console.vercel.app";
 const MARKET = "https://dusky-market.vercel.app";
 const RELAY = "https://dusky-relay.onrender.com";
 
-/** A code nobody else is using, so a rerun cannot collide with a live session. */
-const CODE = `PRD${Date.now().toString(36).slice(-3).toUpperCase()}`;
+/**
+ * A code nobody else is using, so a rerun cannot collide with a live session.
+ *
+ * Letters only, from SESSION_CODE_ALPHABET. Base36 was fine while the relay
+ * took any string, and stopped being fine when the console started refusing
+ * anything a lens could not legibly show.
+ */
+const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
+const stamp = Date.now();
+const CODE = `PRD${[0, 1, 2]
+  .map((i) => ALPHABET[Math.floor(stamp / ALPHABET.length ** i) % ALPHABET.length])
+  .join("")}`;
 
 async function focusChoice(page: Page, label: RegExp) {
   for (let i = 0; i < 10; i += 1) {
@@ -49,14 +59,27 @@ test("every surface is public, with no login wall in front of the glasses", asyn
   }
 });
 
+/**
+ * `/demo` is a client-side route, so the host has to serve index.html for it.
+ * Without the rewrite in vercel/console.json a shared link 404s, and the very
+ * first thing anyone is handed is a broken page.
+ */
+test("the front door and the demo route are both served", async ({ request }) => {
+  for (const path of ["/", "/demo"]) {
+    const res = await request.get(`${CONSOLE}${path}`);
+    expect(res.status(), `${path} should be served`).toBe(200);
+    expect(await res.text(), `${path} should be the app, not a 404`).toContain('id="root"');
+  }
+});
+
 test("the deployed console discovers the deployed market cross-origin", async ({ page }) => {
-  await page.goto(`${CONSOLE}/?session=${CODE}`);
+  // A code in the URL pairs with no typing. `mode=glasses` suppresses the
+  // embedded panel, because this test opens its own Display page and a
+  // session takes exactly one Display.
+  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
 
   // If this fails the browser has no WebMCP, and nothing below can pass.
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
-
-  await page.getByLabel("Pairing code from your glasses").fill(CODE);
-  await page.getByRole("button", { name: "Pair" }).click();
 
   // Four tools, and ONLY because dusky-market named dusky-console in
   // exposedTo. A trailing slash or an http:// would produce zero here.
@@ -76,9 +99,7 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
 
-  await consolePage.goto(`${CONSOLE}/?session=${CODE}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
   await expect(consolePage.getByText("Add to cart")).toBeVisible();
 
   // The Display connects over wss:// to a relay on a different host entirely.
@@ -108,7 +129,7 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
   await expect(displayPage.getByRole("button", { name: /Confirm/ })).toBeVisible();
 
   // Nothing has run: the deployed partner site is untouched.
-  const cart = consolePage.frameLocator("iframe").getByTestId("cart");
+  const cart = consolePage.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
   await expect(cart).toHaveText("empty");
 
   await focusChoice(displayPage, /Confirm/);
@@ -128,9 +149,7 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
 
-  await consolePage.goto(`${CONSOLE}/?session=${CODE}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
   await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
@@ -170,9 +189,7 @@ test("a spoken request from an agent reaches the wearer", async ({ browser }) =>
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
 
-  await consolePage.goto(`${CONSOLE}/?session=${CODE}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
   await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);

@@ -41,9 +41,11 @@
   gap: var(--dusky-s6);
   grid-template-columns: minmax(0, 1fr);
 }
-@media (min-width: 900px) {
+@media (min-width: 1000px) {
   .grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* The lens column is sized by the panel it holds; the site and the log
+       take the rest. */
+    grid-template-columns: 480px minmax(0, 1fr);
   }
 }
 
@@ -253,4 +255,147 @@
   overflow: auto;
   white-space: pre-wrap;
   color: var(--dusky-ink-dim);
+}
+
+/* ------------------------------------------------- workspace additions */
+
+.back {
+  font-family: var(--dusky-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+  text-decoration: none;
+  border: none;
+  align-self: flex-start;
+}
+
+/**
+ * The one sentence somebody must not have to discover by closing the tab.
+ * It is a standing statement rather than a dismissible banner on purpose.
+ */
+.standing {
+  margin: 0;
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border-left: 2px solid var(--dusky-accent-soft);
+  font-size: 0.9rem;
+  color: var(--dusky-ink-dim);
+  max-width: 78ch;
+}
+.standing strong {
+  color: var(--dusky-ink-strong);
+  font-weight: 400;
+}
+
+.startCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+  align-items: flex-start;
+  padding: var(--dusky-s5);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  background: var(--dusky-sunken);
+  max-width: 46rem;
+}
+
+.h1 {
+  margin: 0;
+  font-weight: 300;
+  font-size: 1.4rem;
+  letter-spacing: -0.025em;
+  color: var(--dusky-ink-strong);
+}
+
+.primary {
+  padding: 0.7em 1.4em;
+  border: 1px solid var(--dusky-accent);
+  border-radius: var(--dusky-radius);
+  background: var(--dusky-accent);
+  color: var(--dusky-ground);
+  font: inherit;
+  font-size: 0.98rem;
+  cursor: pointer;
+}
+.primary:hover {
+  filter: brightness(1.08);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dusky-s5);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  background: var(--dusky-sunken);
+}
+
+.sources {
+  display: flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+  flex-wrap: wrap;
+}
+
+.sourcesLabel {
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.sourceBtn {
+  padding: 0.35em 0.8em;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  background: none;
+  color: var(--dusky-ink-dim);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.sourceBtn[data-on="true"] {
+  border-color: var(--dusky-accent);
+  color: var(--dusky-ink-strong);
+  background: var(--dusky-raised);
+}
+
+.lensCol,
+.siteCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+  min-width: 0;
+}
+
+.note {
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--dusky-ink-faint);
+}
+
+/* 600 x 600 is not negotiable, so the panel scales rather than reflows.
+   Reflowing it would be showing something the glasses cannot show. */
+.stage {
+  width: 480px;
+  height: 480px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+}
+
+.lens {
+  width: 600px;
+  height: 600px;
+  border: 0;
+  display: block;
+  transform: scale(0.8);
+  transform-origin: top left;
 }

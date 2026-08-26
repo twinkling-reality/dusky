@@ -5,7 +5,7 @@
 | Surface | URL |
 | --- | --- |
 | Display, for the glasses | https://dusky-display.vercel.app |
-| Console | https://dusky-console.vercel.app |
+| Website and demo | https://dusky-console.vercel.app |
 | Verdant Market | https://dusky-market.vercel.app |
 | Amber & Oak | https://dusky-reservations.vercel.app (not deployed yet) |
 | Relay | https://dusky-relay.onrender.com |
@@ -26,7 +26,7 @@ does not.
 | Surface | What it is | Where it runs | Host |
 | --- | --- | --- | --- |
 | `apps/display` | The 600x600 app the wearer sees | On the glasses | Vercel |
-| `apps/console` | Dusky's WebMCP client | A desktop browser | Vercel |
+| `apps/console` | The website: front door at `/`, demo at `/demo` | A desktop browser | Vercel |
 | `apps/market` | Verdant Market, a test service | A desktop browser | Vercel |
 | `apps/reservations` | Amber & Oak, a second test service | A desktop browser | Vercel |
 | `apps/server` | The session relay | A server | Render, Railway or Fly |
@@ -89,6 +89,11 @@ Each is a separate Vercel project from the same repository.
 - **Enable "Include source files outside of the Root Directory"**. The workspace
   packages live in `packages/`, so the build fails without it.
 - Build command `pnpm build`, output `dist`. Vite is detected automatically.
+
+**The console needs an SPA rewrite.** `/demo` is a client-side route, so the
+host has to serve `index.html` for every path. `vercel/console.json` carries
+the rewrite; without it a link straight to the demo returns a 404, which is a
+bad first thing to hand anybody. `pnpm test:prod` checks both paths.
 
 **Turn deployment protection off for the Display.** Vercel's authentication
 sits in front of the page, and the glasses cannot log in. Meta's own

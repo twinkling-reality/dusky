@@ -34,6 +34,14 @@ const RECONNECT_MS = [250, 500, 1000, 2000, 4000] as const;
 /** An agent request that never comes back must not hang a tool call forever. */
 const AGENT_REPLY_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a burst of tool registrations is allowed to settle.
+ *
+ * Long enough to swallow a site registering its tools one at a time, short
+ * enough that a wearer looking at a menu sees a real change almost at once.
+ */
+const TOOLS_SETTLE_MS = 200;
+
 export function useConsoleLink(
   relayUrl: string,
   sessionId: string,
@@ -100,6 +108,11 @@ export function useConsoleLink(
     let disposed = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
+
+    // Pointing Dusky at a different source re-runs this effect. The previous
+    // site's tools are not this site's tools, and leaving them on screen until
+    // discovery finishes would show a menu that belongs to somewhere else.
+    setTools([]);
 
     const connect = () => {
       if (disposed) return;
@@ -182,14 +195,27 @@ export function useConsoleLink(
 
     // A page adding or removing tools must reach the wearer, so we forward the
     // event rather than polling for changes.
+    //
+    // Coalesced, because registration is one event PER TOOL: a site declaring
+    // four of them fires four times in a few milliseconds, and each one made
+    // the relay restart the session and re-discover. That produced a run of
+    // "0 tools" answers against a page still registering, and, far worse,
+    // would reset the wearer's frame four times if a site ever re-registered
+    // while somebody was mid-task. One burst is one change.
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const off = bridge.current?.onToolsChanged(() => {
-      note("ontoolchange fired");
-      send({ t: "toolsChanged" });
+      if (settle !== undefined) clearTimeout(settle);
+      settle = setTimeout(() => {
+        settle = undefined;
+        note("ontoolchange settled, re-discovering");
+        send({ t: "toolsChanged" });
+      }, TOOLS_SETTLE_MS);
     });
 
     return () => {
       disposed = true;
       if (timer !== undefined) clearTimeout(timer);
+      if (settle !== undefined) clearTimeout(settle);
       off?.();
       ws.current?.close();
       ws.current = null;

@@ -204,6 +204,25 @@ export interface AuditEntry {
   detail?: Record<string, unknown>;
 }
 
+/**
+ * The alphabet a pairing code is drawn from.
+ *
+ * Letters only, minus I, L and O. The code is read by a human off a waveguide
+ * and typed somewhere else, so dropping digits kills every digit-letter
+ * confusion at once (0/O, 1/I, 5/S, 8/B, 2/Z, 3/J) and dropping those three
+ * letters kills the ones that look like each other. See the note in
+ * apps/display/src/App.tsx for what this cost to learn.
+ *
+ * It lives here because two surfaces now mint codes: the Display, when a
+ * wearer opens it on the glasses, and the website, when someone starts a demo
+ * with no glasses at all. Two alphabets that drifted apart would produce codes
+ * one of them could not display legibly.
+ */
+export const SESSION_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
+
+/** Six places over 23 symbols, which is about 148 million codes. */
+export const SESSION_CODE_LENGTH = 6;
+
 export const DISPLAY_VIEWPORT = { width: 600, height: 600 } as const;
 /** Meta's documented minimum interactive target on the waveguide. */
 export const MIN_TARGET_PX = 88;

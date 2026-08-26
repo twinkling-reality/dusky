@@ -3,5 +3,6 @@
   "framework": null,
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @dusky/app-console build",
-  "outputDirectory": "apps/console/dist"
+  "outputDirectory": "apps/console/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

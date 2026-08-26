@@ -1,4 +1,4 @@
-import type { DisplayFrame } from "@dusky/contracts";
+import { type DisplayFrame, SESSION_CODE_ALPHABET, SESSION_CODE_LENGTH } from "@dusky/contracts";
 import { FrameView } from "@dusky/lens";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
@@ -16,24 +16,14 @@ import { useRelay } from "./useRelay.js";
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/display";
 
 /**
- * Letters only, and not all of them.
- *
- * The code is read by a human off a waveguide, in whatever light they happen
- * to be standing in, and then typed somewhere else. Base36 put digits next to
- * letters and produced JN4CB2, which was read back as 3N4CB2 and cost twenty
- * minutes of debugging a system that was working perfectly. Dropping digits
- * kills every digit-letter confusion at once: 0/O, 1/I, 5/S, 8/B, 2/Z, 3/J.
- * I, L and O go too, because they are the letters that look like each other.
- *
- * 23 symbols over 6 places is about 148 million codes, which is far more than
- * a relay holding a handful of live sessions will ever need.
+ * The alphabet lives in @dusky/contracts, because the website mints codes too
+ * now and two alphabets that drifted apart would produce codes one surface
+ * could not display legibly. What it cost to learn is recorded there.
  */
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
-
 function mintCode(): string {
-  const bytes = new Uint8Array(6);
+  const bytes = new Uint8Array(SESSION_CODE_LENGTH);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+  return Array.from(bytes, (b) => SESSION_CODE_ALPHABET[b % SESSION_CODE_ALPHABET.length]).join("");
 }
 
 function readSessionId(): string {

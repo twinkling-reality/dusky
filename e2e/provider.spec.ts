@@ -13,7 +13,9 @@ import { expect, type Page, test } from "@playwright/test";
  * exactly the path the browser's built-in agent takes. Nothing is mocked.
  */
 
-const CODE = "PROV01";
+// No I, L or O: those are the letters SESSION_CODE_ALPHABET drops because
+// they are the ones misread off a waveguide. "PROV01" had digits and an O.
+const CODE = "PRVDER";
 
 /** Arguments go as a JSON string: Chrome 151 rejects an object. */
 async function callDuskyTool(page: Page, name: string, args: Record<string, unknown> = {}) {
@@ -40,10 +42,13 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
 
-  await consolePage.goto(`http://localhost:7803/?session=${CODE}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
   await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
+  // Dusky's own tools are registered as soon as the page loads, which is
+  // BEFORE the relay has finished discovering the partner's. Pairing used to
+  // take a form fill and two clicks, which hid that gap; a code in the URL
+  // does not. Wait for discovery, or the agent asks an empty session.
+  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(4);
 
   // Registering our own tools must not pollute what the WEARER sees. Chrome
   // returns this document's own tools from getTools({fromOrigins}) even when

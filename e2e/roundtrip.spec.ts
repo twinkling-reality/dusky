@@ -25,26 +25,36 @@ async function focusChoice(page: Page, label: RegExp | string) {
  * fails, nothing else in the repository matters.
  */
 
-const CODE = "E2E001";
+/**
+ * A code the system could actually mint: letters only, drawn from
+ * SESSION_CODE_ALPHABET. `E2E001` was never a shape a lens would show, and the
+ * console is now entitled to refuse one.
+ */
+const CODE = "ZEBRAS";
 
+/**
+ * A code in the URL pairs the console with no typing, which is what the
+ * website's "try it now" does. `mode=glasses` suppresses the embedded panel,
+ * because these tests open their own Display page and a session takes exactly
+ * one Display: a second would close the first.
+ */
 async function pairConsole(page: Page) {
-  await page.goto(`http://localhost:7803/?session=${CODE}`);
-  await page.getByLabel("Pairing code from your glasses").fill(CODE);
-  await page.getByRole("button", { name: "Pair" }).click();
+  await page.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
 }
 
 /**
  * The list of tools the console actually discovered.
  *
- * Scoped deliberately. A bare `getByText("Add to cart")` matched exactly one
- * element for as long as the console had one place a tool name could appear,
- * and silently became ambiguous the moment the page also showed a schema
- * being compiled. A locator that depends on the rest of the page staying
- * small is a locator that will break for a reason unrelated to the thing it
- * is testing.
+ * Scoped deliberately, and by a test id rather than by page text. A bare
+ * `getByText("Add to cart")` matched one element for as long as the console
+ * had one place a tool name could appear, and became ambiguous the moment the
+ * page also showed a schema being compiled. Filtering by a printed origin
+ * then broke when the rows stopped printing it. A locator that depends on the
+ * rest of the page staying still is a locator that breaks for reasons
+ * unrelated to what it is testing.
  */
 function discovered(page: Page) {
-  return page.locator("ul").filter({ hasText: "http://localhost:7801" }).first();
+  return page.getByTestId("actions");
 }
 
 test("WebMCP is actually enabled in this browser", async ({ page }) => {
@@ -77,9 +87,7 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
 
-  await consolePage.goto(`http://localhost:7803/?session=${CODE}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(CODE);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
   await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${CODE}`);
@@ -137,11 +145,9 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  const code = "E2E002";
+  const code = "ZEBRAT";
 
-  await consolePage.goto(`http://localhost:7803/?session=${code}`);
-  await consolePage.getByLabel("Pairing code from your glasses").fill(code);
-  await consolePage.getByRole("button", { name: "Pair" }).click();
+  await consolePage.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
   await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${code}`);

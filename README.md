@@ -34,9 +34,13 @@ pnpm install
 pnpm dev
 ```
 
-Then open the console at <http://localhost:7803>, open the Display at
-<http://localhost:7802> in a second tab, and enter the Display's pairing code in
-the console.
+Then open <http://localhost:7803> and press **Try it now**. Dusky mints a
+pairing code, opens the Display in the same tab, and pairs itself: the glasses
+view, the partner site and every protocol call are all on one screen.
+
+To drive a real pair of glasses instead, open the Display at
+<http://localhost:7802>, read the six letters off the lens, and enter them on
+the demo page.
 
 Drive the Display with <kbd>↑</kbd> <kbd>↓</kbd> to move focus, <kbd>Enter</kbd>
 to select, <kbd>Esc</kbd> to go back. Those six keys are the entire input
@@ -103,7 +107,7 @@ mediated by the browser.
 | `packages/tokens` | Design tokens. Two palettes: console, and emitted light for the waveguide. |
 | `packages/lens` | The 600x600 panel as a component, so the website renders the real one. |
 | `apps/display` | The 600x600 Web App. The primary product surface. |
-| `apps/console` | The operator console and WebMCP client. |
+| `apps/console` | The website: the front door, and the demo that is Dusky's WebMCP client. |
 | `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |
 | `apps/market` | A first-party WebMCP test service. Clearly labelled; nothing is sold. |
 | `apps/reservations` | A second test service with nothing in common with a shop. Nothing is reserved. |
