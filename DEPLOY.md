@@ -1,5 +1,24 @@
 # Deploying Dusky, and getting it onto the glasses
 
+## Live as of 2026-08-26
+
+| Surface | URL |
+| --- | --- |
+| Display, for the glasses | https://dusky-display.vercel.app |
+| Console | https://dusky-console.vercel.app |
+| Verdant Market | https://dusky-market.vercel.app |
+| Relay | https://dusky-relay.onrender.com |
+
+Two things are deliberately still manual, because they are credentials:
+
+- `ANTHROPIC_API_KEY` is unset on the relay. Add it under Environment in the
+  Render dashboard. Until then the planner tries, fails, and the wearer gets
+  the menu, which is the degradation the relay was built for.
+- Viewing the console needs WebMCP in the browser: the ChatGPT desktop app's
+  built-in browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`.
+  The console says so plainly when the API is missing.
+
+
 Four surfaces. Three are static and belong on any CDN. One holds WebSockets and
 does not.
 
