@@ -107,8 +107,40 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, role, url));
 });
 
+/**
+ * How long a socket may go without answering a protocol-level ping.
+ *
+ * Two missed beats terminates it. This is the relay's half of the same
+ * problem the Display solves with `ping`/`pong`: a client whose radio went
+ * quiet leaves a socket that is open as far as this process is concerned, so
+ * `statusValue()` reports `display_connected: true` and `accepting_tasks:
+ * true`, and an agent's task is accepted into a void. `terminate()` fires
+ * `close`, which runs the ordinary detach path, so the lie ends by itself.
+ *
+ * `wss.clients` is not used because this server upgrades by hand and never
+ * emits `connection`, so the set would be empty. Per-socket is also simply
+ * less to get wrong.
+ */
+const HEARTBEAT_MS = 30_000;
+
 function onConnection(ws: WebSocket, role: Role, url: URL): void {
   let sessionId: string | null = null;
+
+  let alive = true;
+  ws.on("pong", () => {
+    alive = true;
+  });
+  const beat = setInterval(() => {
+    if (!alive) {
+      ws.terminate();
+      return;
+    }
+    alive = false;
+    ws.ping();
+  }, HEARTBEAT_MS);
+  // Do not hold the process open for a heartbeat.
+  beat.unref?.();
+  ws.on("close", () => clearInterval(beat));
 
   ws.on("message", (raw: RawData) => {
     void (async () => {

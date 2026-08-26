@@ -233,8 +233,33 @@ export class SessionActor {
   async onDisplayMessage(msg: DisplayToServer): Promise<void> {
     switch (msg.t) {
       case "hello":
-      case "ping":
         return;
+      // Answered BEFORE the pairing guard below, deliberately. A wearer
+      // staring at the pairing code has the same right to know their link is
+      // dead as one halfway through a task, and that screen is the one they
+      // will be sitting on longest.
+      case "ping":
+        this.toDisplay({ t: "pong" });
+        return;
+      default:
+        break;
+    }
+
+    // Say nothing until a browser has paired, on THIS path too.
+    //
+    // `attachDisplay` is carefully guarded so the wearer keeps their pairing
+    // frame, with the code on it, until a console connects. Nothing guarded
+    // the messages that arrive afterwards, so one Escape on that screen ran
+    // `__cancel`, which showed and pushed an empty menu: the six characters
+    // the wearer has to read off the lens were replaced by "No actions
+    // available here / This source declared no usable tools", which is untrue
+    // about a site that never connected, on a frame with no choices on it.
+    //
+    // Nobody has documented how a wearer relaunches a web app on these
+    // glasses, so there may be no way back from that screen.
+    if (this.consoleSock?.readyState !== 1) return;
+
+    switch (msg.t) {
       case "choose":
         // Acknowledge before any work, so the wearer never wonders.
         this.toDisplay({ t: "ack", frameId: msg.frameId, choiceId: msg.choiceId });

@@ -117,12 +117,24 @@ export type DisplayToServer =
   /** Text committed by the on-glasses composer (handwriting or dictation). */
   | { t: "text"; frameId: string; value: string }
   | { t: "cancel"; frameId: string }
+  /**
+   * Liveness, and the reason it cannot be left to the socket.
+   *
+   * When the glasses sleep, the page is suspended rather than closed. The
+   * radio goes quiet with no FIN and no RST, so `readyState` stays OPEN, sends
+   * disappear into a dead socket, and no `close` event ever fires: the Display
+   * keeps rendering a stale frame with dead controls and does not know it.
+   * Only traffic can tell the difference, so the Display sends these and
+   * expects an answer.
+   */
   | { t: "ping" };
 
 export type ServerToDisplay =
   /** Sent within 150ms of a choose, before any work happens. */
   | { t: "ack"; frameId: string; choiceId: string }
   | { t: "frame"; frameId: string; state: TaskState; frame: DisplayFrame }
+  /** The answer to a `ping`. Its only job is to be inbound traffic. */
+  | { t: "pong" }
   | { t: "bye"; reason: string };
 
 /* ------------------------------------------------- console <-> server wire */

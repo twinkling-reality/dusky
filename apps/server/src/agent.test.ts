@@ -302,3 +302,52 @@ describe("the source label a wearer reads", () => {
     expect(actions.find((x) => x.name === "add_to_cart")?.needsApproval).toBe(true);
   });
 });
+
+describe("the wearer's screen before a browser has paired", () => {
+  /**
+   * `attachDisplay` stays silent until a console connects, so the Display
+   * keeps showing its own pairing frame with the code on it. Everything the
+   * glasses SEND afterwards has to respect the same rule.
+   */
+  it("ignores a gesture that arrives before a console is attached", async () => {
+    const built = actor();
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+    display.sent.length = 0;
+
+    // One Escape used to run __cancel, which pushed an empty menu over the
+    // six characters the wearer has to read off the lens.
+    await built.a.onDisplayMessage({ t: "cancel", frameId: 1 } as never);
+    await built.a.onDisplayMessage({ t: "choose", frameId: 1, choiceId: "__cancel" } as never);
+    await built.a.onDisplayMessage({ t: "text", frameId: 1, value: "anything" } as never);
+
+    expect(display.sent, "the relay spoke over the pairing code").toEqual([]);
+  });
+
+  it("answers a liveness ping even before a console is attached", async () => {
+    const built = actor();
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+    display.sent.length = 0;
+
+    await built.a.onDisplayMessage({ t: "ping" } as never);
+
+    // The wearer sitting on the pairing code has the same right to know their
+    // link is dead as one mid-task, and that is the screen they sit on
+    // longest. A ping that went unanswered while unpaired would make the
+    // Display's own watchdog tear down a perfectly good socket every 30s.
+    const replies = display.sent.map((t) => (JSON.parse(t) as { t: string }).t);
+    expect(replies, "a ping went unanswered").toEqual(["pong"]);
+  });
+
+  it("still answers a gesture once a console is attached", async () => {
+    const built = actor();
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+    display.sent.length = 0;
+
+    await built.a.onDisplayMessage({ t: "cancel", frameId: 1 } as never);
+    expect(display.sent.length, "a paired session went deaf").toBeGreaterThan(0);
+  });
+});
