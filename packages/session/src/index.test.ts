@@ -202,3 +202,140 @@ describe("failure handling", () => {
     expect(f.retryable).toBe(true);
   });
 });
+
+/**
+ * A planner is a port, so the machine cannot assume a careful implementation
+ * behind it. These are the cases where a planner is wrong, hostile or simply
+ * broken, and the machine has to be the thing that holds.
+ */
+describe("a planner the machine does not trust", () => {
+  const consequentialResolver: Planner = {
+    pickTool: async () => null,
+    planResolver: async () => ({ name: "add_to_cart", args: { product_id: "oat-1" } }),
+  };
+
+  function recordingRunner() {
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const runner: ToolRunner = {
+      discover: async () => [SEARCH, ADD],
+      invoke: async (_origin, name, args) => {
+        calls.push({ name, args });
+        return JSON.stringify({ ok: true, added: "Organic oat milk", cart_total: 4.29 });
+      },
+    };
+    return { runner, calls };
+  }
+
+  it("falls back to the menu when the planner throws", async () => {
+    const runner = fakeRunner();
+    const audit: string[] = [];
+    const exploding: Planner = {
+      pickTool: async () => {
+        throw new Error("model unreachable");
+      },
+      planResolver: async () => null,
+    };
+    const s = new Session({
+      source: "Shop",
+      runner,
+      planner: exploding,
+      onAudit: (e) => audit.push(`${e.kind}:${JSON.stringify(e.detail ?? {})}`),
+    });
+    await s.start();
+    const f = await s.submitText("find me some oat milk");
+    expect(f.kind).toBe("idle");
+    expect(runner.calls).toEqual([]);
+    expect(audit.some((a) => a.startsWith("plan:") && a.includes("model unreachable"))).toBe(true);
+  });
+
+  it("ignores a tool this session never discovered, and records that it tried", async () => {
+    const runner = fakeRunner();
+    const audit: { kind: string; toolName?: string }[] = [];
+    const inventing: Planner = {
+      pickTool: async () => ({ name: "wire_money", args: { amount: 5000 } }),
+      planResolver: async () => null,
+    };
+    const s = new Session({
+      source: "Shop",
+      runner,
+      planner: inventing,
+      onAudit: (e) => audit.push({ kind: e.kind, toolName: e.toolName }),
+    });
+    await s.start();
+    const f = await s.submitText("pay my rent");
+    expect(f.kind).toBe("idle");
+    expect(runner.calls).toEqual([]);
+    expect(audit).toContainEqual({ kind: "plan", toolName: "wire_money" });
+  });
+
+  // The gate is not the only way an argument can do damage. An invented
+  // `force` reaching a site would bypass the gate without touching the gate.
+  it("strips arguments the tool never declared before anything can run", async () => {
+    const { runner, calls } = recordingRunner();
+    const smuggling: Planner = {
+      pickTool: async () => ({
+        name: "add_to_cart",
+        args: { product_id: "oat-1", force: true, confirm: true, quantity: 99 },
+      }),
+      planResolver: async () => null,
+    };
+    const s = new Session({ source: "Shop", runner, planner: smuggling });
+    await s.start();
+    await s.submitText("add the oat milk");
+    await s.handle("__confirm");
+    expect(calls).toEqual([{ name: "add_to_cart", args: { product_id: "oat-1" } }]);
+  });
+
+  it("still stops at the gate when the planner supplies every argument", async () => {
+    const { runner, calls } = recordingRunner();
+    const eager: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: { product_id: "oat-1" } }),
+      planResolver: async () => null,
+    };
+    const s = new Session({ source: "Shop", runner, planner: eager });
+    await s.start();
+    const f = await s.submitText("add the oat milk");
+    // A complete proposal is still only a proposal.
+    expect(f.kind).toBe("confirm");
+    expect(calls).toEqual([]);
+  });
+
+  it("records a refused resolver rather than silently dropping it", async () => {
+    // The one path where a proposal would run with no human in front of it,
+    // so the refusal has to be visible in the audit trail afterwards.
+    const runner = fakeRunner();
+    const audit: { kind: string; toolName?: string; detail?: Record<string, unknown> }[] = [];
+    const s = new Session({
+      source: "Shop",
+      runner,
+      planner: consequentialResolver,
+      onAudit: (e) => audit.push({ kind: e.kind, toolName: e.toolName, detail: e.detail }),
+    });
+    await s.start();
+    await s.handle("add_to_cart");
+    expect(runner.calls).toEqual([]);
+    expect(audit).toContainEqual({
+      kind: "plan",
+      toolName: "add_to_cart",
+      detail: { path: "planResolver", accepted: false, reason: "not read-only" },
+    });
+  });
+
+  it("keeps collecting the parameter when the resolver planner throws", async () => {
+    const runner = fakeRunner();
+    const exploding: Planner = {
+      pickTool: async () => null,
+      planResolver: async () => {
+        throw new Error("model unreachable");
+      },
+    };
+    const s = new Session({ source: "Shop", runner, planner: exploding });
+    await s.start();
+    const f = await s.handle("add_to_cart");
+    // The wearer is asked for the value instead of being stranded.
+    expect(f.kind).toBe("choose");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose"]);
+    expect(runner.calls).toEqual([]);
+  });
+});

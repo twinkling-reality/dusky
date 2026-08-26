@@ -20,6 +20,7 @@ import {
   isOperable,
   label,
   nextMissingParam,
+  parameters,
   paramFrame,
   resultFrame,
   workingFrame,
@@ -141,15 +142,43 @@ export class Session {
   async submitIntent(text: string): Promise<DisplayFrame> {
     this.intent = text;
     if (!this.o.planner) return this.frame;
-    const pick = await this.o.planner.pickTool(text, this.tools.filter(isOperable));
+
+    // A planner is assistance, never a dependency. Anything it does wrong,
+    // including throwing, has to land the wearer on the menu they can already
+    // drive rather than anywhere they cannot get out of.
+    let pick: { name: string; args: Record<string, unknown> } | null = null;
+    try {
+      pick = await this.o.planner.pickTool(text, this.tools.filter(isOperable));
+    } catch (err) {
+      this.audit({ kind: "plan", detail: { path: "pickTool", failed: msg(err) } });
+    }
+
     // A planner that is unsure must produce a question, never a guess.
     if (!pick) {
       this.frame = idleFrame(this.o.source, this.tools, 0);
       return this.frame;
     }
+
     const tool = this.byName(pick.name);
-    if (!tool) return this.frame;
-    return this.beginTool(tool, pick.args ?? {});
+    if (!tool) {
+      // Named something this session never discovered. Recorded, then ignored.
+      this.audit({
+        kind: "plan",
+        toolName: pick.name,
+        detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
+      });
+      this.frame = idleFrame(this.o.source, this.tools, 0);
+      return this.frame;
+    }
+
+    const args = declaredArgs(tool, pick.args ?? {});
+    this.audit({
+      kind: "plan",
+      toolName: tool.name,
+      origin: tool.origin,
+      detail: { path: "pickTool", accepted: true, args },
+    });
+    return this.beginTool(tool, args);
   }
 
   /** The single entry point for a gesture selection. */
@@ -225,23 +254,46 @@ export class Session {
       // than asking the wearer to spell a product id, run something that
       // produces them and offer the results as choices.
       if (missing.kind === "text" && this.o.planner) {
-        const plan = await this.o.planner.planResolver(
-          missing.name,
-          p.tool,
-          this.readOnly(),
-          this.intent,
-        );
+        let plan: { name: string; args: Record<string, unknown> } | null = null;
+        try {
+          plan = await this.o.planner.planResolver(
+            missing.name,
+            p.tool,
+            this.readOnly(),
+            this.intent,
+          );
+        } catch (err) {
+          this.audit({ kind: "plan", detail: { path: "planResolver", failed: msg(err) } });
+        }
+
         if (plan) {
           const resolver = this.byName(plan.name);
           // Enforced in code: a resolver must be read-only. A planner that
-          // names a consequential tool is ignored, not trusted.
-          if (resolver && gate(resolver).consequence === "read") {
+          // names a consequential tool is ignored, not trusted. This is the
+          // one path where a proposal runs with no human in front of it, so
+          // the refusal is recorded rather than merely happening.
+          const allowed = resolver !== undefined && gate(resolver).consequence === "read";
+          if (!allowed) {
+            this.audit({
+              kind: "plan",
+              toolName: plan.name,
+              origin: resolver?.origin,
+              detail: {
+                path: "planResolver",
+                accepted: false,
+                reason: resolver ? "not read-only" : "not a discovered tool",
+              },
+            });
+          } else if (resolver) {
+            const args = declaredArgs(resolver, plan.args ?? {});
+            this.audit({
+              kind: "plan",
+              toolName: resolver.name,
+              origin: resolver.origin,
+              detail: { path: "planResolver", accepted: true, args },
+            });
             try {
-              const raw = await this.o.runner.invoke(
-                resolver.origin,
-                resolver.name,
-                plan.args ?? {},
-              );
+              const raw = await this.o.runner.invoke(resolver.origin, resolver.name, args);
               this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
               candidates = candidatesFromResult(raw);
             } catch {
@@ -358,6 +410,24 @@ function coerce(v: string): unknown {
   if (v === "true") return true;
   if (v === "false") return false;
   return v;
+}
+
+/**
+ * Keep only the arguments the tool itself declared.
+ *
+ * `Planner` is a port, so the machine cannot assume a careful implementation
+ * on the other side of it. An invented `force` or `confirm` riding along into
+ * a real invocation would bypass the gate without anyone touching the gate,
+ * which is precisely the class of thing this file exists to make impossible.
+ */
+function declaredArgs(
+  tool: ToolDescriptor,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = new Set(parameters(tool).map((p) => p.name));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) if (declared.has(k)) out[k] = v;
+  return out;
 }
 
 /** A short, honest description of what is about to happen. */

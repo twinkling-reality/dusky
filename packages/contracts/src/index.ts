@@ -138,7 +138,8 @@ export type ConsoleToServer =
 export interface AuditEntry {
   at: string;
   sessionId: string;
-  kind: "discover" | "gate" | "invoke" | "result" | "cancel" | "error";
+  /** `plan` records what a model proposed, including proposals code refused. */
+  kind: "discover" | "plan" | "gate" | "invoke" | "result" | "cancel" | "error";
   origin?: string;
   toolName?: string;
   /** Never contains credentials. Arguments are recorded, secrets are not. */
