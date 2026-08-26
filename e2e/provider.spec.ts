@@ -37,6 +37,27 @@ interface ModelContextLike {
   executeTool(tool: unknown, input?: unknown): Promise<string>;
 }
 
+/**
+ * Drive the Display exactly as the glasses do: arrow keys move focus, Enter
+ * activates whatever the d-pad is on.
+ *
+ * Pressing Enter on the button itself is not the same act. `useDpad` keeps its
+ * own index and selects THAT, so a press aimed at a row only worked while the
+ * row happened to be the one under the wearer's thumb, which meant this test
+ * quietly depended on `add_to_cart` being first. It is not first any more, and
+ * per AGENTS.md it was never something to depend on. Same helper as
+ * `e2e/roundtrip.spec.ts`, for the same reason.
+ */
+async function focusChoice(page: Page, label: RegExp) {
+  for (let i = 0; i < 8; i += 1) {
+    const focused = await page.locator('[data-focused="true"]').textContent();
+    if (focused && label.test(focused)) return;
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(60);
+  }
+  throw new Error(`never focused a choice matching ${String(label)}`);
+}
+
 test("an agent in the browser can inspect and drive a Dusky session", async ({ browser }) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
@@ -83,7 +104,8 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   /* ---- the constraint that makes this safe to expose at all ---- */
 
   // Put the wearer in front of a confirmation, the way a gesture would.
-  await displayPage.getByRole("button", { name: /Add to cart/ }).press("Enter");
+  await focusChoice(displayPage, /Add to cart/);
+  await displayPage.keyboard.press("Enter");
   const compose = displayPage.locator('input[type="text"]');
   await expect(compose).toBeVisible();
   await compose.fill("oat-1");
