@@ -29,7 +29,7 @@
  */
 
 import type { ToolDescriptor } from "@dusky/contracts";
-import { isOperable, type ParamSpec, parameters } from "@dusky/frames";
+import { isOperable, parameters, valueForParam } from "@dusky/frames";
 import { gate } from "@dusky/policy";
 import { CardCache, safeText } from "./cards.js";
 import { shortlist } from "./rank.js";
@@ -533,7 +533,7 @@ export function readArgs(
       dropped.push(key);
       continue;
     }
-    const coerced = coerce(value, spec);
+    const coerced = valueForParam(value, spec);
     if (coerced === undefined) dropped.push(key);
     else args[key] = coerced;
   }
@@ -548,39 +548,6 @@ export function readArgs(
  * and a structure the display cannot render on a confirmation frame is never
  * accepted at all.
  */
-function coerce(value: unknown, spec: ParamSpec): unknown {
-  if (value === null || value === undefined) return undefined;
-
-  switch (spec.kind) {
-    case "enum": {
-      const allowed = spec.schema["enum"];
-      if (!Array.isArray(allowed)) return undefined;
-      const hit = allowed.find((a) => String(a) === String(value));
-      return hit === undefined ? undefined : hit;
-    }
-    case "boolean":
-      if (typeof value === "boolean") return value;
-      if (value === "true") return true;
-      if (value === "false") return false;
-      return undefined;
-    case "number": {
-      if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
-      if (typeof value === "string" && value.trim() !== "") {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : undefined;
-      }
-      return undefined;
-    }
-    case "text":
-      if (typeof value === "string") return value;
-      if (typeof value === "number" || typeof value === "boolean") return String(value);
-      return undefined;
-    // An object or array cannot be shown on a confirmation frame, so it can
-    // never be part of something the wearer is asked to approve.
-    case "unsupported":
-      return undefined;
-  }
-}
 
 /** The clear winner of a ranking, or null when the field is close. */
 function decisiveWinner(ranked: { tool: ToolDescriptor; score: number }[]): ToolDescriptor | null {

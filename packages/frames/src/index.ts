@@ -97,6 +97,95 @@ export function isOperable(tool: ToolDescriptor): boolean {
 /* ----------------------------------------------------------- humanization */
 
 /** `add_to_cart` becomes `Add to cart`. Titles win when the site supplies one. */
+/**
+ * A tool's identity.
+ *
+ * The name alone is not one. Any origin may register any name, so two sources
+ * can both publish `checkout` and neither is more entitled to it than the
+ * other. Resolving a choice by name meant taking whichever the browser
+ * happened to return first, and `getTools` ordering is explicitly not
+ * something to depend on: a site that registered a familiar name could have
+ * its own tool run when the wearer picked somebody else's.
+ *
+ * The origin is the part a site cannot forge, because the browser supplies it.
+ */
+/**
+ * The single answer to "may this value be sent for this declared parameter?"
+ *
+ * Returns the value to send, or `undefined` to drop it.
+ *
+ * It lives here because BOTH `packages/planner` and `packages/session` have to
+ * ask, and they must not answer differently. The planner validates what a
+ * model proposed; the session validates again before invoking, because a
+ * `Planner` is a port and a different implementation reaches the session
+ * without ever passing through the planner's code. Two implementations of one
+ * rule is the arrangement AGENTS.md disowns: a guarantee that only holds while
+ * two files agree is not a guarantee.
+ *
+ * Rejecting is always safe here. The worst case is a parameter the wearer is
+ * asked for instead, which is the menu-driven path the product already has.
+ */
+export function valueForParam(value: unknown, spec: ParamSpec): unknown {
+  if (value === null || value === undefined) return undefined;
+
+  switch (spec.kind) {
+    case "enum": {
+      const allowed = spec.schema["enum"];
+      if (!Array.isArray(allowed)) return undefined;
+      // The DECLARED member, not a parsed copy of the label, which is how an
+      // integer enum survives a Display that can only send text.
+      const hit = allowed.find((a) => String(a) === String(value));
+      return hit === undefined ? undefined : hit;
+    }
+    case "boolean":
+      if (typeof value === "boolean") return value;
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return undefined;
+    case "number": {
+      if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+      if (typeof value === "string" && value.trim() !== "") {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : undefined;
+      }
+      return undefined;
+    }
+    case "text":
+      if (typeof value === "string") return value;
+      if (typeof value === "number" || typeof value === "boolean") return String(value);
+      return undefined;
+    // An object or an array cannot be shown on a confirmation frame, so it can
+    // never be part of something the wearer is asked to approve.
+    case "unsupported":
+      return undefined;
+  }
+}
+
+export function toolId(tool: ToolDescriptor): string {
+  return `${tool.origin} ${tool.name}`;
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
+/**
+ * What to call a tool on a menu that may contain another tool called the same.
+ *
+ * Only collisions pay the extra width, because on a panel this size a row is
+ * expensive. A wearer being shown two identical rows has no way to make an
+ * informed choice, which is worse than a long row.
+ */
+function menuLabel(tool: ToolDescriptor, among: readonly ToolDescriptor[]): string {
+  const mine = label(tool);
+  const collides = among.some((t) => t !== tool && label(t) === mine);
+  return collides ? `${mine} (${hostOf(tool.origin)})` : mine;
+}
+
 export function label(tool: ToolDescriptor): string {
   if (tool.title?.trim()) return tool.title.trim();
   const words = tool.name.replace(/[_-]+/g, " ").trim();
@@ -113,15 +202,24 @@ function paginate(
   page: number,
   budget = MAX_CHOICES,
 ): { choices: Choice[]; pages: number } {
-  const pages = Math.max(1, Math.ceil(all.length / (budget - 1)));
   if (all.length <= budget) return { choices: all, pages: 1 };
   const size = budget - 1;
-  const start = Math.min(page, pages - 1) * size;
-  const slice = all.slice(start, start + size);
+  const pages = Math.ceil(all.length / size);
+
+  // Wrap rather than clamp. Clamping made "More" redraw the frame the wearer
+  // was already on once they reached the last page: it looks live, it accepts
+  // the press, and nothing moves. There is no scrollbar and no cursor here, so
+  // a control that does nothing is the only feedback they get, and it reads as
+  // a hang. Wrapping to the first page is always a visible answer.
+  const p = ((page % pages) + pages) % pages;
+  const slice = all.slice(p * size, p * size + size);
   slice.push({
     id: "__more",
     label: "More",
-    meta: `${Math.min(page + 1, pages - 1) + 1}/${pages}`,
+    // Where the wearer IS, not where the button leads. Numbering the
+    // destination made the last two pages both read "2/2", which is how you
+    // lose your place on a panel that cannot scroll.
+    meta: `${p + 1}/${pages}`,
   });
   return { choices: slice, pages };
 }
@@ -145,8 +243,8 @@ export function idleFrame(
 ): DisplayFrame {
   const operable = tools.filter(isOperable);
   const all: Choice[] = operable.map((t, i) => ({
-    id: t.name,
-    label: label(t),
+    id: toolId(t),
+    label: menuLabel(t, operable),
     meta: String(i + 1).padStart(2, "0"),
   }));
 
@@ -225,18 +323,47 @@ export function paramFrame(
  * The gate. Built from the tool result and the classified consequence, never
  * from model prose, so the wearer reads the same target the code will send.
  */
+/**
+ * Plain words for what approving this will actually do.
+ *
+ * This panel cannot signal severity the way a screen does. An additive
+ * waveguide has no background, so there is no colour to go red and no
+ * darkening to lean on, and dimmer text does not read as graver text, it
+ * reads as text competing with the room. Severity therefore has to be
+ * SAID, or it is not communicated at all.
+ *
+ * Without this, approving `delete_account` and approving `review_cart`
+ * rendered as the same frame: a title, a target and two buttons.
+ *
+ * The words describe the ceremony `packages/policy` assigned, never anything
+ * the site claimed about itself.
+ */
+function consequenceNote(consequence?: string): string | undefined {
+  switch (consequence) {
+    case "financial":
+      return "This spends money";
+    case "destructive":
+      return "This cannot be undone";
+    case "write":
+      return "This changes something on the site";
+    default:
+      return undefined;
+  }
+}
+
 export function confirmFrame(
   source: string,
   tool: ToolDescriptor,
   target: string,
   consequence?: string,
 ): DisplayFrame {
+  const note = consequenceNote(consequence);
   return {
     kind: "confirm",
     source,
     title: label(tool),
     target,
-    consequence,
+    ...(note !== undefined ? { consequence: note } : {}),
     choices: [
       { id: "__confirm", label: "Confirm", meta: "enter" },
       { id: "__cancel", label: "Cancel", meta: "esc", tone: "danger" },

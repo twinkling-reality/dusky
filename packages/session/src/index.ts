@@ -33,6 +33,8 @@ import {
   parameters,
   paramFrame,
   resultFrame,
+  toolId,
+  valueForParam,
   workingFrame,
 } from "@dusky/frames";
 import { gate, isConfirmationFresh } from "@dusky/policy";
@@ -96,8 +98,15 @@ export interface SessionOptions {
 interface Pending {
   tool: ToolDescriptor;
   args: Record<string, unknown>;
-  /** Candidates offered for the parameter currently on screen. */
+  /** The parameter currently on screen. */
   awaiting?: string;
+  /**
+   * The candidates offered for it. Kept because paging has to rebuild the
+   * frame, and a resolver result is not something we can ask for twice: it
+   * may have cost a model call, and re-invoking a site to redraw a screen the
+   * wearer is already looking at is not a read we are entitled to repeat.
+   */
+  candidates?: Choice[];
   /** When the confirmation frame was shown, for staleness checks. */
   confirmShownAt?: number;
   /** Human-readable target for the confirmation frame. */
@@ -116,6 +125,17 @@ export class Session {
   private toolsChangedAt = 0;
   private pending: Pending | null = null;
   private page = 0;
+  /**
+   * The pending task currently being invoked, so one approval cannot run twice.
+   *
+   * Deliberately the Pending ITSELF rather than a boolean. A boolean locks the
+   * whole session, and the wearer can walk away from an invocation: Escape
+   * nulls `pending` and returns them to the menu while the call is still in
+   * flight. Their next pick builds a NEW Pending, which is a different object,
+   * so it runs. A boolean would have left them pressing a dead menu until the
+   * abandoned call settled.
+   */
+  private executing: Pending | null = null;
   private intent = "";
   private frame: DisplayFrame;
 
@@ -169,8 +189,36 @@ export class Session {
     });
   }
 
+  /**
+   * Resolve a choice, or a planner's proposal, to exactly one tool.
+   *
+   * Two namespaces arrive here and they are not the same thing. A gesture
+   * carries the qualified id the menu put on the row, which names an origin
+   * and cannot be mistaken for anything else. A planner carries a bare NAME,
+   * because a model is only ever shown names.
+   *
+   * A bare name is an identity only for as long as it is unique. When two
+   * origins claim one, this refuses instead of picking, exactly as
+   * `packages/planner` does, and independently of it: a guarantee that only
+   * holds while two files agree is not a guarantee. Refusing is also the safe
+   * direction, since the alternative was resolving by whatever order the
+   * browser happened to return, which let a site hijack a familiar name by
+   * registering it too.
+   */
   private byName(name: string): ToolDescriptor | undefined {
-    return this.tools.find((t) => t.name === name);
+    const exact = this.tools.find((t) => toolId(t) === name);
+    if (exact) return exact;
+
+    const matches = this.tools.filter((t) => t.name === name);
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      this.audit({
+        kind: "error",
+        toolName: name,
+        detail: { reason: "ambiguous tool name", origins: matches.map((t) => t.origin) },
+      });
+    }
+    return undefined;
   }
 
   /**
@@ -192,6 +240,20 @@ export class Session {
       this.toolsChangedAt = this.now();
       this.audit({ kind: "discover", detail: { count: this.tools.length } });
       this.page = 0;
+      // The question that was on screen is not on screen any more, so stop
+      // waiting for its answer. Without this the wearer sees the menu while
+      // `awaiting` still points at a parameter, and their next tap is read as
+      // the answer rather than as a tool: choosing "Search products" set
+      // product_id to "search_products" and walked straight to a confirmation
+      // for a purchase nobody asked for.
+      //
+      // `pending` itself survives on purpose. A confirmation shown before this
+      // discovery must still be refused as stale rather than silently
+      // forgotten, and that check reads `pending.confirmShownAt`.
+      if (this.pending) {
+        this.pending.awaiting = undefined;
+        this.pending.candidates = undefined;
+      }
       this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     } catch (err) {
       this.show(errorFrame(this.o.source, "Cannot reach this source", msg(err), true));
@@ -257,7 +319,30 @@ export class Session {
       return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
     }
     if (choiceId === "__retry") {
-      if (!this.pending) return this.frame;
+      // The retry offered on a discovery failure has nothing pending behind
+      // it, because nothing was ever chosen. It used to return the current
+      // frame unchanged, which pushed nothing: the wearer pressed the only
+      // control on screen, the panel did not move, and because no frame was
+      // pushed the progress hairline kept sweeping. Re-run the thing that
+      // actually failed.
+      if (!this.pending) return this.start();
+
+      // Rule 5: never auto-retry anything that is not read-only. A timeout is
+      // "unknown", not "did not happen", so repeating a write can charge
+      // twice. The error frame already declines to OFFER a retry for a write,
+      // but the frame is not the guard. `onDisplayMessage` forwards whatever
+      // choice id arrives on the display socket without checking it against
+      // the frame it just sent, so anyone holding the six-character pairing
+      // code could send `__retry` and run a purchase again. The rule has to
+      // hold in the machine, not in the screen.
+      if (gate(this.pending.tool).consequence !== "read") {
+        this.audit({
+          kind: "error",
+          toolName: this.pending.tool.name,
+          detail: { reason: "refused to retry a non-read tool" },
+        });
+        return this.frame;
+      }
       return this.execute();
     }
     if (choiceId === "__confirm") return this.onConfirm();
@@ -293,8 +378,24 @@ export class Session {
     return parameters(p.tool).find((x) => x.name === p.awaiting);
   }
 
+  /**
+   * Turn the page on whatever is currently on screen.
+   *
+   * This used to return `this.frame` untouched whenever a parameter was being
+   * collected, which made "More" a control that took the press and did
+   * nothing: the page counter advanced, no frame was built, and nothing was
+   * pushed. Every enum value past the first screenful was unreachable by any
+   * gesture a wearer could make. Rebuilding the menu instead would have been
+   * worse than doing nothing, because it would have silently abandoned the
+   * tool the wearer was halfway through.
+   */
   private repaint(): DisplayFrame {
-    if (this.pending?.awaiting) return this.frame;
+    const p = this.pending;
+    if (p?.awaiting) {
+      const missing = this.awaitingParam();
+      if (!missing) return this.frame;
+      return this.show(paramFrame(this.o.source, p.tool, missing, p.candidates ?? [], this.page));
+    }
     return this.show(idleFrame(this.o.source, this.tools, this.page, this.canSpeak()));
   }
 
@@ -371,6 +472,7 @@ export class Session {
         }
       }
 
+      p.candidates = candidates;
       return this.show(paramFrame(this.o.source, p.tool, missing, candidates, this.page));
     }
 
@@ -379,6 +481,10 @@ export class Session {
     if (g.requiresConfirmation) {
       p.confirmShownAt = this.now();
       p.targetLabel = describeArgs(p.args) || label(p.tool);
+      // Declared on Pending since the gate was written, and never once
+      // assigned, so every confirm frame carried `undefined` and the panel's
+      // severity line never rendered. The value was sitting in `g` throughout.
+      p.consequence = g.consequence;
       this.audit({
         kind: "gate",
         toolName: p.tool.name,
@@ -416,6 +522,23 @@ export class Session {
   private async execute(): Promise<DisplayFrame> {
     const p = this.pending;
     if (!p) return this.frame;
+
+    // One approval is one execution.
+    //
+    // Every message from the glasses is handled in its own detached task, and
+    // nothing on a cursorless display disables a choice once it has been
+    // pressed, so a double tap on a confirm frame arrives as two independent
+    // confirmations. Both used to pass the freshness check, because both saw
+    // the same `confirmShownAt`, and `pending` is not cleared until the first
+    // result comes back. That invoked a gated tool twice on one human yes,
+    // which on a real merchant is a second charge.
+    //
+    // The lock lives here rather than in the transport because this is the
+    // layer that owns the rule. A guarantee that holds only while the relay
+    // remembers to filter stale frame ids is not a guarantee.
+    if (this.executing === p) return this.frame;
+    this.executing = p;
+
     this.show(workingFrame(this.o.source, p.tool));
 
     const ctrl = new AbortController();
@@ -478,6 +601,13 @@ export class Session {
       this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
     } finally {
       if (timer !== undefined) clearTimeout(timer);
+      // Released on every exit, including the timeout, because the error frame
+      // for a read offers a retry and that retry has to be able to run. Only
+      // reads are ever offered one, so releasing here cannot resurrect the
+      // double-invocation this lock exists to stop. Guarded because a wearer
+      // who cancelled and started something else must not have THEIR lock
+      // cleared by the call they walked away from.
+      if (this.executing === p) this.executing = null;
     }
     return this.frame;
   }
@@ -531,20 +661,46 @@ function coerce(v: string, param?: ParamSpec): unknown {
  * a real invocation would bypass the gate without anyone touching the gate,
  * which is precisely the class of thing this file exists to make impossible.
  */
+/**
+ * Reduce a proposal to what the site actually declared, by NAME and by VALUE.
+ *
+ * It used to filter names only, which made this check strictly weaker than the
+ * one in `packages/planner` and left the difference reachable. A `Planner` is
+ * a port: another implementation reaches here without passing through that
+ * package at all. So `party_size: 9999` went to a site that declared
+ * `enum: [1,2,3,4]`, and an object argument went with it, invisible on the
+ * confirmation frame the wearer approved.
+ *
+ * `valueForParam` is the one implementation of that rule, shared with the
+ * planner, so the two cannot drift apart.
+ */
 function declaredArgs(
   tool: ToolDescriptor,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  const declared = new Set(parameters(tool).map((p) => p.name));
+  const specs = new Map(parameters(tool).map((p) => [p.name, p]));
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(args)) if (declared.has(k)) out[k] = v;
+  for (const [k, v] of Object.entries(args)) {
+    const spec = specs.get(k);
+    if (!spec) continue;
+    const value = valueForParam(v, spec);
+    if (value !== undefined) out[k] = value;
+  }
   return out;
 }
 
 /** A short, honest description of what is about to happen. */
+/**
+ * What the wearer is shown they are approving.
+ *
+ * Every value, never a filtered subset. This used to keep only strings and
+ * numbers, so anything else was sent but not displayed: the wearer approved a
+ * call containing an argument the frame never mentioned. `declaredArgs` now
+ * guarantees the values are displayable scalars, and rendering all of them
+ * means a future change to that cannot quietly reintroduce a hidden argument.
+ */
 function describeArgs(args: Record<string, unknown>): string {
-  const vals = Object.values(args).filter((v) => typeof v === "string" || typeof v === "number");
-  return vals.length ? vals.map(String).join(", ") : "";
+  return Object.values(args).map(String).join(", ");
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   outcomeFromResult,
   parameters,
   paramFrame,
+  toolId,
 } from "./index.js";
 
 const tool = (p: Partial<ToolDescriptor>): ToolDescriptor => ({
@@ -160,12 +161,31 @@ describe("results become the next frame's choices", () => {
 
 describe("the gate", () => {
   it("offers confirm and cancel, with cancel marked dangerous", () => {
-    const f = confirmFrame("Shop", tool({ name: "add_to_cart" }), "Organic oat milk", "$4.29");
+    const f = confirmFrame("Shop", tool({ name: "add_to_cart" }), "Organic oat milk", "financial");
     if (f.kind !== "confirm") throw new Error("unreachable");
     expect(f.target).toBe("Organic oat milk");
-    expect(f.consequence).toBe("$4.29");
     expect(f.choices.map((c) => c.id)).toEqual(["__confirm", "__cancel"]);
     expect(f.choices[1]!.tone).toBe("danger");
+  });
+
+  /*
+   * The argument is the ceremony `packages/policy` assigned, not free text.
+   * It used to be passed through verbatim, and this test handed it "$4.29",
+   * which is not a consequence and which nothing in the product ever sent:
+   * the session passed a field it never assigned, so every real confirm frame
+   * carried `undefined` and the severity line never rendered at all.
+   */
+  it("says what approving it will do, in words the panel can show", () => {
+    const say = (c?: string) => {
+      const f = confirmFrame("Shop", tool({ name: "x" }), "target", c);
+      return f.kind === "confirm" ? f.consequence : undefined;
+    };
+    expect(say("financial")).toMatch(/money/i);
+    expect(say("destructive")).toMatch(/undone/i);
+    expect(say("write")).toBeTruthy();
+    // A read never reaches the gate, so it has nothing to say here.
+    expect(say("read")).toBeUndefined();
+    expect(say(undefined)).toBeUndefined();
   });
 });
 
@@ -304,7 +324,9 @@ describe("saying what you want", () => {
     const f = idleFrame("Shop", [t("a"), t("b")], 0, true);
     if (f.kind !== "idle") throw new Error("unreachable");
     // Last, so a new menu focuses an action rather than opening a text field.
-    expect(f.choices.map((c) => c.id)).toEqual(["a", "b", "__compose"]);
+    // Tool rows carry a qualified id, because a bare name belongs to whichever
+    // origin registered it and two origins may register the same one.
+    expect(f.choices.map((c) => c.id)).toEqual([toolId(t("a")), toolId(t("b")), "__compose"]);
     expect(f.note).toContain("speak");
   });
 
@@ -313,7 +335,7 @@ describe("saying what you want", () => {
   it("offers nothing to speak into when nothing could interpret it", () => {
     const f = idleFrame("Shop", [t("a")], 0, false);
     if (f.kind !== "idle") throw new Error("unreachable");
-    expect(f.choices.map((c) => c.id)).toEqual(["a"]);
+    expect(f.choices.map((c) => c.id)).toEqual([toolId(t("a"))]);
     expect(f.note).not.toContain("speak");
   });
 
@@ -325,5 +347,40 @@ describe("saying what you want", () => {
       expect(f.choices.at(-1)?.id, `page ${page}`).toBe("__compose");
       expect(f.choices.length, `page ${page} must fit 600x600`).toBeLessThanOrEqual(MAX_CHOICES);
     }
+  });
+
+  // The session increments `page` forever and never asks how many there are,
+  // so paging has to terminate here or not at all. It used to clamp, which
+  // meant the last page answered "More" with a byte-identical frame.
+  it("wraps to the first page rather than redrawing the last one", () => {
+    const many = ["a", "b", "c", "d", "e", "f"].map(t);
+    const labels = (page: number) => {
+      const f = idleFrame("Shop", many, page, true);
+      if (f.kind !== "idle") throw new Error("unreachable");
+      return f.choices.filter((c) => c.id !== "__more" && c.id !== "__compose").map((c) => c.label);
+    };
+
+    // Two tools a page once the composer and "More" have taken their slots.
+    expect(labels(0)).toEqual(["A", "B"]);
+    expect(labels(1)).toEqual(["C", "D"]);
+    expect(labels(2)).toEqual(["E", "F"]);
+    // The press that used to do nothing.
+    expect(labels(3)).toEqual(["A", "B"]);
+    expect(labels(7)).toEqual(["C", "D"]);
+  });
+
+  // Two adjacent pages that both say "2/2" tell a wearer nothing about where
+  // they are, on a panel with no scrollbar to tell them instead.
+  it("numbers the page the wearer is on, not the one the button leads to", () => {
+    const many = ["a", "b", "c", "d", "e", "f"].map(t);
+    const meta = (page: number) => {
+      const f = idleFrame("Shop", many, page, true);
+      if (f.kind !== "idle") throw new Error("unreachable");
+      return f.choices.find((c) => c.id === "__more")?.meta;
+    };
+    expect(meta(0)).toBe("1/3");
+    expect(meta(1)).toBe("2/3");
+    expect(meta(2)).toBe("3/3");
+    expect(meta(3)).toBe("1/3");
   });
 });
