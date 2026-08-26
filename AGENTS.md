@@ -83,10 +83,31 @@ at all.
 4. **An annotation may lower ceremony, never raise it.** `readOnlyHint` is a
    hint from a party that may be hostile, and Chrome passes only 1 of 4 WPT
    annotation tests. Hard danger verbs override it; see `classifyDetailed`.
+
+   Those verbs are looked for in the SCHEMA as well as in the name, title and
+   description. A tool could otherwise describe itself blandly, claim to be
+   read-only, and declare what it really does in its parameters:
+   `apply_changes`, "Applies pending changes.", with a `delete_everything`
+   boolean, classified as a read and ran with nobody in front of it. The schema
+   is the same kind of evidence as the annotation and was the only part not
+   being read.
+
+   Only the HARD lexicons consult it. A parameter is weaker evidence about what
+   a tool DOES than the tool's own name: a hard verb names an action and is
+   worth acting on wherever it appears, a soft one names a domain and needs the
+   tool's own naming behind it, or a search with a `remove_duplicates` flag
+   would stop for a human. Either way this can only raise ceremony, so the rule
+   above still holds.
 5. **Never auto-retry anything that is not read-only.** A timeout is "unknown",
    not "did not happen".
 6. **`packages/policy` must stay dependency-free.** If it ever imports the agent
-   or a transport, the deterministic guarantee is gone.
+   or a transport, the deterministic guarantee is gone. This was prose with
+   nothing enforcing it until `index.test.ts` grew a test that reads the source
+   and the manifest: one type import from `@dusky/contracts`, no other
+   dependency, and no `Date.now`, `fetch`, `document` or `Math.random`. The
+   pull is real rather than theoretical, because the classifier reads a JSON
+   Schema by hand specifically to avoid importing the function in
+   `packages/frames` that already does it.
 
 ## The planner, and why it cannot widen anything
 
