@@ -118,6 +118,12 @@ would rather they were.
 | relay | `DUSKY_PLANNER` | `on` to enable spoken requests, omit for menu-only |
 | relay | `ANTHROPIC_API_KEY` | required only when the planner is on |
 | relay | `DUSKY_AUDIT_DIR` | a directory that outlives the container, or unset for memory only |
+
+Trails on that disk are kept for a week and then expired, swept hourly and
+once at boot. That bounds a directory whose filenames are pairing codes, which
+anyone reaching the relay can invent. `/diagnostics/:id` answers "no trail for
+this code" once a trail has aged out, which is deliberately a statement about
+what is held rather than about what once happened.
 | display | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/display` |
 | console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
 | console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |
