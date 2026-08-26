@@ -1,166 +1,27 @@
 /**
- * The argument, on its own route.
+ * The machine, and nothing above it.
  *
- * Same measure, same drawn margin, same capsule as the front door. The only
- * new shape is the row of cards, and they are cards by SPACING rather than by
- * border: the page already has two vertical rules drawn on it, and a grid of
- * boxed rectangles inside a drawn frame is two framing systems arguing.
+ * Same measure, same drawn margin, same capsule as the front door. This file
+ * holds almost nothing because almost nothing on this route is chrome: the
+ * three columns are the page.
  */
 .page {
   max-width: var(--dusky-page);
   margin-inline: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s7);
-  padding-top: clamp(2rem, 6vh, 4rem);
+  padding-top: clamp(2rem, 6vh, 3.5rem);
   padding-bottom: var(--dusky-s7);
   padding-inline: var(--dusky-s5);
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s4);
-  max-width: 40rem;
-}
-
-.claim {
-  margin: 0;
-  font-weight: 300;
-  font-size: clamp(1.9rem, 4vw, 3rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  color: var(--dusky-ink-strong);
-  text-wrap: balance;
-}
-
-.lede {
-  margin: 0;
-  max-width: 58ch;
-  font-size: 1.02rem;
-  line-height: 1.55;
-  color: var(--dusky-ink-dim);
-}
-
-/* ------------------------------------------------------------------ cases */
-
-.cases {
-  list-style: none;
-  margin: 0;
+/* Named for anything that cannot see the columns, and not taking a line from
+   anything that can. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  display: grid;
-  gap: var(--dusky-s6);
-  grid-template-columns: minmax(0, 1fr);
-}
-@media (min-width: 860px) {
-  .cases {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--dusky-s5);
-  }
-}
-
-/*
- * A hairline along the top edge only, in the manner of a column rule rather
- * than a box. Three of these read as three columns of one page; three outlined
- * rectangles read as three components someone dropped in.
- */
-.case {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-  padding-top: var(--dusky-s4);
-  border-top: 1px solid var(--dusky-hair);
-  min-width: 0;
-}
-
-.kicker {
-  font-family: var(--dusky-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--dusky-accent);
-}
-
-.caseLine {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.3;
-  color: var(--dusky-ink-strong);
-  text-wrap: balance;
-}
-
-/* Named so it can be checked. */
-.evidence {
-  margin-top: auto;
-  padding-top: var(--dusky-s3);
-  font-family: var(--dusky-mono);
-  font-size: 0.72rem;
-  color: var(--dusky-ink-faint);
-  overflow-wrap: anywhere;
-}
-
-/* ------------------------------------------------------------- derivation */
-
-/* No border and no padding of its own. It is the body of this page, not an
-   inset panel on it. */
-.derivation {
-  min-width: 0;
-}
-
-/* ------------------------------------------------------------------- tail */
-
-.tail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--dusky-s5);
-  padding-top: var(--dusky-s5);
-  border-top: 1px solid var(--dusky-hair);
-}
-
-.tailBody {
-  margin: 0;
-  max-width: 54ch;
-  font-size: 0.9rem;
-  line-height: 1.55;
-  color: var(--dusky-ink-dim);
-}
-.tailBody code {
-  font-family: var(--dusky-mono);
-  font-size: 0.86em;
-  color: var(--dusky-accent);
-}
-
-.tailAction {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dusky-s3);
-  height: 3rem;
-  padding: 0 0.45rem 0 1.4rem;
-  border-radius: 999px;
-  background: var(--dusky-ink-strong);
-  /* Set on every side. The stylesheet gives every <a> a bottom border in the
-     accent, and `a:hover` outranks a single class. */
-  border: 1px solid var(--dusky-ink-strong);
-  color: var(--dusky-surface);
-  font: inherit;
-  font-size: 1rem;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
-  text-decoration: none;
-}
-.tailAction:hover {
-  background: var(--dusky-accent);
-  border-color: var(--dusky-accent);
-}
-
-.arrow {
-  display: grid;
-  place-items: center;
-  width: 2.1rem;
-  height: 2.1rem;
-  flex: none;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--dusky-surface) 20%, transparent);
-  font-size: 0.9rem;
 }

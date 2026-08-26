@@ -3,7 +3,7 @@ import { factsFromResult, isOperable, label, outcomeFromResult, parameters } fro
 import { FrameView } from "@dusky/lens";
 import { gate } from "@dusky/policy";
 import { Session, type ToolRunner } from "@dusky/session";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./Derivation.module.css";
 import { PRESETS, type Preset } from "./presets.js";
 
@@ -17,12 +17,20 @@ import { PRESETS, type Preset } from "./presets.js";
  * editable box is the whole argument: a hardcoded interface cannot answer an
  * edit.
  *
- * This was briefly split into a hook and two views, because the panel sat in
- * a cell on the front page while the boxes lived in a drawer underneath it.
- * A live panel on its own only proves that something moves. Standing next to
- * the JSON Schema it was derived from, with the schema editable, it proves
- * the thing this page exists to prove, so the two halves are back together
- * and the split that kept them in sync is gone with them.
+ * It reads left to right, and that ordering is the whole design.
+ *
+ * Declared, derived, displayed. The middle column used to sit at the BOTTOM of
+ * the page, eight hundred pixels below the two things it connects, under
+ * headings that were the names of the functions that produced them. So the two
+ * boxes had nothing visible between them, and the panel on the right read as a
+ * mock somebody had drawn next to some code. Standing between them, in words a
+ * reader owns, it is the only thing on the page that explains what the other
+ * two have to do with each other.
+ *
+ * The function names are still printed, under the plain-language label rather
+ * than instead of it. They are what make the claim checkable: every value here
+ * names the exported function that produced it, and none of those functions
+ * knows what site it is looking at.
  */
 
 /** A runner that answers from a text box. No network, no browser API, no site. */
@@ -129,13 +137,11 @@ export function Derivation() {
 
   return (
     <div className={styles.wrap}>
-      {/* A segmented control and one line about the current choice, rather
-          than four bordered cards each carrying its own paragraph. Only one of
-          those paragraphs is ever the relevant one, and the other three were
-          noise sitting above the thing they were describing. */}
+      {/* Four declarations worth looking at, and one line about the one in the
+          boxes. Cards saying the same thing sat above this and duplicated it. */}
       <div className={styles.presets}>
         <fieldset className={styles.segments}>
-          <legend className={styles.srOnly}>Example schemas</legend>
+          <legend className={styles.srOnly}>Example declarations</legend>
           {PRESETS.map((p) => (
             <button
               key={p.id}
@@ -152,32 +158,32 @@ export function Derivation() {
         <p className={styles.presetPoint}>{preset.point}</p>
       </div>
 
-      {/* Schema in, screens out, side by side. The whole point is that these
-          two are the same machine seen from either end. */}
-      <div className={styles.derive}>
-        <div className={styles.col}>
-          <h3 className={styles.h3}>
-            What the site declared
-            <span className={styles.tag}>editable</span>
-          </h3>
+      <div className={styles.pipe}>
+        <section className={styles.col}>
+          <Head n="01" title="Declared" note="by the site, over WebMCP" tag="editable" />
+          <label className={styles.field} htmlFor="tool">
+            tool
+          </label>
           <textarea
+            id="tool"
             className={styles.code}
             value={toolText}
             spellCheck={false}
-            rows={14}
+            rows={16}
             onChange={(e) => setToolText(e.target.value)}
             aria-label="Tool definition"
           />
           <p className={styles.foot}>
-            No <code>origin</code>: the browser supplies that, not the site. Here,{" "}
-            <code>{preset.origin}</code>.
+            No <code>origin</code>: the browser supplies that, not the site, which is why it is the
+            one field on a tool that can be trusted. A site also has to name Dusky&rsquo;s origin in{" "}
+            <code>exposedTo</code> before the browser hands over anything at all.
           </p>
 
-          <h3 className={styles.h3}>
-            What it returns
-            <span className={styles.tag}>editable</span>
-          </h3>
+          <label className={styles.field} htmlFor="result">
+            result
+          </label>
           <textarea
+            id="result"
             className={styles.code}
             value={resultText}
             spellCheck={false}
@@ -185,13 +191,84 @@ export function Derivation() {
             onChange={(e) => setResultText(e.target.value)}
             aria-label="Tool result"
           />
-        </div>
+        </section>
 
-        <div className={styles.col}>
-          <h3 className={styles.h3}>
-            What the wearer sees
-            <span className={styles.tag}>live, 600 x 600</span>
-          </h3>
+        <section className={styles.col}>
+          <Head n="02" title="Derived" note="no model, no network, no site in the code" />
+          {parsed.error ? (
+            <p className={styles.err}>{parsed.error}</p>
+          ) : (
+            <dl className={styles.facts}>
+              <Fact label="Called" fn="label(tool)" pkg="frames" value={tool ? label(tool) : ""} />
+              <Fact
+                label="Can be driven on six keys"
+                fn="isOperable(tool)"
+                pkg="frames"
+                value={yesNo(tool ? isOperable(tool) : false)}
+                note={
+                  tool && !isOperable(tool)
+                    ? "a required parameter cannot be collected on six keys, so it is left off the menu"
+                    : undefined
+                }
+              />
+              <Fact
+                label="Consequence"
+                fn="gate(tool).consequence"
+                pkg="policy"
+                value={g?.consequence ?? ""}
+              />
+              <Fact
+                label="Stops for a human"
+                fn="gate(tool).requiresConfirmation"
+                pkg="policy"
+                value={yesNo(g?.requiresConfirmation ?? false)}
+                note={g?.reason}
+              />
+              <Fact label="It will ask for" fn="parameters(tool)" pkg="frames">
+                {params.length === 0 ? (
+                  <span className={styles.none}>nothing</span>
+                ) : (
+                  <ul className={styles.rows}>
+                    {params.map((p) => (
+                      <li key={p.name} className={styles.row}>
+                        <code>{p.name}</code>
+                        <span className={styles.kind} data-kind={p.kind}>
+                          {p.kind}
+                        </span>
+                        <span className={styles.becomes}>{becomes(p.kind, p.required)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Fact>
+              <Fact label="It will report" fn="factsFromResult(raw)" pkg="frames">
+                {facts.length === 0 ? (
+                  <span className={styles.none}>
+                    nothing readable, so the wearer is shown the raw text
+                  </span>
+                ) : (
+                  <ul className={styles.rows}>
+                    {facts.map((f) => (
+                      <li key={f.label} className={styles.row}>
+                        <code>{f.label}</code>
+                        <span className={styles.becomes}>{f.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Fact>
+              <Fact
+                label="Counted a success"
+                fn="outcomeFromResult(raw).ok"
+                pkg="frames"
+                value={yesNo(outcome.ok)}
+              />
+            </dl>
+          )}
+        </section>
+
+        <section className={styles.col}>
+          <Head n="03" title="Displayed" note="the real build, 600 x 600" tag="live" />
           <div className={styles.stage}>
             {frame && (
               <div className={styles.panel}>
@@ -211,89 +288,72 @@ export function Derivation() {
             )}
           </div>
           <p className={styles.foot}>
-            The same component the glasses run. Click a choice, or edit the schema and watch it
-            answer.
+            The component the glasses run, over the same compiler and the same state machine. Click
+            a choice, or change the declaration and watch this answer.
           </p>
-        </div>
-      </div>
-
-      <div className={styles.readout}>
-        <div className={styles.col}>
-          <h3 className={styles.h3}>Every step, and the function that took it</h3>
-          {parsed.error ? (
-            <p className={styles.err}>{parsed.error}</p>
-          ) : (
-            <dl className={styles.steps}>
-              <Step fn="label(tool)" pkg="frames" value={tool ? label(tool) : ""} />
-              <Step
-                fn="isOperable(tool)"
-                pkg="frames"
-                value={String(tool ? isOperable(tool) : false)}
-                note={
-                  tool && !isOperable(tool)
-                    ? "a required parameter cannot be collected on six keys, so it is left off the menu"
-                    : undefined
-                }
-              />
-              <Step fn="gate(tool).consequence" pkg="policy" value={g?.consequence ?? ""} />
-              <Step
-                fn="gate(tool).requiresConfirmation"
-                pkg="policy"
-                value={String(g?.requiresConfirmation ?? false)}
-              />
-              <Step fn="gate(tool).reason" pkg="policy" value={g?.reason ?? ""} />
-              <Step fn="outcomeFromResult(raw).ok" pkg="frames" value={String(outcome.ok)} />
-            </dl>
-          )}
-        </div>
-
-        <div className={styles.col}>
-          <h3 className={styles.h3}>parameters(tool)</h3>
-          <ul className={styles.params}>
-            {params.map((p) => (
-              <li key={p.name} className={styles.param}>
-                <code>{p.name}</code>
-                <span className={styles.kind} data-kind={p.kind}>
-                  {p.kind}
-                </span>
-                <span className={styles.req}>{p.required ? "required" : "optional"}</span>
-                <span className={styles.becomes}>{becomes(p.kind, p.required)}</span>
-              </li>
-            ))}
-            {params.length === 0 && <li className={styles.none}>no parameters declared</li>}
-          </ul>
-
-          <h3 className={styles.h3}>factsFromResult(raw)</h3>
-          <ul className={styles.params}>
-            {facts.map((f) => (
-              <li key={f.label} className={styles.fact}>
-                <code>{f.label}</code>
-                <span className={styles.becomes}>{f.value}</span>
-              </li>
-            ))}
-            {facts.length === 0 && (
-              <li className={styles.none}>nothing readable, so the wearer is shown the raw text</li>
-            )}
-          </ul>
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function Step({ fn, pkg, value, note }: { fn: string; pkg: string; value: string; note?: string }) {
+/**
+ * A column heading: where it comes in the sequence, what it is, and what it is
+ * made of. Three of these, and read across they are the whole page.
+ */
+function Head({ n, title, note, tag }: { n: string; title: string; note: string; tag?: string }) {
   return (
-    <div className={styles.step}>
-      <dt className={styles.stepFn}>
-        <code>{fn}</code>
-        <span className={styles.pkg}>@dusky/{pkg}</span>
+    <header className={styles.head}>
+      <span className={styles.n}>{n}</span>
+      <h2 className={styles.h2}>{title}</h2>
+      {tag && <span className={styles.tag}>{tag}</span>}
+      <span className={styles.note}>{note}</span>
+    </header>
+  );
+}
+
+/**
+ * One thing Dusky worked out, and the function that worked it out.
+ *
+ * The label a reader can use comes first and the function name sits under it in
+ * mono. It used to be the other way round, which meant the page introduced
+ * every one of its own answers with a symbol only somebody holding the source
+ * could read.
+ */
+function Fact({
+  label: name,
+  fn,
+  pkg,
+  value,
+  note,
+  children,
+}: {
+  label: string;
+  fn: string;
+  pkg: string;
+  value?: string;
+  note?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={styles.fact}>
+      <dt className={styles.factKey}>
+        <span className={styles.factLabel}>{name}</span>
+        <code className={styles.factFn}>
+          {fn} <span className={styles.pkg}>@dusky/{pkg}</span>
+        </code>
       </dt>
-      <dd className={styles.stepVal}>
-        {value}
-        {note && <span className={styles.stepNote}>{note}</span>}
+      <dd className={styles.factVal}>
+        {children ?? value}
+        {note && <span className={styles.factNote}>{note}</span>}
       </dd>
     </div>
   );
+}
+
+/** Booleans read as answers here, not as literals. */
+function yesNo(v: boolean): string {
+  return v ? "yes" : "no";
 }
 
 /** What a parameter of this kind turns into, in one phrase. */

@@ -1,34 +1,15 @@
+/**
+ * Declared, derived, displayed. Three columns that read as one sentence.
+ *
+ * No panel borders anywhere. The page already has two vertical rules drawn down
+ * its margins; a grid of outlined rectangles inside a drawn frame is two
+ * framing systems arguing, and it is most of why this read as a debug tool
+ * rather than as a page.
+ */
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s4);
-}
-
-/*
- * A label, not a banner. These were mono, uppercase and letterspaced, which is
- * the loudest treatment in the palette and there are six of them on this page:
- * every box was introduced by something shouting at the same volume as
- * everything else, which is the same as nothing having a hierarchy at all.
- */
-.h3 {
-  margin: var(--dusky-s3) 0 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--dusky-s3);
-  font-weight: 400;
-  font-size: 0.86rem;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--dusky-ink-dim);
-}
-
-.tag {
-  font-family: var(--dusky-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--dusky-accent);
+  gap: var(--dusky-s6);
 }
 
 /* ------------------------------------------------------------- presets */
@@ -42,8 +23,8 @@
 
 /*
  * One track with the choices inside it, in the manner of a segmented control.
- * These used to be four bordered cards in a grid, which put four rectangles and
- * four paragraphs above the two rectangles that matter.
+ * These used to be four bordered cards in a grid, above three MORE cards saying
+ * roughly the same thing, and neither set looked like the one you could press.
  */
 .segments {
   display: flex;
@@ -98,38 +79,24 @@
   color: var(--dusky-ink-dim);
 }
 
-/* -------------------------------------------------------------- layout */
+/* ------------------------------------------------------------ pipeline */
 
-/**
- * Schema on the left, the screens it compiled to on the right.
- *
+/*
  * The right track is sized by the panel rather than by the page, because
  * 600 by 600 is the one measurement in this product that is not ours to
- * choose. The left takes what is left.
+ * choose. The other two split what is left, with the declaration a little
+ * wider because it holds the longest lines on the page.
  */
-.derive {
+.pipe {
   display: grid;
-  gap: var(--dusky-s5);
+  gap: var(--dusky-s6);
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
-@media (min-width: 1000px) {
-  .derive {
-    grid-template-columns: minmax(0, 1fr) 480px;
-  }
-}
-
-/* What happened in between, on the same two tracks, so the seam between the
-   columns does not move from one row of the section to the next. */
-.readout {
-  display: grid;
-  gap: var(--dusky-s5);
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-@media (min-width: 1000px) {
-  .readout {
-    grid-template-columns: minmax(0, 1fr) 480px;
+@media (min-width: 1100px) {
+  .pipe {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr) 440px;
+    gap: var(--dusky-s5);
   }
 }
 
@@ -138,6 +105,62 @@
   flex-direction: column;
   gap: var(--dusky-s2);
   min-width: 0;
+}
+
+/* --------------------------------------------------------------- heads */
+
+.head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--dusky-s2);
+  padding-bottom: var(--dusky-s2);
+  margin-bottom: var(--dusky-s2);
+  border-bottom: 1px solid var(--dusky-hair);
+}
+
+/* Where it comes in the sequence. The same 01/02/03 the discovered tool list
+   uses, so a reader who has seen one has seen the other. */
+.n {
+  font-family: var(--dusky-mono);
+  font-size: 0.68rem;
+  color: var(--dusky-ink-faint);
+}
+
+.h2 {
+  margin: 0;
+  font-weight: 400;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+  color: var(--dusky-ink-strong);
+}
+
+.tag {
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+}
+
+/* What the column is made of. Pushed to the end of the line, and allowed to
+   drop to its own when the column is too narrow to hold both. */
+.note {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--dusky-ink-faint);
+}
+
+/* ---------------------------------------------------------- declaration */
+
+/* The name of the thing in the box, in the box's own language. */
+.field {
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+  margin-top: var(--dusky-s2);
 }
 
 /*
@@ -149,7 +172,7 @@
   width: 100%;
   resize: vertical;
   font-family: var(--dusky-mono);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   line-height: 1.65;
   tab-size: 2;
   background: color-mix(in srgb, var(--dusky-ink-strong) 4%, transparent);
@@ -169,13 +192,14 @@
 }
 
 .foot {
-  margin: 0;
+  margin: var(--dusky-s1) 0 0;
   font-size: 0.8rem;
+  line-height: 1.5;
   color: var(--dusky-ink-faint);
 }
 .foot code {
   font-family: var(--dusky-mono);
-  color: var(--dusky-ink-dim);
+  color: var(--dusky-accent);
 }
 
 .err {
@@ -188,110 +212,107 @@
   font-size: 0.78rem;
 }
 
-/* --------------------------------------------------------------- steps */
+/* ------------------------------------------------------------ derived */
 
-.steps {
+.facts {
   margin: 0;
   display: flex;
   flex-direction: column;
 }
 
-.step {
+/*
+ * Label and value on one line, with the function that produced the value under
+ * the label. The value spans both rows so a long list of parameters sits beside
+ * the whole label rather than beside half of it.
+ */
+/* The label track is the wider one. `gate(tool).requiresConfirmation` is the
+   longest string on this page and it has nowhere to break, so a narrow track
+   snapped it mid-word. */
+.fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0 var(--dusky-s3);
+  padding: var(--dusky-s3) 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+.facts > .fact:last-child {
+  border-bottom: 0;
+}
+
+.factKey {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--dusky-hair-soft);
+  min-width: 0;
 }
 
-.stepFn {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--dusky-s3);
+.factLabel {
+  font-size: 0.88rem;
+  color: var(--dusky-ink-strong);
+}
+
+/* Kept, because it is what makes the value above it checkable. Demoted,
+   because it is not what anybody is reading. */
+.factFn {
   font-family: var(--dusky-mono);
-  font-size: 0.76rem;
-  color: var(--dusky-ink-dim);
+  font-size: 0.62rem;
+  color: var(--dusky-ink-faint);
+  overflow-wrap: anywhere;
 }
 
 .pkg {
-  font-size: 0.68rem;
-  color: var(--dusky-ink-faint);
+  color: color-mix(in srgb, var(--dusky-ink-faint) 70%, transparent);
 }
 
-.stepVal {
+.factVal {
+  grid-column: 2;
+  grid-row: 1;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.88rem;
   color: var(--dusky-ink-strong);
 }
 
-.stepNote {
+.factNote {
   font-size: 0.8rem;
+  line-height: 1.45;
   color: var(--dusky-ink-faint);
 }
 
-/* ---------------------------------------------------------- parameters */
-
-.params {
+.rows {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-/* A grid rather than wrapping flex, so the kind chips and the consequences
-   line up down the column instead of landing wherever the name length puts
-   them. Four fixed tracks: name, kind, whether it is required, what it
-   becomes on the panel. */
-.param {
-  display: grid;
-  grid-template-columns: minmax(6rem, max-content) max-content max-content 1fr;
+.row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--dusky-s3);
-  padding: 0.4rem 0;
-  border-bottom: 1px solid var(--dusky-hair-soft);
-  font-size: 0.86rem;
-  color: var(--dusky-ink-faint);
+  gap: 0 var(--dusky-s2);
+  min-width: 0;
 }
-.param code {
+.row code {
   font-family: var(--dusky-mono);
   font-size: 0.8rem;
   color: var(--dusky-ink-strong);
-}
-
-/* Facts are two columns, not four, so they get their own row shape. */
-.fact {
-  display: grid;
-  grid-template-columns: minmax(8rem, max-content) 1fr;
-  align-items: baseline;
-  gap: var(--dusky-s3);
-  padding: 0.4rem 0;
-  border-bottom: 1px solid var(--dusky-hair-soft);
-  font-size: 0.86rem;
-  color: var(--dusky-ink-faint);
-}
-.fact code {
-  font-family: var(--dusky-mono);
-  font-size: 0.8rem;
-  color: var(--dusky-ink-strong);
-}
-
-/* A row that is only prose, so it must not be forced into the grid tracks. */
-.none {
-  padding: 0.4rem 0;
-  font-size: 0.86rem;
-  color: var(--dusky-ink-faint);
 }
 
 .kind {
   font-family: var(--dusky-mono);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 0.1em 0.45em;
   border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
+  border-radius: 999px;
   color: var(--dusky-accent);
 }
 .kind[data-kind="unsupported"] {
@@ -299,15 +320,17 @@
   border-color: var(--dusky-warn);
 }
 
-.req {
-  font-size: 0.76rem;
-}
-
 .becomes {
+  font-size: 0.84rem;
   color: var(--dusky-ink-dim);
 }
 
-/* --------------------------------------------------------------- panel */
+.none {
+  font-size: 0.84rem;
+  color: var(--dusky-ink-faint);
+}
+
+/* ----------------------------------------------------------- displayed */
 
 /**
  * 600 x 600 is not negotiable, so the panel scales rather than reflows.
@@ -315,8 +338,8 @@
  */
 .stage {
   position: relative;
-  width: 480px;
-  height: 480px;
+  width: 440px;
+  height: 440px;
   max-width: 100%;
   overflow: hidden;
   border-radius: 16px;
@@ -331,17 +354,17 @@
 .panel {
   width: 600px;
   height: 600px;
-  transform: scale(0.8);
+  transform: scale(0.7333);
   transform-origin: top left;
 }
 
-/* Narrow enough that 480 would overflow: same square, fewer pixels. */
+/* Narrow enough that 440 would overflow: same square, fewer pixels. */
 @media (max-width: 560px) {
   .stage {
-    width: 330px;
-    height: 330px;
+    width: 320px;
+    height: 320px;
   }
   .panel {
-    transform: scale(0.55);
+    transform: scale(0.5333);
   }
 }
