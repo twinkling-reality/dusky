@@ -76,8 +76,93 @@ const OUTWARD = [
   "broadcast",
 ];
 
+/**
+ * Letters chosen to be read as Latin while not being Latin.
+ *
+ * The lexicons are ASCII and `matches` is a substring test, so a tool called
+ * `d\u0435lete_account` reads as "delete" to every human who sees it on a lens
+ * and matches nothing here. It then gets to use `readOnlyHint` and reach the
+ * wearer with no gate at all. Cheap for a site to do and invisible on a
+ * waveguide, which is the worst combination available.
+ *
+ * Lowercase only, because folding happens after `toLowerCase`.
+ */
+const CONFUSABLE: Record<string, string> = {
+  // Cyrillic
+  "\u0430": "a",
+  "\u0432": "b",
+  "\u0435": "e",
+  "\u043a": "k",
+  "\u043c": "m",
+  "\u043d": "h",
+  "\u043e": "o",
+  "\u0440": "p",
+  "\u0441": "c",
+  "\u0442": "t",
+  "\u0443": "y",
+  "\u0445": "x",
+  "\u0455": "s",
+  "\u0456": "i",
+  "\u0458": "j",
+  "\u0501": "d",
+  "\u051b": "q",
+  "\u051d": "w",
+  // Greek
+  "\u03b1": "a",
+  "\u03b2": "b",
+  "\u03b3": "y",
+  "\u03b5": "e",
+  "\u03b9": "i",
+  "\u03ba": "k",
+  "\u03bd": "v",
+  "\u03bf": "o",
+  "\u03c1": "p",
+  "\u03c4": "t",
+  "\u03c5": "u",
+  "\u03c7": "x",
+};
+
+/**
+ * Reduce site-supplied text to something the lexicons can honestly match.
+ *
+ * NFKD turns fullwidth and other compatibility spellings into plain letters
+ * and splits accents off their bases. Stripping `Cf` removes zero-width and
+ * bidi characters, which is what lets `de<ZWSP>lete` be one word again;
+ * stripping `Mn` removes the combining marks NFKD just produced.
+ */
+function fold(raw: string): string {
+  const flattened = raw
+    .normalize("NFKD")
+    .replace(/[\p{Cf}\p{Mn}]/gu, "")
+    .toLowerCase();
+  let out = "";
+  for (const ch of flattened) out += CONFUSABLE[ch] ?? ch;
+  return out;
+}
+
+/** Scripts whose letters are routinely used to impersonate Latin ones. */
+const LATIN = /\p{Script=Latin}/u;
+const LATIN_ALIKE = /[\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Armenian}\p{Script=Cherokee}]/u;
+
+/**
+ * Whether any single word mixes Latin with a script that imitates it.
+ *
+ * The backstop for confusables that are not in the table above. A wholly
+ * Cyrillic or wholly Japanese tool is a LANGUAGE and is left alone; a word
+ * that is Latin except for one Cyrillic letter is not something anyone does
+ * by accident. Such a tool does not get to lower its own ceremony, which
+ * leaves it at the default rather than declaring it dangerous: we know the
+ * claim is untrustworthy, not what the tool actually does.
+ */
+function mixesLatinAlikeScripts(raw: string): boolean {
+  for (const token of raw.split(/[\s_\-./:,()[\]{}]+/)) {
+    if (token && LATIN.test(token) && LATIN_ALIKE.test(token)) return true;
+  }
+  return false;
+}
+
 function haystack(tool: ToolDescriptor): string {
-  return `${tool.name} ${tool.title ?? ""} ${tool.description}`.toLowerCase();
+  return fold(`${tool.name} ${tool.title ?? ""} ${tool.description}`);
 }
 
 /**
@@ -107,7 +192,7 @@ function paramText(tool: ToolDescriptor): string {
       if (typeof described === "string") parts.push(described);
     }
   }
-  return parts.join(" ").toLowerCase();
+  return fold(parts.join(" "));
 }
 
 function matches(text: string, needles: readonly string[]): boolean {
@@ -129,7 +214,11 @@ export interface Classification {
  */
 export function classifyDetailed(tool: ToolDescriptor): Classification {
   const text = haystack(tool);
-  const claimsReadOnly = tool.annotations.readOnlyHint === true;
+
+  // A claim made in text that is trying to look like other text is not a claim
+  // worth honouring.
+  const spelled = `${tool.name} ${tool.title ?? ""} ${tool.description}`;
+  const claimsReadOnly = tool.annotations.readOnlyHint === true && !mixesLatinAlikeScripts(spelled);
 
   // The schema joins the HARD checks only.
   //
