@@ -137,6 +137,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@dusky/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@dusky/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -168,6 +171,12 @@ importers:
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+
+  packages/audit:
+    dependencies:
+      '@dusky/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/contracts:
     dependencies:

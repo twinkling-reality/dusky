@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AuditStore } from "@dusky/audit";
 import type {
   AgentReply,
   AgentRequest,
@@ -112,16 +113,17 @@ export class SessionActor {
   private seq = 0;
   private readonly hasPlanner: boolean;
   private readonly record: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
-  readonly audit: AuditEntry[] = [];
 
   constructor(
     readonly id: string,
     private readonly source: string,
     makePlanner?: PlannerFactory,
+    private readonly audit?: AuditStore,
   ) {
+    // The trail goes to a store rather than an array on this object, so it
+    // outlives the process that happened to be running when it was written.
     const record = (e: Omit<AuditEntry, "at" | "sessionId">) => {
-      this.audit.push({ ...e, at: new Date().toISOString(), sessionId: this.id });
-      if (this.audit.length > 500) this.audit.shift();
+      this.audit?.append({ ...e, at: new Date().toISOString(), sessionId: this.id });
     };
     this.record = record;
     this.hasPlanner = makePlanner !== undefined;
@@ -377,12 +379,15 @@ function stateFor(kind: string) {
 export class Hub {
   private sessions = new Map<string, SessionActor>();
 
-  constructor(private readonly makePlanner?: PlannerFactory) {}
+  constructor(
+    private readonly makePlanner?: PlannerFactory,
+    private readonly audit?: AuditStore,
+  ) {}
 
   get(id: string, source: string): SessionActor {
     let s = this.sessions.get(id);
     if (!s) {
-      s = new SessionActor(id, source, this.makePlanner);
+      s = new SessionActor(id, source, this.makePlanner, this.audit);
       this.sessions.set(id, s);
     }
     return s;

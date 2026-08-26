@@ -7,6 +7,7 @@ const pkg = (name: string) =>
 export default defineConfig({
   resolve: {
     alias: {
+      "@dusky/audit": pkg("audit"),
       "@dusky/contracts": pkg("contracts"),
       "@dusky/policy": pkg("policy"),
       "@dusky/frames": pkg("frames"),

@@ -182,5 +182,10 @@ Honest gaps, not oversights.
 - **How a wearer launches or exits a web app on the glasses.** Meta's own
   documentation covers deployment and the companion-app flow in detail and does
   not describe the on-device launcher at all.
-- **Audit durability.** The trail is an in-memory array capped at 500 entries.
-  It is a product feature and it currently does not survive a restart.
+- ~~**Audit durability.**~~ Resolved. The trail now goes through an
+  `AuditStore` port with a memory implementation, a JSON Lines file
+  implementation, and a tee that writes to both and reads the durable one.
+  Diagnostics reads from the store rather than from a live actor, so a session
+  that has ended, or one whose process has since been replaced, is still
+  answerable. On Render this needs a persistent disk; without one the relay
+  says so at boot rather than pretending otherwise.

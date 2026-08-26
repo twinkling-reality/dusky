@@ -98,6 +98,7 @@ would rather they were.
 | relay | `DUSKY_SOURCE` | `Verdant Market` |
 | relay | `DUSKY_PLANNER` | `on` to enable spoken requests, omit for menu-only |
 | relay | `ANTHROPIC_API_KEY` | required only when the planner is on |
+| relay | `DUSKY_AUDIT_DIR` | a directory that outlives the container, or unset for memory only |
 | display | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/display` |
 | console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
 | console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |

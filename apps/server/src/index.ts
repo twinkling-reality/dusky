@@ -1,4 +1,6 @@
-import type { ConsoleToServer, DisplayToServer } from "@dusky/contracts";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { type AuditStore, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "@dusky/audit";
+import type { AuditEntry, ConsoleToServer, DisplayToServer } from "@dusky/contracts";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -20,18 +22,67 @@ import { plannerFactory } from "./planner.js";
 const PORT = Number(process.env["PORT"] ?? 7900);
 const SOURCE = process.env["DUSKY_SOURCE"] ?? "Verdant Market";
 
-const hub = new Hub(plannerFactory());
+/**
+ * Where the audit trail is kept.
+ *
+ * Memory alone was the old behaviour and loses everything on a deploy, which
+ * is not acceptable for something described as a product feature. Set
+ * DUSKY_AUDIT_DIR to a directory that outlives the container and the trail
+ * outlives it too; without one, Dusky is honest about being ephemeral rather
+ * than pretending otherwise.
+ */
+const auditDir = process.env["DUSKY_AUDIT_DIR"];
+const memory = new MemoryAuditStore();
+const audit: AuditStore = auditDir
+  ? new TeeAuditStore(
+      memory,
+      new FileAuditStore({
+        dir: auditDir,
+        fs: { mkdir, appendFile, readFile },
+        onError: (err) => console.warn(`dusky: audit write failed: ${err.message}`),
+      }),
+    )
+  : memory;
+console.log(
+  auditDir
+    ? `dusky: audit trail persisted to ${auditDir}`
+    : "dusky: audit trail is in memory only and will not survive a restart",
+);
+
+const hub = new Hub(plannerFactory(), audit);
 const app = new Hono();
 
 app.use("*", cors({ origin: (o) => o ?? "*", credentials: false }));
 
 app.get("/health", (c) => c.json({ ok: true, sessions: hub.list().length }));
 
-/** Developer diagnostics. Deliberately separate from the wearer experience. */
-app.get("/diagnostics/:id", (c) => {
-  const actor = hub.peek(c.req.param("id").toUpperCase());
-  if (!actor) return c.json({ error: "no such session" }, 404);
-  return c.json({ id: actor.id, audit: actor.audit });
+/**
+ * Developer diagnostics. Deliberately separate from the wearer experience.
+ *
+ * Reads from the STORE rather than from a live actor, so the trail of a
+ * session that has since ended, or that belonged to a process which has since
+ * been replaced, is still answerable.
+ *
+ * Knowing a pairing code is already enough to pair a console to that session,
+ * so this endpoint grants nothing that the code did not already grant. It is
+ * one more reason a code is a credential and should not be posted anywhere.
+ */
+app.get("/diagnostics/:id", async (c) => {
+  const id = c.req.param("id").toUpperCase();
+  const kindsParam = c.req.query("kinds");
+  const limitParam = Number(c.req.query("limit") ?? "");
+  const entries = await audit.read(id, {
+    kinds: kindsParam ? (kindsParam.split(",") as AuditEntry["kind"][]) : undefined,
+    limit: Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined,
+  });
+  if (entries.length === 0 && !hub.peek(id)) return c.json({ error: "no such session" }, 404);
+  return c.json({
+    id,
+    live: hub.peek(id) !== undefined,
+    durable: auditDir !== undefined,
+    count: entries.length,
+    audit: entries,
+  });
 });
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {

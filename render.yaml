@@ -22,8 +22,20 @@ services:
     # lockfile-mismatch failure readable from the build log alone.
     buildCommand: pnpm --version && pnpm install --prod --frozen-lockfile
     startCommand: pnpm --filter @dusky/app-server start
+    # The audit trail is a product feature, so it has to outlive the process.
+    # A disk costs about $0.25/month and pins the service to one instance with
+    # no zero-downtime deploys, which costs this relay nothing: the Hub keeps
+    # session actors in memory and is already single-instance by construction.
+    # Remove the disk and DUSKY_AUDIT_DIR together, and the trail goes back to
+    # being ephemeral rather than silently half-persisted.
+    disk:
+      name: dusky-audit
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       # Render supplies PORT and the server reads it.
+      - key: DUSKY_AUDIT_DIR
+        value: /var/data/audit
       - key: DUSKY_SOURCE
         value: Verdant Market
       # Turn the planner on to enable spoken requests and send_task_to_display.

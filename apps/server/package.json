@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dusky/audit": "workspace:*",
     "@dusky/contracts": "workspace:*",
     "@dusky/frames": "workspace:*",
     "@dusky/planner": "workspace:*",
