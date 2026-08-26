@@ -121,6 +121,11 @@ at all.
    Schema by hand specifically to avoid importing the function in
    `packages/frames` that already does it.
 
+   The edge in the other direction is fine and is now used: `packages/frames`
+   imports `classify` to order the wearer's menu. Policy is the deterministic
+   layer everything else may consult, which is only true while it consults
+   nothing.
+
 ## The planner, and why it cannot widen anything
 
 `packages/planner` implements the `Planner` port that `packages/session`
@@ -294,6 +299,12 @@ These are in `packages/webmcp`, the only file allowed to know them:
 - Flag: `--enable-features=WebMCPTesting`, matching
   `chrome://flags/#enable-webmcp-testing`.
 - Tool ordering from `getTools` is the browser's business. Never depend on it.
+  The wearer's menu did, until `menuOrder` in `packages/frames` gave it a total
+  order of its own: the ceremony `packages/policy` assigns, then the label,
+  then `toolId`. That is why the row a wearer lands on is a read whenever the
+  source offers one, and why the same source produces the same menu twice. The
+  argument for that order, and the three alternatives it turns down, are in the
+  comment above it rather than here.
 - **`getTools({fromOrigins})` also returns THIS document's own registered tools**,
   even when `fromOrigins` names only other origins. Verified 2026-08-26 against
   151.0.7922.174, the day Dusky started registering tools of its own and
