@@ -117,6 +117,14 @@ Enter a name and `https://dusky-display.vercel.app`. That is the whole install.
 A QR code is optional. It encodes exactly the same two values and simply
 automates typing them:
 
+```bash
+node scripts/glasses-qr.mjs --url https://dusky-display.vercel.app
+```
+
+That prints a QR in the terminal for your phone camera to read directly, and
+refuses a URL the glasses could never reach. Add `--out dusky-qr.png` for a
+file. The link it encodes is:
+
 ```
 fb-viewapp://web_app_deep_link?appName=<name>&appUrl=<url-encoded-url>
 ```
