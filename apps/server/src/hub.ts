@@ -107,6 +107,8 @@ class RemoteToolRunner implements ToolRunner {
 export class SessionActor {
   private display: WebSocket | null = null;
   private consoleSock: WebSocket | null = null;
+  /** When anything last happened here, for the Hub's idle sweep. */
+  private lastActivity: number;
   private readonly runner: RemoteToolRunner;
   private session: Session;
   private frameId = "0";
@@ -119,7 +121,11 @@ export class SessionActor {
     private source: string,
     private readonly makePlanner?: PlannerFactory,
     private readonly audit?: AuditStore,
+    // One clock for the whole hub, so the idle sweep is a decision about
+    // elapsed time rather than about whatever the wall clock happens to say.
+    private readonly clock: () => number = () => Date.now(),
   ) {
+    this.lastActivity = clock();
     // The trail goes to a store rather than an array on this object, so it
     // outlives the process that happened to be running when it was written.
     const record = (e: Omit<AuditEntry, "at" | "sessionId">) => {
@@ -175,7 +181,31 @@ export class SessionActor {
     });
   }
 
+  /** Record that this session is in use. Idempotent and very cheap. */
+  touch(at: number = this.clock()): void {
+    this.lastActivity = at;
+  }
+
+  /** Nothing is holding this session open right now. */
+  private hasSockets(): boolean {
+    return this.display?.readyState === 1 || this.consoleSock?.readyState === 1;
+  }
+
+  /**
+   * Safe to forget.
+   *
+   * Only ever true with no live socket on either side, so a wearer whose
+   * glasses are simply idle is never dropped out from under them. The audit
+   * trail is unaffected: it goes through `AuditStore`, and diagnostics reads
+   * from the store rather than from a live actor, so a forgotten session is
+   * still answerable.
+   */
+  disposable(at: number, ttlMs: number): boolean {
+    return !this.hasSockets() && at - this.lastActivity > ttlMs;
+  }
+
   attachDisplay(sock: WebSocket): void {
+    this.touch();
     this.display?.close();
     this.display = sock;
     // Say NOTHING until a browser has paired.
@@ -231,6 +261,7 @@ export class SessionActor {
   }
 
   async onDisplayMessage(msg: DisplayToServer): Promise<void> {
+    this.touch();
     switch (msg.t) {
       case "hello":
         return;
@@ -445,21 +476,56 @@ function stateFor(kind: string) {
   }
 }
 
+/**
+ * How long a session with nothing connected to it is kept.
+ *
+ * Generous, because the cost of being wrong is asymmetric: forgetting too
+ * early strands a wearer whose glasses were merely asleep, and forgetting too
+ * late costs a few hundred bytes.
+ */
+export const IDLE_TTL_MS = 30 * 60_000;
+
 export class Hub {
   private sessions = new Map<string, SessionActor>();
 
   constructor(
     private readonly makePlanner?: PlannerFactory,
     private readonly audit?: AuditStore,
+    private readonly now: () => number = () => Date.now(),
   ) {}
 
   get(id: string, source: string): SessionActor {
     let s = this.sessions.get(id);
     if (!s) {
-      s = new SessionActor(id, source, this.makePlanner, this.audit);
+      s = new SessionActor(id, source, this.makePlanner, this.audit, this.now);
       this.sessions.set(id, s);
     }
+    s.touch(this.now());
     return s;
+  }
+
+  /**
+   * Forget sessions nothing is connected to any more.
+   *
+   * This map used to only ever grow. `get` inserted and nothing ever deleted,
+   * while the key space is pairing codes, which anyone reaching the relay can
+   * invent. `packages/audit` had already written the rule down: an unbounded
+   * map keyed on anything a stranger can create is a memory leak with extra
+   * steps. It was carrying one.
+   */
+  sweep(at: number = this.now(), ttlMs: number = IDLE_TTL_MS): number {
+    let gone = 0;
+    for (const [id, actor] of this.sessions) {
+      if (!actor.disposable(at, ttlMs)) continue;
+      this.sessions.delete(id);
+      gone += 1;
+    }
+    return gone;
+  }
+
+  /** How many sessions are held right now. Reported by `/health`. */
+  size(): number {
+    return this.sessions.size;
   }
 
   peek(id: string): SessionActor | undefined {
