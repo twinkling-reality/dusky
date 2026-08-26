@@ -1,0 +1,85 @@
+/**
+ * Shared design tokens.
+ *
+ * Two palettes live here and they are not variants of each other:
+ *
+ *   --dusky-*  the operator console. A quiet, near-monochrome reading surface.
+ *   --emit-*   the Display. Emitted light on an additive waveguide, where the
+ *              ground is absent rather than dark. Never themed, never inverted.
+ */
+
+:root {
+  /* Console, light */
+  --dusky-ground: #fbfbfa;
+  --dusky-raised: #ffffff;
+  --dusky-sunken: #f2f3f2;
+  --dusky-hair: #d9dcda;
+  --dusky-hair-soft: #e8eae8;
+  --dusky-ink: #2b3132;
+  --dusky-ink-strong: #0e1213;
+  --dusky-ink-dim: #6b7473;
+  --dusky-ink-faint: #9aa3a2;
+  --dusky-accent: #1e7c79;
+  --dusky-accent-soft: #bfe0de;
+  --dusky-ok: #2f7d51;
+  --dusky-warn: #8a6420;
+  --dusky-stop: #a8443a;
+
+  /* Display, never themed */
+  --emit-ground: #000000;
+  --emit-dim: #4f6d6c;
+  --emit-body: #b9cfcd;
+  --emit-bright: #f2fcfb;
+  --emit-accent: #6fd6d2;
+  --emit-ok: #7fcfa0;
+  --emit-warn: #d8b471;
+  --emit-danger: #db8c80;
+
+  --dusky-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --dusky-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --dusky-s1: 0.25rem;
+  --dusky-s2: 0.5rem;
+  --dusky-s3: 0.75rem;
+  --dusky-s4: 1rem;
+  --dusky-s5: 1.5rem;
+  --dusky-s6: 2rem;
+  --dusky-s7: 3rem;
+  --dusky-radius: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --dusky-ground: #0b0d0e;
+    --dusky-raised: #14181a;
+    --dusky-sunken: #090b0c;
+    --dusky-hair: #242a2c;
+    --dusky-hair-soft: #1a1f21;
+    --dusky-ink: #cbd2d4;
+    --dusky-ink-strong: #eef3f4;
+    --dusky-ink-dim: #79847f;
+    --dusky-ink-faint: #4e585a;
+    --dusky-accent: #6fd6d2;
+    --dusky-accent-soft: #2e4e4f;
+    --dusky-ok: #7fcfa0;
+    --dusky-warn: #d8b471;
+    --dusky-stop: #db8c80;
+  }
+}
+
+:root[data-theme="dark"] {
+  --dusky-ground: #0b0d0e;
+  --dusky-raised: #14181a;
+  --dusky-sunken: #090b0c;
+  --dusky-hair: #242a2c;
+  --dusky-hair-soft: #1a1f21;
+  --dusky-ink: #cbd2d4;
+  --dusky-ink-strong: #eef3f4;
+  --dusky-ink-dim: #79847f;
+  --dusky-ink-faint: #4e585a;
+  --dusky-accent: #6fd6d2;
+  --dusky-accent-soft: #2e4e4f;
+  --dusky-ok: #7fcfa0;
+  --dusky-warn: #d8b471;
+  --dusky-stop: #db8c80;
+}
