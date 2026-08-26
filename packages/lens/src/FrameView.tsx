@@ -123,7 +123,21 @@ export function FrameView({
           {choices.map((c, i) => (
             <li key={c.id}>
               {c.id === "__compose" && onText ? (
+                /*
+                 * Keyed on the frame, not on the choice id.
+                 *
+                 * The choice id is "__compose" on every frame that offers a
+                 * composer, so two free-text parameters in a row reconciled
+                 * to the SAME Composer instance: `sent` was still true from
+                 * the first answer and the first answer's text was still in
+                 * the field, so the second question could not be answered at
+                 * all. Escape, which throws away every answer so far, was the
+                 * only way out. A planner masks this because the busy frame
+                 * in between unmounts the list, and the planner is off by
+                 * default, so the shipping configuration was the broken one.
+                 */
                 <Composer
+                  key={frameKey}
                   ref={register(i)}
                   placeholder={c.label}
                   focused={index === i}

@@ -82,13 +82,26 @@ export function App() {
 /** Shown before a console has paired: one glance, one number. */
 function pairingFrame(sessionId: string, link: string): DisplayFrame {
   if (link === "offline") {
+    // No "Try again" here, deliberately.
+    //
+    // It used to offer one, and it was the only control on the frame, so it
+    // was the focused one. Pressing it called `relay.choose`, which calls
+    // `send`, which DROPS the message when the socket is not open. Nothing
+    // went anywhere, so no frame came back, so `frameKey` never changed, so
+    // the local gesture acknowledgement never cleared and the hairline swept
+    // forever. The wearer's only affordance looked like it had hung the
+    // panel.
+    //
+    // `useRelay` is already retrying on its own, forever, at four seconds a
+    // go. Saying so is both true and more useful than a button that cannot
+    // reach anything by definition.
     return {
       kind: "error",
       source: "Dusky",
       title: "Cannot reach Dusky",
-      detail: "The session relay is unreachable.",
-      retryable: true,
-      choices: [{ id: "__retry", label: "Try again", meta: "enter" }],
+      detail: "The session relay is unreachable. Still trying.",
+      retryable: false,
+      choices: [],
     };
   }
   // The CODE is the content of this frame, so it gets the frame's largest and
