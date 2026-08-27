@@ -73,8 +73,15 @@ export type DisplayFrame =
       kind: "confirm";
       source: string;
       title: string;
-      /** The exact thing being acted on. Comes from the tool, never from prose. */
-      target: string;
+      /**
+       * The exact thing being acted on. Comes from the tool, never from prose.
+       *
+       * Optional, because a tool that takes no arguments has nothing to name.
+       * It used to fall back to the tool's own label, which the title above is
+       * already set from, so `empty_cart` asked a wearer to confirm
+       * "Empty cart / Empty cart".
+       */
+      target?: string;
       /** Price, permanence, refundability. Omitted when genuinely unknown. */
       consequence?: string;
       choices: Choice[];

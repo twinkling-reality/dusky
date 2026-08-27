@@ -471,7 +471,7 @@ function consequenceNote(consequence?: string): string | undefined {
 export function confirmFrame(
   source: string,
   tool: ToolDescriptor,
-  target: string,
+  target?: string,
   consequence?: string,
 ): DisplayFrame {
   const note = consequenceNote(consequence);
@@ -479,7 +479,7 @@ export function confirmFrame(
     kind: "confirm",
     source,
     title: label(tool),
-    target,
+    ...(target !== undefined && target !== "" ? { target } : {}),
     ...(note !== undefined ? { consequence: note } : {}),
     choices: [
       { id: "__confirm", label: "Confirm", meta: "enter" },

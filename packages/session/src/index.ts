@@ -531,7 +531,16 @@ export class Session {
     const g = gate(p.tool);
     if (g.requiresConfirmation) {
       p.confirmShownAt = this.now();
-      p.targetLabel = describeArgs(p.args) || label(p.tool);
+      /*
+       * No fallback to the tool's own label.
+       *
+       * `confirmFrame` already sets the title from `label(tool)`, so falling
+       * back here printed the same words twice: a wearer confirming
+       * `empty_cart`, which takes no arguments, read "Empty cart" above
+       * "Empty cart". A tool with nothing to name gets no target line.
+       */
+      const described = describeArgs(p.args);
+      if (described) p.targetLabel = described;
       // Declared on Pending since the gate was written, and never once
       // assigned, so every confirm frame carried `undefined` and the panel's
       // severity line never rendered. The value was sitting in `g` throughout.

@@ -93,7 +93,9 @@ export function FrameView({
 
         {frame.kind === "confirm" && (
           <>
-            <p className={styles.target}>{frame.target}</p>
+            {/* A tool with no arguments has nothing to name here, and the
+                title above already carries its label. */}
+            {frame.target && <p className={styles.target}>{frame.target}</p>}
             {frame.consequence && <p className={styles.consequence}>{frame.consequence}</p>}
           </>
         )}
