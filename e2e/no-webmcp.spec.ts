@@ -37,3 +37,37 @@ test("a browser that cannot speak WebMCP is not reported as an empty site", asyn
   await expect(panel).not.toContainText(/declared/i);
   await expect(panel).not.toContainText(/has not offered any actions/i);
 });
+
+test("the embedded panel says the same thing, on the path a judge actually takes", async ({
+  page,
+}) => {
+  /*
+   * The test above drives ?mode=glasses, which is the path somebody with
+   * hardware takes. Nobody without hardware takes it. The front door's one
+   * button goes to ?start=1, which mints a session and embeds the Display, and
+   * that path had no coverage here at all: an unflagged browser could have been
+   * told this source "has not offered any actions", which is a claim about
+   * somebody else's site made by a browser that never looked.
+   */
+  await page.goto("http://localhost:7803/demo?start=1");
+  const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
+  const panel = lens.locator("div[data-kind]");
+
+  await expect(panel).toContainText(/cannot reach this source/i, { timeout: 30_000 });
+  await expect(panel).toContainText(/WebMCP is not enabled/i);
+  await expect(panel).not.toContainText(/has not offered any actions/i);
+  await expect(panel).not.toContainText(/No actions available/i);
+
+  // Retrying, switching source and reloading all keep telling the truth. Each
+  // one re-runs discovery, and each one is a chance to answer "empty" instead
+  // of "could not look".
+  await lens.getByRole("button", { name: /Try again/ }).click();
+  await expect(panel).toContainText(/cannot reach this source/i);
+
+  await page.getByRole("button", { name: "Amber & Oak" }).click();
+  await expect(panel).toContainText(/cannot reach this source/i);
+  await expect(panel).not.toContainText(/has not offered any actions/i);
+
+  await page.reload();
+  await expect(panel).toContainText(/cannot reach this source/i, { timeout: 30_000 });
+});
