@@ -146,11 +146,32 @@ export function App() {
 
       <header className={styles.head}>
         <h1 className={styles.title}>Verdant Market</h1>
-        <p className={styles.sub}>
-          A first-party WebMCP service built to exercise Dusky&rsquo;s tool discovery, schema
-          translation and synchronised state. Nothing here is sold.
-        </p>
       </header>
+
+      {/*
+        The cart is first, and boxed.
+
+        It was under the catalogue, which put it about 200px below the fold of
+        the 450px panel Dusky embeds this page in. The cart is the ONLY thing on
+        this page that changes when a tool runs, so the proof that anything
+        happened was the one thing nobody could see: you would add oat milk,
+        confirm it on the lens, and watch the shop sit there.
+      */}
+      <section className={styles.section}>
+        <h2 className={styles.h2}>Cart</h2>
+        <p className={styles.cartBox}>
+          <span className={styles.cart} data-testid="cart">
+            {cart.length ? (
+              <>
+                <strong>{cart.map((c) => c.name).join(", ")}</strong>
+                <span className={styles.num}> {money(total)}</span>
+              </>
+            ) : (
+              "empty"
+            )}
+          </span>
+        </p>
+      </section>
 
       <section className={styles.section}>
         <h2 className={styles.h2}>Catalog</h2>
@@ -162,20 +183,6 @@ export function App() {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.h2}>Cart</h2>
-        <p className={styles.cart} data-testid="cart">
-          {cart.length ? (
-            <>
-              <strong>{cart.map((c) => c.name).join(", ")}</strong>
-              <span className={styles.num}> {money(total)}</span>
-            </>
-          ) : (
-            "empty"
-          )}
-        </p>
       </section>
 
       <p className={styles.origin}>

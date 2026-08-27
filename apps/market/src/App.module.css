@@ -34,13 +34,6 @@
   color: var(--dusky-ink-strong);
 }
 
-.sub {
-  margin: 0;
-  color: var(--dusky-ink-dim);
-  font-size: 0.9rem;
-  max-width: 52ch;
-}
-
 .section {
   display: flex;
   flex-direction: column;
@@ -105,7 +98,7 @@
   font-family: var(--dusky-mono);
   font-size: 0.73rem;
   line-height: 1.7;
-  background: var(--dusky-sunken);
+  background: var(--dusky-surface);
   border: 1px solid var(--dusky-hair-soft);
   border-radius: var(--dusky-radius);
   padding: var(--dusky-s3);
@@ -124,4 +117,20 @@
   font-size: 0.84rem;
   color: var(--dusky-ink-faint);
   max-width: 52ch;
+}
+
+/*
+ * The cart, boxed and first on the page.
+ *
+ * This is the only element here that changes when Dusky runs a tool, and it
+ * used to sit under the catalogue, roughly 200px below the fold of the panel
+ * Dusky embeds this page in. Boxed so it reads as a live value rather than as
+ * one more line of the page.
+ */
+.cartBox {
+  margin: 0;
+  padding: var(--dusky-s3) var(--dusky-s4);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius);
+  background: var(--dusky-surface);
 }
