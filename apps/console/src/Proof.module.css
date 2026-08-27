@@ -21,6 +21,22 @@
  * size the figures use, so the prose and the pictures share one edge and the
  * column reads as a column rather than as text with things beside it.
  */
+/*
+ * A title, at the size a title gets. Not the front door's display size: that
+ * page is making a claim and this one is explaining a mechanism, and the two
+ * jobs do not take the same weight.
+ */
+.title {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto 0.9em;
+  font-weight: 300;
+  font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--dusky-ink-strong);
+}
+
 .read {
   width: 100%;
   max-width: 34rem;
@@ -67,17 +83,4 @@
 .wide {
   width: min(58rem, 100%);
   margin: 2.2em auto 0;
-}
-
-/* Named for anything that cannot see the page, and not taking a line from
-   anything that can. */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }

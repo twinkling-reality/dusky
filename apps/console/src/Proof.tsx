@@ -42,10 +42,18 @@ export function Proof() {
       </SiteHeader>
 
       <main className={styles.page}>
-        {/* The document needs a name. The page does not print it: the first
-            paragraph is the lead, and a display headline above a lead was one
-            of the four registers this page kept accumulating. */}
-        <h1 className={styles.srOnly}>Where the screen comes from</h1>
+        {/*
+          Visible, and it was not for one build.
+          
+          The reasoning for hiding it was that a headline above a lead paragraph
+          is a second register saying what the paragraph says. That is true of a
+          MARKETING headline and false of a title: the reference this page is
+          built on carries one at full size, and a reader arriving from a nav
+          item has had nothing else to tell them where they are. Landing on a
+          paragraph that opens "Dusky never sees what a website looks like" with
+          no title above it is exactly as disorienting as it sounds.
+        */}
+        <h1 className={styles.title}>Where the screen comes from</h1>
 
         <article className={styles.read}>
           <p>
