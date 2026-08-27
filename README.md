@@ -1,144 +1,128 @@
 # Dusky
 
-A browser for a web made of tools instead of pages.
+**Turn web actions into augmented reality.**
 
-Dusky turns a website's declared [WebMCP](https://github.com/webmachinelearning/webmcp) tools
-into a glanceable, gesture-driven interface for Meta Ray-Ban Display: a 600x600
-additive waveguide with six keys of input and no cursor. Instead of rendering a
-page you cannot read, Dusky reads the actions the site chose to publish and asks
-you one question at a time.
+Dusky uses [WebMCP](https://github.com/webmachinelearning/webmcp) to turn website
+capabilities into dynamic, actionable interfaces for AR displays, starting with
+Meta Ray-Ban Display.
 
-There is no per-site integration anywhere in this repository. Point Dusky at a
-participating site and the interface is derived from that site's tool schemas.
+## Why
 
-Two first-party services are included so that claim can be checked rather than
-believed. Verdant Market sells things; Amber & Oak holds tables. They declare a
-different number of tools, use different parameter types, and return completely
-different result shapes. The same Dusky drives both, and adding the second one
-changed nothing inside it.
+Smart glasses are the wearable that is going to stick. A headset like Vision Pro
+or Quest has a display better than most laptops and nobody wears one down the
+street. Glasses have the form factor people already accept, adoption has climbed
+every year, and Google and Samsung are building Android XR with Warby Parker and
+Gentle Monster as eyewear partners. This stops being a curiosity and becomes a
+daily-carry device.
 
-## Try it without glasses
+The price of that form factor is the screen. Meta Ray-Ban Display is the one
+shipping with a display today, and it is 600x600, six keys of input, no cursor,
+no pointer. You cannot reflow a website onto that. Responsive design is about
+layout, and there is no layout small enough.
 
-The Display client is an ordinary web page. The glasses translate Neural Band
-pinches and temple swipes into arrow keys and Enter, so **the same build runs in
-your browser, driven by the same code path**. What you cannot see without
-hardware is the waveguide, not the product.
+So take the actions instead of the page. A site that speaks WebMCP publishes what
+it can *do*: search a catalogue, add something to a cart, review it, check out.
+Dusky reads that list and assembles a screen for it, one question at a time,
+sized for the lens. No app per site, no app store, no per-device port, and
+nothing for the site to build beyond declaring its tools.
 
-You need a WebMCP-capable browser:
+There is no code in this repository for any particular website.
 
-- **Chrome 149 or later** with `chrome://flags/#enable-webmcp-testing` enabled, or
-- **the ChatGPT desktop app's built-in browser**, which supports WebMCP by default.
+## How it works
+
+```mermaid
+flowchart TD
+  S["A website declares what it can do<br/>WebMCP tools, inside its own page"]
+  B["Your browser hands that list to Dusky"]
+  C["Dusky compiles a screen from the schema"]
+  G["You pick, on the glasses<br/>six keys, no cursor"]
+  P{"Does it spend money<br/>or delete something?"}
+  K["Stops. You confirm on the lens."]
+  R["The tool runs inside the site's own page,<br/>in your own logged-in session"]
+
+  S --> B --> C --> G --> P
+  P -- no --> R
+  P -- yes --> K --> R
+  R -- "result becomes the next screen" --> C
+```
+
+Three things worth pointing at:
+
+- **One tool becomes several screens.** Dusky reads the tool's parameters and
+  asks for them one at a time. A list of allowed values becomes buttons. A
+  true/false becomes Yes/No. Free text opens the keyboard on the glasses. Long
+  lists get paged.
+- **Dusky adds the confirmation step.** The site did not ask for it and cannot
+  switch it off. Anything that spends money or deletes something stops and waits
+  for you.
+- **Nothing is proxied.** The tool runs in the site's own page, in your browser,
+  in your session. Dusky never sees a login or a password.
+
+## Try it, without glasses
+
+You need **Chrome 149+** with `chrome://flags/#enable-webmcp-testing`, or **the
+ChatGPT desktop app's built-in browser**, which has it on already.
 
 ```bash
-pnpm install
-pnpm dev
+pnpm install && pnpm dev
 ```
 
-Then open <http://localhost:7803> and press **Try it now**. Dusky mints a
-pairing code, opens the Display in the same tab, and pairs itself: the glasses
-view, the partner site and every protocol call are all on one screen.
+Open <http://localhost:7803> and press **Open Dusky**. You get three things in
+one tab: the glasses view on the left, the shop on the right, and every WebMCP
+call underneath as it happens.
 
-To drive a real pair of glasses instead, open the Display at
-<http://localhost:7802>, read the six letters off the lens, and enter them on
-the demo page.
+Press a row on the glasses panel and watch the shop's cart change next to it.
+That is the part worth looking at. The panel itself is a small black rectangle
+with text on it, because that is what a 600x600 additive waveguide renders, but
+pressing a row on it runs a real tool inside the real site and you can watch
+both ends of that at once.
 
-Drive the Display with <kbd>↑</kbd> <kbd>↓</kbd> to move focus, <kbd>Enter</kbd>
-to select, <kbd>Esc</kbd> to go back. Those six keys are the entire input
-surface of the real device.
+Move with <kbd>↑</kbd><kbd>↓</kbd>, choose with <kbd>Enter</kbd>, back with
+<kbd>Esc</kbd>. Those six keys are the entire input surface of the real device,
+which is why the same build runs here and on the glasses unchanged.
 
-Watch the console's **Protocol activity** panel while you do it: every
-`getTools` and `executeTool` call is logged as it happens, so nothing has to be
-taken on trust.
+Then switch to Amber & Oak. It is a restaurant, it shares no vocabulary with the
+shop, and the interface changes while none of the code does.
 
-## Watching a schema become an interface
-
-Further down the console there is a JSON Schema on one side and the screens it
-compiled to on the other, with every step in between labelled by the function
-that took it. The panel is the component the glasses render, driven by the same
-state machine over the same compiler, with a tool runner that answers from a
-text box rather than from a network.
-
-Which means the schema is editable. Change a parameter from a string to an enum
-and the composer becomes buttons while you watch; paste a tool from a site
-nobody here has seen and it compiles anyway. A hardcoded interface cannot
-answer an edit, so this is the one part of the argument that costs no trust.
-It also needs no WebMCP, which is why it works in any browser.
-
-## On the actual glasses
-
-1. Deploy `apps/display` to any HTTPS host.
-2. In the Meta AI app, enable Developer Mode (Settings > App Info, tap the app
-   version five times).
-3. Go to App Settings > App Connections > Web Apps > Add a Web App and paste the
-   URL.
-4. Launch it from the glasses app grid.
-
-The console still runs in a browser on your phone or laptop, because that is
-where the partner site's session and tools live. You do not look at it.
-
-## How it fits together
-
-```
-  GLASSES                    DUSKY BACKEND                  BROWSER
-┌──────────────┐    wss    ┌────────────────────┐   wss   ┌──────────────────────────┐
-│ Display Web  │◄─────────►│  Session actor     │◄───────►│  Console                 │
-│ App 600x600  │           │  ├ task state      │         │  ├ iframe allow="tools"  │
-│ ↑↓←→ ⏎ esc   │           │  ├ policy engine   │         │  │   └ partner site      │
-│ composer     │           │  └ audit log       │         │  └ WebMCP bridge         │
-└──────────────┘           └────────────────────┘         └──────────────────────────┘
-   decides                     never holds                    executes tools in the
-                               site credentials                site's own document
-```
-
-The glasses hold attention and authority. The browser holds capability and
-session. Dusky moves intent between them and never moves credentials: a tool
-runs inside the partner site's own document, in your own logged-in session,
-mediated by the browser.
-
-## Layout
+## What is in here
 
 | Path | What it is |
 | --- | --- |
-| `packages/contracts` | Shared types. The one place every surface agrees on shape. |
-| `packages/policy` | Deterministic trust rules. No model, no network, no DOM. |
-| `packages/frames` | The schema-to-frame compiler. Turns a tool schema into screens. |
-| `packages/session` | The task machine. Intent in, frames out, ports for everything else. |
-| `packages/webmcp` | The only file that knows what browsers actually do, versus what the spec says. |
-| `packages/tokens` | Design tokens. Two palettes: console, and emitted light for the waveguide. |
-| `packages/lens` | The 600x600 panel as a component, so the website renders the real one. |
-| `apps/display` | The 600x600 Web App. The primary product surface. |
-| `apps/console` | The website: the front door, and the demo that is Dusky's WebMCP client. |
+| `apps/display` | The 600x600 Web App. What the wearer sees. |
+| `apps/console` | The website and the demo. The only surface that touches WebMCP. |
 | `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |
-| `apps/market` | A first-party WebMCP test service. Clearly labelled; nothing is sold. |
-| `apps/reservations` | A second test service with nothing in common with a shop. Nothing is reserved. |
-| `e2e` | The round trip, run against real Chrome with the real flag. |
+| `apps/market`, `apps/reservations` | Two unrelated first-party test services. Nothing is sold or reserved. |
+| `packages/frames` | The schema-to-frame compiler. Knows no site. |
+| `packages/policy` | Deterministic trust rules. No model, no network, no DOM. |
+| `packages/session` | The task machine. Intent in, frames out. |
+| `packages/planner` | Optional. Turns a spoken request into a proposal it cannot enforce. |
+| `packages/webmcp` | The only file that knows what browsers actually do, versus what the spec says. |
+| `packages/lens`, `packages/tokens`, `packages/contracts` | The panel, the palettes, the shared types. |
+| `e2e` | The round trip, in real Chrome with the real flag. |
 
-## What Dusky does not claim
+## Limits
 
-- **It does not work with arbitrary WebMCP sites.** Consuming another site's
-  tools requires that site to name Dusky's origin in `exposedTo`. This is a
-  deliberate security property of the specification and the browser enforces it.
-- **It does not integrate with Meta AI** or extend its voice commands.
-- **It has no microphone or camera on the Display.** Free text arrives through
-  the on-glasses composer (handwriting or dictation), which the wearer opens.
-- **It does not read raw Neural Band gestures.** The OS moves focus; the app is
-  told what was activated.
-- **It does not guarantee correct agent reasoning.** The policy layer is the
-  guarantee: nothing consequential runs without an explicit human confirmation,
-  and success is only ever reported from a tool's returned result.
+- **It does not work with any website.** A site has to name Dusky in
+  `exposedTo` before the browser will hand over its tools. That rule is the
+  browser's, and it is the right one: otherwise any page could read the tools of
+  every site you had open.
+- **A model can be wrong.** Nothing consequential runs without you confirming
+  it, and Dusky only reports success if the tool actually returned it.
+- **No microphone or camera on the glasses**, and no raw gestures. The OS moves
+  focus and tells the app what you picked.
 
-## Development
+## More
+
+- [AGENTS.md](./AGENTS.md): how it is built, and why each decision went the way
+  it did. Includes what Chrome actually does versus what the spec says.
+- [FIELD-NOTES.md](./FIELD-NOTES.md): bugs found by wearing it.
+- [DEPLOY.md](./DEPLOY.md): hosting, and getting it onto a pair of glasses.
 
 ```bash
-pnpm test        # unit tests
+pnpm test        # unit
 pnpm test:e2e    # round trip in real Chrome with the WebMCP flag
-pnpm typecheck
-pnpm lint
+pnpm typecheck && pnpm lint
 ```
-
-`pnpm test:e2e` launches your installed Chrome with
-`--enable-features=WebMCPTesting`, so the suite exercises a real browser rather
-than a stub.
 
 ## License
 
