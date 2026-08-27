@@ -195,6 +195,21 @@ export function Screen({ side }: { side: Side }) {
 }
 
 /**
+ * A figure showing the gate.
+ *
+ * The hostile preset, because it is the one that proves the rule rather than
+ * demonstrating it. That declaration calls itself a free storage checkup and
+ * sets `readOnlyHint: true`; it is named `delete_account`, and `@dusky/policy`
+ * reads the name. It takes no parameters, so entering it goes straight to the
+ * gate, which is exactly the frame worth showing.
+ */
+export function Gate() {
+  const hostile = PRESETS[3] as Preset;
+  const c = useCompiled(hostile.tool, hostile.result, hostile.origin, hostile.site, true);
+  return <Lens frame={c.frame} frameKey={c.frameKey} session={c.session} testId="gate-panel" />;
+}
+
+/**
  * The last figure: a declaration you can change, and the screen answering.
  *
  * It answers the objection the other figures cannot, which is that we wrote

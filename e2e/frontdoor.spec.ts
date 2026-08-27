@@ -111,8 +111,10 @@ test("the argument is a route of its own, reachable by keyboard", async ({ page 
   // added to product_id, and the same code draws a composer on one side and a
   // button per declared value on the other. Both panels are already inside the
   // tool, on the screen that declaration produced.
+  // Four sets of glasses on that page: the two a declaration compiled to, the
+  // one showing the gate, and the one answering the editable box.
   const shown = page.locator("div[data-kind]");
-  await expect(shown).toHaveCount(3);
+  await expect(shown).toHaveCount(4);
   await expect(page.getByRole("button", { name: "oat-2" })).toBeVisible();
   await expect(page.getByText("Tap to write or speak")).toBeVisible();
 });

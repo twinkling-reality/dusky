@@ -1,35 +1,24 @@
 /**
- * A read, with the demonstrations as its figures.
+ * How Dusky works, in four sections.
  *
- * One column, one typographic register, and figures dropped between the
- * paragraphs. There are no captions and no labels anywhere on this page,
- * because every figure is introduced by the sentence directly above it.
+ * A heading, one sentence, a picture. Nothing gets a second sentence, so this
+ * file has one text style and one figure style and nothing else.
  */
 .page {
   max-width: var(--dusky-page);
   margin-inline: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s6);
+  gap: var(--dusky-s7);
   padding-top: clamp(2rem, 6vh, 3.5rem);
   padding-bottom: var(--dusky-s7);
   padding-inline: var(--dusky-s5);
 }
 
-/*
- * A reading measure. Wide enough for the 600 by 600 panel to sit in it at the
- * size the figures use, so the prose and the pictures share one edge and the
- * column reads as a column rather than as text with things beside it.
- */
-/*
- * A title, at the size a title gets. Not the front door's display size: that
- * page is making a claim and this one is explaining a mechanism, and the two
- * jobs do not take the same weight.
- */
 .title {
   width: 100%;
   max-width: 34rem;
-  margin: 0 auto 0.9em;
+  margin: 0 auto;
   font-weight: 300;
   font-size: clamp(1.8rem, 3.2vw, 2.5rem);
   line-height: 1.1;
@@ -37,36 +26,90 @@
   color: var(--dusky-ink-strong);
 }
 
+.section {
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+}
+
+/* Plain nouns. A heading here is read at a glance or not at all, so it cannot
+   be a phrase somebody has to decode first. */
+.h2 {
+  margin: 0;
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: -0.015em;
+  color: var(--dusky-ink-strong);
+}
+
+.line {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--dusky-ink);
+  text-wrap: pretty;
+}
+.line code {
+  font-family: var(--dusky-mono);
+  font-size: 0.86em;
+  color: var(--dusky-accent);
+}
+
+/* No border, no background, no caption. The sentence above it said what it is. */
+.figure {
+  margin: var(--dusky-s4) 0 var(--dusky-s3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--dusky-s4);
+}
+
+/*
+ * The last section is wider than the others, because its figure holds a
+ * declaration you can type in AND the screen answering it.
+ *
+ * The width belongs to the SECTION, not to the figure. A figure trying to break
+ * out of a 34rem parent with negative margins ended up about sixty pixels wide,
+ * with the JSON wrapping one word per line. Its heading and its sentence keep
+ * the reading measure, so they stay in line with every other section.
+ */
+.sectionWide {
+  max-width: min(58rem, 100%);
+}
+.sectionWide > .h2,
+.sectionWide > .line {
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+}
+
+.wide {
+  margin: var(--dusky-s4) 0 0;
+}
+
 /* ------------------------------------------------------------------ flow */
 
 /*
- * The three stations.
+ * The three surfaces.
  *
- * There was a connector between them and it is gone. It was misaligned, which
- * was arithmetic: the marks are 3.8rem so their centre line is at 1.9rem, and
- * the rule was drawn at 1.4rem, hanging above them and reaching neither. There
- * was also a pulse travelling it, which on a diagram this small was a smudge
- * moving through a gap.
+ * There was a connector between the marks and it is gone: it was drawn at
+ * 1.4rem when the marks are 3.8rem tall, so it hung above them and reached
+ * neither, and the pulse travelling it was a smudge moving through a gap.
+ * Nothing replaced it. Three marks in a row, in a column that reads left to
+ * right, are already in sequence.
  *
- * Nothing replaced it, because nothing needed to. Three marks in a row, read
- * left to right, in a column of prose that is read left to right, are already
- * in sequence. A line between them was drawing a relationship the layout had
- * already stated.
- *
- * What carries the sequence instead is the colour, and it is a progression
- * rather than three choices: paper, then ink, then light. The first mark has no
- * colour at all because a published list is inert. The second is the product's
- * own accent because that is the step Dusky performs. The third is the emitted
- * palette, the only place on this website it belongs, because what glasses do
- * is emit. One gradient geometry across all three, so they read as one family
- * sampled at three points.
+ * The colour is a progression rather than three choices: light, then nothing,
+ * then the product's own accent. The glasses emit, which is what glasses do.
+ * The relay is passive and carries no colour at all. The browser is where the
+ * work happens, so it is the one in the accent.
  */
 .flow {
   list-style: none;
-  margin: 0 auto 2.8em;
+  margin: var(--dusky-s4) 0 0;
   padding: 0;
-  width: 100%;
-  max-width: 34rem;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--dusky-s4);
@@ -104,8 +147,18 @@
   }
 }
 
-/* Paper. A published list is inert, so this one has no colour. */
-.mark[data-kind="list"] {
+/*
+ * Dark first, light second. Run the other way it was cyan fading to dark and
+ * read as a teal square; run this way it is a ground with light on it, which is
+ * both what a waveguide is and what tells it apart from the accent beside it.
+ */
+.mark[data-kind="lens"] {
+  --mark-a: var(--emit-ground);
+  --mark-b: var(--emit-accent);
+}
+
+/* Passive, so it carries no colour. */
+.mark[data-kind="relay"] {
   --mark-a: var(--dusky-surface);
   --mark-b: color-mix(in srgb, var(--dusky-ink-strong) 18%, var(--dusky-surface));
   box-shadow:
@@ -113,23 +166,10 @@
     0 8px 20px rgb(20 22 19 / 8%);
 }
 
-/* Ink. The step Dusky performs, in the product's own colour. */
-.mark[data-kind="dusky"] {
+/* Where the work happens, so it is the one in the product's own colour. */
+.mark[data-kind="browser"] {
   --mark-a: var(--dusky-accent-soft);
   --mark-b: var(--dusky-accent);
-}
-
-/*
- * Light. The emitted palette, which is what glasses do.
- *
- * Dark first, light second, which is the opposite way round from the mark
- * beside it. Run the other way it was cyan fading to dark and read as a third
- * teal square next to the second one; run this way it is a ground with light on
- * it, which is both what a waveguide is and what tells the two apart.
- */
-.mark[data-kind="lens"] {
-  --mark-a: var(--emit-ground);
-  --mark-b: var(--emit-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -174,54 +214,4 @@
   .what {
     margin-left: auto;
   }
-}
-
-/* ------------------------------------------------------------------ read */
-
-.read {
-  width: 100%;
-  max-width: 34rem;
-  margin-inline: auto;
-  font-size: 1.0625rem;
-  line-height: 1.68;
-  color: var(--dusky-ink);
-  text-wrap: pretty;
-}
-
-.read p {
-  margin: 0;
-  max-width: 62ch;
-}
-.read p + p {
-  margin-top: 1.1em;
-}
-
-.read code {
-  font-family: var(--dusky-mono);
-  font-size: 0.86em;
-  color: var(--dusky-accent);
-}
-
-/*
- * A figure, in the sense the word has in a book: the thing the sentence above
- * just introduced, set apart and left alone. No border, no background, no
- * caption. It is not a card and it does not need to announce itself.
- */
-.figure {
-  margin: 2.2em 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--dusky-s4);
-}
-
-/*
- * The last figure needs more room than the reading measure, because it holds a
- * declaration you can type in AND the screen answering it. It stays on the same
- * centre line as the prose: a figure wider than its text is ordinary, a figure
- * that also moves sideways is a second column.
- */
-.wide {
-  width: min(58rem, 100%);
-  margin: 2.2em auto 0;
 }

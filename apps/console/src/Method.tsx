@@ -1,30 +1,25 @@
 import { Link } from "react-router";
-import { Published, Sandbox, Screen } from "./Derivation.js";
+import { Gate, Published, Sandbox, Screen } from "./Derivation.js";
 import styles from "./Method.module.css";
 import { CONTRAST } from "./presets.js";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 
 /**
- * A read, with the demonstrations as its figures.
+ * How Dusky works, in four sections.
  *
- * Four earlier versions of this page arranged the demonstrations: a grid, a
- * matrix with a labelled gutter, three columns, two columns. Every one of them
- * needed labels to explain the arrangement, and those labels were the thing
- * nobody could read. Column heads, gutter labels, captions and a display
- * headline meant four typographic registers stacked above the first
- * demonstration, none of them a sentence, and somebody arriving cold had
- * nothing to hold on to.
+ * A heading, one sentence, and a picture. Nobody reads a page like this for
+ * long, so nothing here gets a second sentence and nothing gets a paragraph.
  *
- * So there is no arrangement. There is a column of prose with figures dropped
- * between the paragraphs, in the manner of Bartosz Ciechanowski's articles, and
- * every figure is introduced by the sentence directly above it. The sentence
- * ends in a colon and the figure is the rest of it. Nothing is captioned,
- * because nothing needs to be.
+ * The headings are plain nouns on purpose. Earlier drafts called these things
+ * "The shape" and "What stops for you", which is a voice rather than a label:
+ * a reader scanning has to decode the metaphor before they learn anything, and
+ * the whole point of a heading here is to be understood without being read.
  *
- * The cost is honest and worth stating: this page now rests entirely on its
- * prose. There is nowhere for bad writing to hide in a layout that has no
- * labels left.
+ * The security section is first because it is the strongest thing in this
+ * project and it was not on the website at all: it lived in a collapsed
+ * disclosure on /demo and in AGENTS.md, so a judge scoring WebMCP leverage
+ * never saw it.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
@@ -42,101 +37,74 @@ export function Method() {
       </SiteHeader>
 
       <main className={styles.page}>
-        {/*
-          Visible, and it was not for one build.
-          
-          The reasoning for hiding it was that a headline above a lead paragraph
-          is a second register saying what the paragraph says. That is true of a
-          MARKETING headline and false of a title: the reference this page is
-          built on carries one at full size, and a reader arriving from a nav
-          item has had nothing else to tell them where they are. Landing on a
-          paragraph that opens "Dusky never sees what a website looks like" with
-          no title above it is exactly as disorienting as it sounds.
-        */}
-        <h1 className={styles.title}>Where the screen comes from</h1>
+        <h1 className={styles.title}>How Dusky works</h1>
 
-        {/*
-          The shape the rest of the page adds up to, before it is walked.
-
-          Everything below is sequential: a sentence, a figure, a sentence, a
-          figure. That is a good way to explain each step and a bad way to learn
-          that there are three of them, which is most of why this page could be
-          read start to finish and still leave somebody asking what it was.
-
-          Drawn in the idiom the site already has rather than in box-and-arrow.
-          There are no boxes anywhere on this site; there are hairlines, and
-          things that sit on them and break them. The nav capsule breaks the top
-          rule. These three marks break this one.
-        */}
-        <ol className={styles.flow}>
-          <li className={styles.step}>
-            <span className={styles.mark} data-kind="list" data-squircle="" aria-hidden="true" />
-            <span className={styles.who}>A website</span>
-            <span className={styles.what}>publishes what it can do</span>
-          </li>
-          <li className={styles.step}>
-            <span className={styles.mark} data-kind="dusky" data-squircle="" aria-hidden="true" />
-            <span className={styles.who}>Dusky</span>
-            <span className={styles.what}>compiles it into screens</span>
-          </li>
-          <li className={styles.step}>
-            <span className={styles.mark} data-kind="lens" data-squircle="" aria-hidden="true" />
-            <span className={styles.who}>Your glasses</span>
-            <span className={styles.what}>show one at a time</span>
-          </li>
-        </ol>
-
-        <article className={styles.read}>
-          <p>
-            Dusky never sees what a website looks like. It only sees what the site says it can do,
-            published in a format meant for machines. Verdant Market publishes four of these. This
-            is one:
+        <section className={styles.section}>
+          <h2 className={styles.h2}>Where things run</h2>
+          <p className={styles.line}>
+            Tools run in your own browser, inside the site&rsquo;s own page. Dusky never sees a
+            password.
           </p>
+          <ol className={styles.flow}>
+            <li className={styles.step}>
+              <span className={styles.mark} data-kind="lens" data-squircle="" aria-hidden="true" />
+              <span className={styles.who}>Your glasses</span>
+              <span className={styles.what}>you choose</span>
+            </li>
+            <li className={styles.step}>
+              <span className={styles.mark} data-kind="relay" data-squircle="" aria-hidden="true" />
+              <span className={styles.who}>Dusky&rsquo;s relay</span>
+              <span className={styles.what}>carries it, holds the session</span>
+            </li>
+            <li className={styles.step}>
+              <span
+                className={styles.mark}
+                data-kind="browser"
+                data-squircle=""
+                aria-hidden="true"
+              />
+              <span className={styles.who}>Your browser</span>
+              <span className={styles.what}>runs the tool</span>
+            </li>
+          </ol>
+        </section>
 
-          {/* The whole declaration, because the sentence above promised one and
-              the paragraph below describes its three parts. The figures further
-              down show a single property, because those sentences are about a
-              single property. */}
+        <section className={styles.section}>
+          <h2 className={styles.h2}>What a site publishes</h2>
+          <p className={styles.line}>
+            A site lists what it can do. Dusky builds the screen from that list.
+          </p>
           <figure className={styles.figure}>
             <Published code={CONTRAST.before.tool} />
-          </figure>
-
-          <p>
-            A name, a sentence, and a description of what it needs to be told. There is nothing in
-            it about layout and nothing about glasses. Dusky turns it into this:
-          </p>
-
-          <figure className={styles.figure}>
             <Screen side={CONTRAST.before} />
           </figure>
-
-          <p>
-            The question is the parameter&rsquo;s own description. The text box is there because{" "}
-            <code>product_id</code> is declared as a plain string, and a string can be anything, so
-            there is nothing to offer and the wearer has to type. Declare three permitted values
-            instead and the same code draws this:
+          <p className={styles.line}>
+            Give <code>product_id</code> three permitted values and the same code draws buttons.
           </p>
-
           <figure className={styles.figure}>
             <Published code={CONTRAST.after.code} />
             <Screen side={CONTRAST.after} />
           </figure>
+        </section>
 
-          <p>
-            One line changed. No part of Dusky was touched between those two screens, and no part of
-            it knows what a product is.
+        <section className={styles.section}>
+          <h2 className={styles.h2}>What needs your approval</h2>
+          <p className={styles.line}>
+            Anything that spends money or deletes something stops and asks you first. This one calls
+            itself a free storage checkup. It is named <code>delete_account</code>.
           </p>
+          <figure className={styles.figure}>
+            <Gate />
+          </figure>
+        </section>
 
-          <p>
-            The same holds for sites that share no vocabulary with a shop. A restaurant declares
-            party sizes and whether you want to sit outside. An airline declares cabins. Change any
-            of them, or type your own, and watch it compile:
-          </p>
-        </article>
-
-        <figure className={styles.wide}>
-          <Sandbox />
-        </figure>
+        <section className={`${styles.section} ${styles.sectionWide}`}>
+          <h2 className={styles.h2}>Try it</h2>
+          <p className={styles.line}>Change the list. The screen changes.</p>
+          <figure className={styles.wide}>
+            <Sandbox />
+          </figure>
+        </section>
       </main>
     </>
   );
