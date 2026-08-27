@@ -30,10 +30,34 @@ export interface ConsoleLink {
   link: LinkState;
   webmcp: boolean;
   tools: ToolDescriptor[];
+  /**
+   * Whether a discovery has finished for the source currently selected.
+   *
+   * An empty list means two completely different things and a page that cannot
+   * tell them apart says the alarming one. Switching source clears the tools
+   * and re-discovers, so for the few hundred milliseconds in between the
+   * console announced that the site had granted nothing, which is a real
+   * failure with a real remedy, about a site that was simply still answering.
+   *
+   * A zero is not enough on its own either. The FIRST discovery after a switch
+   * legitimately returns nothing, because the new site's frame has not
+   * registered yet, and `ontoolchange` is what fetches the real answer a moment
+   * later. So an empty result has to hold still before it counts.
+   */
+  discovered: boolean;
   activity: string[];
   /** Whether Dusky's own tools are registered for an agent in this browser. */
   provides: boolean;
 }
+
+/**
+ * How long an empty tool list has to stand before the console calls it empty.
+ *
+ * Long enough to cover the frame registering and `ontoolchange` firing, short
+ * enough that a site which really has not granted anything is not left looking
+ * like it is still loading.
+ */
+const EMPTY_HOLD_MS = 1500;
 
 const RECONNECT_MS = [250, 500, 1000, 2000, 4000] as const;
 
@@ -65,6 +89,25 @@ export function useConsoleLink(
 ): ConsoleLink {
   const [link, setLink] = useState<LinkState>("connecting");
   const [tools, setTools] = useState<ToolDescriptor[]>([]);
+  const [discovered, setDiscovered] = useState(false);
+  const emptyFor = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  /**
+   * Record what a discovery came back with.
+   *
+   * Anything found settles it at once. Nothing found starts a clock instead,
+   * because the re-discovery that `ontoolchange` triggers is usually already on
+   * its way, and a page that reported a missing grant in that window would be
+   * wrong about every source switch.
+   */
+  const settleDiscovery = useCallback((found: number) => {
+    clearTimeout(emptyFor.current);
+    if (found > 0) {
+      setDiscovered(true);
+      return;
+    }
+    emptyFor.current = setTimeout(() => setDiscovered(true), EMPTY_HOLD_MS);
+  }, []);
   const [activity, setActivity] = useState<string[]>([]);
   const webmcp = isWebMcpAvailable();
 
@@ -128,6 +171,8 @@ export function useConsoleLink(
     // site's tools are not this site's tools, and leaving them on screen until
     // discovery finishes would show a menu that belongs to somewhere else.
     setTools([]);
+    setDiscovered(false);
+    clearTimeout(emptyFor.current);
 
     const connect = () => {
       if (disposed) return;
@@ -171,6 +216,7 @@ export function useConsoleLink(
             try {
               const found = await b.discover();
               setTools(found);
+              settleDiscovery(found.length);
               note(`getTools({fromOrigins}) -> ${found.length} tools`);
               send({ t: "tools", requestId: msg.requestId, tools: found });
             } catch (err) {
@@ -178,6 +224,10 @@ export function useConsoleLink(
               // which is on a screen the wearer is not looking at, while the
               // glasses were told the site had nothing to offer.
               const reason = errText(err);
+              // Answered, badly. Still an answer: the log and the lens both
+              // carry the reason, and the list must stop saying "checking".
+              clearTimeout(emptyFor.current);
+              setDiscovered(true);
               note(reason);
               send({ t: "tools", requestId: msg.requestId, tools: [], error: reason });
             }
@@ -247,11 +297,12 @@ export function useConsoleLink(
       disposed = true;
       if (timer !== undefined) clearTimeout(timer);
       if (settle !== undefined) clearTimeout(settle);
+      clearTimeout(emptyFor.current);
       off?.();
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, partnerOrigins, ready, sourceName, note, send]);
+  }, [relayUrl, sessionId, partnerOrigins, ready, sourceName, note, send, settleDiscovery]);
 
   /**
    * Register Dusky's own tools, so an agent in this browser can drive the
@@ -287,7 +338,7 @@ export function useConsoleLink(
     };
   }, [ready, ask, note]);
 
-  return { link, webmcp, tools, activity, provides };
+  return { link, webmcp, tools, discovered, activity, provides };
 }
 
 function errText(e: unknown): string {

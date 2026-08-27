@@ -1,7 +1,7 @@
 import { gate } from "@dusky/policy";
-import { ENABLE_HINT } from "@dusky/webmcp";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 import { isCode, mintCode, type PairMode } from "./session.js";
@@ -23,7 +23,68 @@ import styles from "./Workspace.module.css";
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/console";
 const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:7802";
 
+/**
+ * What you are looking at, on the same terms as the requirements dropdown.
+ *
+ * This page carried a paragraph about the security model above the fold and a
+ * caption under every heading, and all of it was cut because none of it was
+ * what a stranger needed. Cutting it left nothing at all: four labelled boxes
+ * and no way to find out what any of them is.
+ *
+ * A dropdown costs nothing to anybody who does not open it, which is what makes
+ * it the right home for text that only some people need. The last line is the
+ * one that matters: it says what to press.
+ */
+function WhatIsThis({ site, onClose }: { site: string; onClose: () => void }) {
+  const box = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onDown = (e: PointerEvent) => {
+      const el = box.current;
+      const t = e.target as Node | null;
+      if (!el || !t) return;
+      if (el.contains(t) || (t instanceof Element && t.closest("[aria-controls=what]"))) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown);
+    };
+  }, [onClose]);
+
+  return (
+    <section id="what" ref={box} className={styles.what} data-squircle="" aria-label="What is this">
+      <dl className={styles.whatList}>
+        <div>
+          <dt>Glasses</dt>
+          <dd>The screen a wearer sees, running in this tab. A real pair loads the same page.</dd>
+        </div>
+        <div>
+          <dt>{site}</dt>
+          <dd>A live site. Dusky read the actions it publishes and built that screen from them.</dd>
+        </div>
+        <div>
+          <dt>Declared actions</dt>
+          <dd>What the site published, and whether each one stops for you first.</dd>
+        </div>
+        <div>
+          <dt>Activity</dt>
+          <dd>Every call between Dusky and the site, as it happens.</dd>
+        </div>
+      </dl>
+      <p className={styles.whatDo}>Press a row on the glasses. Watch the cart change beside it.</p>
+    </section>
+  );
+}
+
 export function Workspace() {
+  const probe = useRequirements();
+  const [reqOpen, setReqOpen] = useState(false);
+  const [whatOpen, setWhatOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const source = useMemo(() => sourceFromQuery(params.toString()), [params]);
   const origins = useMemo(() => [new URL(source.url).origin], [source]);
@@ -92,6 +153,24 @@ export function Workspace() {
     setParams(next, { replace: true });
   }, [session, params, setParams]);
 
+  /*
+   * Back to the start card, which is the only place pairing is explained.
+   *
+   * Somebody who owns glasses arrives here through the front door's one button,
+   * which mints a session and embeds the panel, and there was then no route to
+   * the pairing form at all: it lives on the card that `?start=1` skips. The
+   * code itself is deliberately NOT printed here, because the code a wearer
+   * types is the one on their own lens, not the one this page minted.
+   */
+  const unpair = () => {
+    setSession(null);
+    setMode("embedded");
+    const next = new URLSearchParams(params);
+    next.delete("session");
+    next.delete("start");
+    setParams(next, { replace: true });
+  };
+
   const start = () => {
     setMode("embedded");
     setSession(mintCode());
@@ -113,48 +192,64 @@ export function Workspace() {
   return (
     <>
       <SiteHeader>
+        {/*
+          The same control the front door uses, rather than a warning banner of
+          this page's own.
+
+          There were three copies of "WebMCP is not enabled": a banner here, the
+          error frame on the lens, and the activity log. The lens and the log
+          are both reporting a real failure and have to say it. This one was the
+          only one that was ours to delete, and the component that says it
+          properly already existed.
+        */}
         {session && (
-          <span className={header.state} data-state={link.link}>
-            {session} &middot; {link.link}
-          </span>
+          <div className={styles.reqAnchor}>
+            <button
+              type="button"
+              className={styles.reqBtn}
+              onClick={() => setWhatOpen((v) => !v)}
+              aria-expanded={whatOpen}
+              aria-controls="what"
+            >
+              What is this?
+            </button>
+            {whatOpen && <WhatIsThis site={source.name} onClose={() => setWhatOpen(false)} />}
+          </div>
         )}
+        <div className={styles.reqAnchor}>
+          <RequirementsButton
+            probe={probe}
+            open={reqOpen}
+            onToggle={() => setReqOpen((v) => !v)}
+            className={styles.reqBtn}
+          />
+          {reqOpen && <RequirementsPanel probe={probe} onClose={() => setReqOpen(false)} />}
+        </div>
         <Link className={header.link} to="/">
           Home
         </Link>
       </SiteHeader>
 
       <div className={styles.page}>
-        {/*
-          One line, and the rest behind it.
-          
-          The paragraph was correct and nobody read it, because a visitor who
-          has just arrived to try something is not there to be briefed. The
-          summary states the two facts a person has to leave with; the reason
-          they are facts is one click away for anyone who wants it.
-        */}
-        <details className={styles.aside}>
-          <summary className={styles.asideSummary}>
-            Tools run in this tab, and closing this tab ends the session.
-          </summary>
-          <p className={styles.asideBody}>
-            They run inside {source.name}&rsquo;s own document, in your own session, which is why
-            Dusky never holds the site&rsquo;s credentials and never sees a login. Nothing is
-            proxied through a server of ours. That is the security model, not a limitation: the tab
-            staying open is the same thing as the permission being yours to withdraw.
-          </p>
-        </details>
-
-        {!link.webmcp && <p className={styles.warn}>{ENABLE_HINT}</p>}
-
         {!session ? (
           <section className={styles.startCard}>
-            <h1 className={styles.h1}>Start a session</h1>
+            {/*
+              Two places to put the output, not two products.
+
+              This card used to offer "Try it now, no glasses" and "Or pair a
+              REAL pair of glasses", which reads as a toy and the actual thing.
+              It is one build either way: the panel below is an iframe onto the
+              same apps/display the glasses load, over the same relay, driving
+              the same tools in the same site. The only difference is whether
+              the pixels land on a monitor or on a waveguide.
+            */}
+            <h1 className={styles.h1}>Where do you want the screen?</h1>
             <button type="button" className={styles.primary} onClick={start}>
-              Try it now, no glasses
+              Run it in this browser
             </button>
             <p className={styles.hint}>
-              Dusky mints a pairing code and opens the Display below, running the same build the
-              glasses run. Arrow keys and Enter, or just click.
+              Opens the glasses build below, on the same relay, driving the same tools in the same
+              site. Arrow keys and Enter, or just click.
             </p>
             <form
               className={styles.pair}
@@ -164,7 +259,7 @@ export function Workspace() {
               }}
             >
               <label className={styles.label} htmlFor="code">
-                Or pair a real pair of glasses
+                Or send it to your Ray-Ban Display
               </label>
               <div className={styles.pairRow}>
                 <input
@@ -186,140 +281,73 @@ export function Workspace() {
         ) : (
           <>
             {/*
-              One strip, not a definition list.
-              
-              These are four short facts and they were set as a two-column
-              table of uppercase labels, which took a block the height of the
-              hero to say four words. Read left to right they are a status
-              line, which is what they are.
+              The source switcher, and nothing else.
+
+              The pair code used to sit here and it was a question with no
+              answer: a code is something a wearer reads off a lens and types
+              into this page, and in embedded mode the page minted it, opened
+              the Display itself and paired it. Nobody types it. It is on the
+              start card, which is where somebody who actually has glasses
+              arrives.
+
+              The row also had the caption "Same Dusky, different site" over
+              these buttons, which is a slogan, not a label.
             */}
-            <div className={styles.bar}>
-              <div className={styles.facts}>
-                <span className={styles.fact}>
-                  <span className={styles.factKey}>session</span>
-                  <span className={styles.mono}>{session}</span>
-                </span>
-                <span className={styles.fact}>
-                  <span className={styles.factKey}>relay</span>
-                  <span className={styles.mono} data-state={link.link}>
-                    {link.link}
-                  </span>
-                </span>
-                <span className={styles.fact}>
-                  <span className={styles.factKey}>actions found</span>
-                  <span className={styles.mono}>{link.tools.length}</span>
-                </span>
-                {/* Dusky consumes other sites' tools everywhere else. Here it is
-                    also a provider, so an agent in this browser can drive the
-                    glasses through the same protocol. */}
-                <span className={styles.fact}>
-                  <span className={styles.factKey}>Dusky&rsquo;s own tools</span>
-                  <span className={styles.mono} data-state={link.provides ? "open" : "offline"}>
-                    {link.provides ? "registered for this browser agent" : "not registered"}
-                  </span>
-                </span>
-              </div>
-              <div className={styles.sources}>
-                <span className={styles.sourcesLabel}>Point Dusky at</span>
-                {SOURCES.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={styles.sourceBtn}
-                    data-on={s.id === source.id}
-                    onClick={() => switchSource(s.id)}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
+            <div className={styles.controls}>
+              {SOURCES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={styles.sourceBtn}
+                  data-on={s.id === source.id}
+                  onClick={() => switchSource(s.id)}
+                >
+                  {s.name}
+                </button>
+              ))}
+              {mode === "embedded" && (
+                <button type="button" className={styles.pairLink} onClick={unpair}>
+                  Pair glasses
+                </button>
+              )}
             </div>
 
+            {/*
+              Four cells on a two by two grid.
+
+              Top row is the two live things, bottom row is the two records of
+              what they did, and the two columns line up down the page. Before
+              this the log hung off the bottom of one column on its own and the
+              two columns ended at different heights, which is what made it read
+              as parts rather than as a page.
+            */}
             <div className={styles.grid}>
-              <section className={styles.lensCol}>
-                <h2 className={styles.h2}>
-                  What the wearer sees
-                  <span className={styles.note}>600 x 600, the real Display build</span>
-                </h2>
+              <section className={styles.cell}>
+                <h2 className={styles.h2}>Glasses</h2>
                 {mode === "embedded" ? (
-                  <>
-                    <div className={styles.stage}>
-                      <iframe
-                        ref={lens}
-                        className={styles.lens}
-                        title="Dusky on the glasses"
-                        src={`${DISPLAY_URL}/?session=${session}`}
-                      />
-                    </div>
-                    <details className={styles.aside}>
-                      <summary className={styles.asideSummary}>How to drive it</summary>
-                      <p className={styles.asideBody}>
-                        Click the panel to give it the arrow keys, or click a choice directly. On
-                        the glasses these are Neural Band pinches and temple swipes, which the OS
-                        turns into exactly these six keys. There is no cursor and there is nothing
-                        else to learn.
-                      </p>
-                    </details>
-                  </>
+                  <div className={styles.stage} data-squircle="">
+                    <iframe
+                      ref={lens}
+                      className={styles.lens}
+                      title="Dusky on the glasses"
+                      src={`${DISPLAY_URL}/?session=${session}`}
+                    />
+                  </div>
                 ) : (
                   <p className={styles.hint}>
                     Paired to glasses showing <strong>{session}</strong>. No panel is embedded here
                     on purpose: a session takes one Display, and a second would disconnect yours.
                   </p>
                 )}
-
-                {/*
-                  Open, and collapsible.
-
-                  Open because this list IS the argument: it is what the site
-                  declared, and every screen on the lens came out of it.
-                  Collapsible because somebody who has read it once should be
-                  able to put it away and watch the panel instead.
-                */}
-                <details className={styles.section} open>
-                  <summary className={styles.h2}>
-                    Actions this source declared
-                    <span className={styles.note}>from getTools, nothing written by hand</span>
-                  </summary>
-                  {/* A stable hook. Tests used to find this list by filtering for
-                      an origin string that happened to be printed in every row,
-                      which broke the moment the rows stopped printing it. */}
-                  <ul className={styles.tools} data-testid="actions">
-                    {link.tools.map((t, i) => {
-                      const g = gate(t);
-                      return (
-                        <li key={`${t.origin}/${t.name}`} className={styles.tool}>
-                          <span className={styles.idx}>{String(i + 1).padStart(2, "0")}</span>
-                          <span className={styles.toolBody}>
-                            <span className={styles.toolName}>{t.title ?? t.name}</span>
-                            <span className={styles.toolDesc}>{t.description}</span>
-                          </span>
-                          <span
-                            className={styles.chip}
-                            data-consequence={g.consequence}
-                            title={g.reason}
-                          >
-                            {g.requiresConfirmation ? "gated" : "read"}
-                          </span>
-                        </li>
-                      );
-                    })}
-                    {link.tools.length === 0 && (
-                      <li className={styles.empty}>
-                        No tools. A site has to name this exact origin in <code>exposedTo</code>{" "}
-                        before the browser will show Dusky anything, so an empty list here usually
-                        means that grant is missing or does not match, rather than that WebMCP is
-                        broken.
-                      </li>
-                    )}
-                  </ul>
-                </details>
               </section>
 
-              <section className={styles.siteCol}>
+              <section className={styles.cell}>
                 <h2 className={styles.h2}>
                   {source.name}
-                  <span className={styles.note}>{origins[0]}</span>
+                  {/* The origin is the one value worth printing beside a
+                      heading: it is how anybody can see the tools were read
+                      from somewhere other than this page. */}
+                  <span className={styles.origin}>{origins[0]}</span>
                 </h2>
                 {/*
                   allow="tools" delegates the WebMCP permissions policy to this
@@ -329,22 +357,65 @@ export function Workspace() {
                 */}
                 <iframe
                   className={styles.frame}
+                  data-squircle=""
                   title={source.name}
                   src={`${source.url}?agent=${encodeURIComponent(location.origin)}`}
                   allow="tools"
                 />
+              </section>
 
-                <details className={styles.section} open>
-                  <summary className={styles.h2}>
-                    Protocol activity
-                    <span className={styles.note}>every call, as it happens</span>
-                  </summary>
-                  <pre className={styles.log}>
-                    {link.activity.length ? link.activity.join("\n") : "no calls yet"}
-                  </pre>
-                </details>
+              <section className={styles.cell}>
+                <h2 className={styles.h2}>Declared actions</h2>
+                {/* A stable hook. Tests used to find this list by filtering for
+                    an origin string that happened to be printed in every row,
+                    which broke the moment the rows stopped printing it. */}
+                <ul className={styles.tools} data-testid="actions">
+                  {link.tools.map((t) => {
+                    const g = gate(t);
+                    return (
+                      <li key={`${t.origin}/${t.name}`} className={styles.tool}>
+                        {/* The name and the ceremony policy assigned it. The
+                            descriptions were three more lines each saying what
+                            the lens beside them already says in the site's own
+                            words. */}
+                        <span className={styles.toolName}>{t.title ?? t.name}</span>
+                        <span
+                          className={styles.chip}
+                          data-consequence={g.consequence}
+                          title={g.reason}
+                        >
+                          {g.requiresConfirmation ? "gated" : "read"}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {link.tools.length === 0 && (
+                    <li className={styles.empty}>
+                      {link.discovered ? (
+                        <>
+                          No tools. A site has to name this exact origin in <code>exposedTo</code>{" "}
+                          before the browser will show Dusky anything.
+                        </>
+                      ) : (
+                        "Reading what this site declared."
+                      )}
+                    </li>
+                  )}
+                </ul>
+              </section>
+
+              <section className={styles.cell}>
+                <h2 className={styles.h2}>Activity</h2>
+                <pre className={styles.log} data-squircle="">
+                  {link.activity.length ? link.activity.join("\n") : "no calls yet"}
+                </pre>
               </section>
             </div>
+
+            {/* Last line on the page, because it is a footnote and not a
+                briefing, and because somebody must not learn it by closing
+                the tab and losing the session. */}
+            <p className={styles.standing}>Closing this tab ends the session.</p>
           </>
         )}
       </div>

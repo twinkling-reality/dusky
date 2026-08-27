@@ -1,86 +1,98 @@
+/*
+ * One geometry for the whole page.
+ *
+ * Everything here was on --dusky-radius, which is 3px and reads as square,
+ * while the front door is built out of pills and 16px squircles. Two pages of
+ * one website disagreeing about their own corners is the kind of thing nobody
+ * names and everybody sees.
+ */
+.page {
+  --dusky-box: 16px;
+}
+
 .page {
   max-width: var(--dusky-page);
   margin: 0 auto;
-  padding: var(--dusky-s5) var(--dusky-s5) var(--dusky-s7);
+  padding: var(--dusky-s4) var(--dusky-s5) var(--dusky-s3);
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s5);
+  /* Sized so the whole thing lands inside one 1440x900 screen. A page whose
+     job is "look, it works" cannot ask anybody to scroll to see whether it
+     did. e2e/frontdoor.spec.ts holds this. */
+  gap: var(--dusky-s4);
+}
+
+/**
+ * The one sentence somebody must not have to discover by closing the tab.
+ *
+ * It was a disclosure with a paragraph behind it, which put the only fact that
+ * matters two presses away. Stated outright, it costs less than the control
+ * that used to hide it.
+ */
+.standing {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--dusky-ink-faint);
 }
 
 /*
- * A disclosure, in the page's own voice.
+ * The requirements control, in the header rather than as a banner.
  *
- * The marker is the project's own arrow rather than the browser's triangle,
- * because a UA triangle is the one piece of default styling that announces a
- * page was not designed.
+ * Mirrors the front door's anchor: relative here, absolute for the panel, so
+ * the dropdown lands under the button that opened it.
  */
-.aside {
-  font-size: 0.88rem;
-  color: var(--dusky-ink-dim);
+.reqAnchor {
+  position: relative;
+  display: inline-flex;
+}
+.reqAnchor > [id="requirements"],
+.reqAnchor > [id="what"] {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  width: min(27rem, calc(100vw - 3rem));
+  text-align: left;
 }
 
-.asideSummary {
-  display: flex;
+.reqBtn {
+  display: inline-flex;
   align-items: center;
   gap: var(--dusky-s2);
-  width: fit-content;
-  padding: 0.35rem 0;
-  color: var(--dusky-ink);
+  height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--dusky-ink-dim);
+  white-space: nowrap;
   cursor: pointer;
-  list-style: none;
 }
-.asideSummary::-webkit-details-marker {
-  display: none;
-}
-.asideSummary::before {
-  content: "";
-  width: 0.42rem;
-  height: 0.42rem;
-  flex: none;
-  border-right: 1.5px solid var(--dusky-accent);
-  border-bottom: 1.5px solid var(--dusky-accent);
-  transform: rotate(-45deg);
-  transition: transform var(--dusky-motion) var(--dusky-ease);
-}
-.aside[open] > .asideSummary::before {
-  transform: rotate(45deg);
-}
-.asideSummary:hover {
+.reqBtn:hover {
   color: var(--dusky-ink-strong);
 }
-
-.asideBody {
-  margin: 0;
-  padding: 0 0 var(--dusky-s2) 1.1rem;
-  max-width: 62ch;
-  line-height: 1.6;
-  color: var(--dusky-ink-dim);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .asideSummary::before {
-    transition: none;
-  }
-}
-
-/* A titled disclosure that is open by default: the heading is the control. */
-.section {
-  min-width: 0;
-}
-
-.warn {
-  margin: 0;
-  padding: var(--dusky-s3) var(--dusky-s4);
-  border: 1px solid var(--dusky-warn);
-  border-radius: var(--dusky-radius);
-  color: var(--dusky-warn);
-  font-size: 0.88rem;
+/* The one control here allowed to ask for attention, because it is the only
+   one that means something is broken for the person reading it. */
+.reqBtn[data-state="bad"] {
+  border-color: color-mix(in srgb, var(--dusky-stop) 45%, transparent);
+  background: color-mix(in srgb, var(--dusky-stop) 5%, var(--dusky-surface));
+  color: var(--dusky-ink);
 }
 
 .grid {
   display: grid;
-  gap: var(--dusky-s6);
+  gap: var(--dusky-s4) var(--dusky-s5);
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* One cell of the grid. Four of them, all the same shape. */
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+  min-width: 0;
 }
 @media (min-width: 1000px) {
   .grid {
@@ -90,18 +102,25 @@
   }
 }
 
+/*
+ * A section label.
+ *
+ * Every one of these used to be a <summary> with a chevron and a second mono
+ * note pushed to its right explaining itself: "600 x 600, the real Display
+ * build", "from getTools, nothing written by hand", "every call, as it
+ * happens". Nothing on this page collapses any more, so the chevron went, and
+ * with the notes gone the labels finally align down the column instead of
+ * drifting wherever the note left room.
+ */
 .h2 {
-  margin: var(--dusky-s3) 0 0;
+  margin: 0;
+  /* One child sits left. The site's heading has a second, its origin, which
+     goes to the far end of the same rule. */
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  /* Wrapping, because the label and its note are two independent things and
-     the column they sit in is not always wide enough for both. Held together
-     they broke mid-phrase down both sides at once. */
   flex-wrap: wrap;
   gap: 0 var(--dusky-s3);
-  cursor: pointer;
-  list-style: none;
   font-family: var(--dusky-mono);
   font-weight: 400;
   font-size: 0.66rem;
@@ -111,78 +130,20 @@
   padding-bottom: var(--dusky-s2);
   border-bottom: 1px solid var(--dusky-hair);
 }
-.h2::-webkit-details-marker {
-  display: none;
-}
-/* The same chevron the smaller disclosures use, so a heading that can be put
-   away looks like one. */
-.h2::before {
-  content: "";
-  order: -1;
-  width: 0.36rem;
-  height: 0.36rem;
-  flex: none;
-  align-self: center;
-  margin-right: calc(var(--dusky-s2) * -0.5);
-  border-right: 1.5px solid var(--dusky-accent);
-  border-bottom: 1.5px solid var(--dusky-accent);
-  transform: rotate(-45deg);
-  transition: transform var(--dusky-motion) var(--dusky-ease);
-}
-.section[open] > .h2::before {
-  transform: rotate(45deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .h2::before {
-    transition: none;
-  }
-}
-.h2:hover {
-  color: var(--dusky-ink-dim);
-}
 
 /*
- * A status line, read left to right.
+ * The source switcher.
  *
- * Four short facts set as a two-column table of uppercase labels took a block
- * the height of the hero to say four words. Wrapping is fine and expected:
- * these are independent facts, not rows of one thing.
+ * This row was a status strip of four mono facts, then a pair code and a
+ * caption. The facts were plumbing the page already reported where it mattered,
+ * the code is not typed by anybody in this mode, and the caption was a slogan.
+ * What is left is the one control.
  */
-.facts {
+.controls {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: var(--dusky-s3) var(--dusky-s5);
-  align-items: baseline;
-}
-
-.fact {
-  display: inline-flex;
-  align-items: baseline;
   gap: var(--dusky-s2);
-  min-width: 0;
-}
-
-.factKey {
-  font-family: var(--dusky-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
-}
-
-.mono {
-  font-family: var(--dusky-mono);
-  font-size: 0.85em;
-  word-break: break-all;
-}
-.mono[data-state="open"] {
-  color: var(--dusky-ok);
-}
-.mono[data-state="reconnecting"] {
-  color: var(--dusky-warn);
-}
-.mono[data-state="offline"] {
-  color: var(--dusky-stop);
 }
 
 .pair {
@@ -243,33 +204,30 @@
   flex-direction: column;
 }
 
-.tool {
-  display: grid;
-  grid-template-columns: 1.7rem 1fr auto;
-  gap: var(--dusky-s3);
-  align-items: start;
-  padding: var(--dusky-s3) 0;
-  border-bottom: 1px solid var(--dusky-hair-soft);
+/* The origin the tools were actually read from. Not uppercased: it is a URL. */
+.origin {
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--dusky-ink-faint);
 }
 
-.idx {
-  font-family: var(--dusky-mono);
-  font-size: 0.7rem;
-  color: var(--dusky-ink-faint);
-  padding-top: 0.2rem;
-}
-.toolBody {
+.tool {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dusky-s3);
+  padding: 0.42rem 0;
+  border-bottom: 1px solid var(--dusky-hair-soft);
 }
+.tools > .tool:last-child {
+  border-bottom: 0;
+}
+
 .toolName {
+  min-width: 0;
+  font-size: 0.94rem;
   color: var(--dusky-ink-strong);
-}
-.toolDesc {
-  font-size: 0.85rem;
-  color: var(--dusky-ink-dim);
 }
 
 .chip {
@@ -302,11 +260,13 @@
   font-size: 0.88rem;
 }
 
+/* Same height as the panel beside it, so the top row has one baseline at the
+   bottom as well as at the top. */
 .frame {
   width: 100%;
-  height: 320px;
+  height: 450px;
   border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
+  border-radius: var(--dusky-box);
   background: var(--dusky-surface);
 }
 
@@ -317,25 +277,16 @@
   line-height: 1.7;
   background: none;
   border: 1px solid var(--dusky-hair-soft);
-  border-radius: var(--dusky-radius);
-  padding: var(--dusky-s3);
-  min-height: 8em;
-  max-height: 20em;
+  padding: var(--dusky-s4);
+  border-radius: var(--dusky-box);
+  min-height: 4.4em;
+  max-height: 9em;
   overflow: auto;
   white-space: pre-wrap;
   color: var(--dusky-ink-dim);
 }
 
 /* ------------------------------------------------- workspace additions */
-
-/**
- * The one sentence somebody must not have to discover by closing the tab.
- * It is a standing statement rather than a dismissible banner on purpose.
- */
-.standing strong {
-  color: var(--dusky-ink-strong);
-  font-weight: 400;
-}
 
 .startCard {
   display: flex;
@@ -370,32 +321,6 @@
   filter: brightness(1.08);
 }
 
-.bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--dusky-s5);
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--dusky-s3) var(--dusky-s4);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-}
-
-.sources {
-  display: flex;
-  align-items: center;
-  gap: var(--dusky-s2);
-  flex-wrap: wrap;
-}
-
-.sourcesLabel {
-  font-family: var(--dusky-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
-}
-
 .sourceBtn {
   padding: 0.35em 0.8em;
   border: 1px solid var(--dusky-hair);
@@ -412,31 +337,15 @@
   box-shadow: inset 0 0 0 1px var(--dusky-accent);
 }
 
-.lensCol,
-.siteCol {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s3);
-  min-width: 0;
-}
-
-.note {
-  font-family: var(--dusky-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.06em;
-  text-transform: none;
-  color: var(--dusky-ink-faint);
-}
-
 /* 600 x 600 is not negotiable, so the panel scales rather than reflows.
    Reflowing it would be showing something the glasses cannot show. */
 .stage {
-  width: 480px;
-  height: 480px;
+  width: 450px;
+  height: 450px;
   max-width: 100%;
   overflow: hidden;
   border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
+  border-radius: var(--dusky-box);
 }
 
 .lens {
@@ -444,6 +353,85 @@
   height: 600px;
   border: 0;
   display: block;
-  transform: scale(0.8);
+  transform: scale(0.75);
   transform-origin: top left;
+}
+
+/* The route to the pairing form, for somebody who owns a pair. Set apart from
+   the source buttons, because it does something else entirely. */
+/*
+ * The hardware route, as a control rather than a ghost.
+ *
+ * It was the same outlined pill as the two source buttons beside it, at the far
+ * end of a row, under a page whose content is four large boxes. It read as a
+ * third source. It carries the product's own accent now, which is the one thing
+ * on this page that does.
+ */
+.pairLink {
+  margin-left: auto;
+  padding: 0.42rem 1.1rem;
+  border: 1px solid var(--dusky-accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dusky-accent) 10%, var(--dusky-surface));
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--dusky-ink-strong);
+  cursor: pointer;
+}
+.pairLink:hover {
+  background: var(--dusky-accent);
+  border-color: var(--dusky-accent);
+  color: var(--dusky-surface);
+}
+.pairLink:hover {
+  color: var(--dusky-ink-strong);
+}
+
+/*
+ * The "what is this" dropdown. Same glass and the same anchor as the
+ * requirements panel, because it is the same kind of thing: words somebody
+ * asked for, rather than words sitting on the page whether or not they did.
+ */
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s4);
+  padding: var(--dusky-s4);
+  border-radius: var(--dusky-box, 16px);
+  background: color-mix(in srgb, var(--dusky-surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--dusky-hair);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 70%),
+    0 14px 34px rgb(20 22 19 / 12%);
+}
+
+.whatList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s3);
+}
+.whatList dt {
+  font-family: var(--dusky-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-dim);
+}
+.whatList dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--dusky-ink);
+}
+
+/* The only line here that tells somebody to do something. */
+.whatDo {
+  margin: 0;
+  padding-top: var(--dusky-s3);
+  border-top: 1px solid var(--dusky-hair-soft);
+  font-size: 0.94rem;
+  color: var(--dusky-ink-strong);
 }

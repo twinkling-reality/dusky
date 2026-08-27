@@ -64,7 +64,10 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   const displayPage = await ctx.newPage();
 
   await consolePage.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
-  await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
+  // Read off the activity log rather than the status strip. The strip carried
+  // this as a fourth mono fact nobody on this page can act on, and the log
+  // prints it verbatim anyway.
+  await expect(consolePage.getByText("registered Dusky's own 4 tools")).toBeVisible();
   // Dusky's own tools are registered as soon as the page loads, which is
   // BEFORE the relay has finished discovering the partner's. Pairing used to
   // take a form fill and two clicks, which hid that gap; a code in the URL
