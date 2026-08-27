@@ -96,7 +96,7 @@
   font-family: var(--dusky-mono);
   font-size: 0.73rem;
   line-height: 1.7;
-  background: var(--dusky-sunken);
+  background: var(--dusky-surface);
   border: 1px solid var(--dusky-hair-soft);
   border-radius: var(--dusky-radius);
   padding: var(--dusky-s3);
