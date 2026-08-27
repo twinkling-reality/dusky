@@ -40,21 +40,30 @@
 /* ------------------------------------------------------------------ flow */
 
 /*
- * The three stations, on one rule.
+ * The three stations.
  *
- * No boxes. There is not a box anywhere on this site: there are hairlines, and
- * things that sit on them and interrupt them, which is what the nav capsule
- * does to the top rule. These marks do the same to this one, so the diagram is
- * drawn in a vocabulary the reader has already met twice before arriving here.
+ * There was a connector between them and it is gone. It was misaligned, which
+ * was arithmetic: the marks are 3.8rem so their centre line is at 1.9rem, and
+ * the rule was drawn at 1.4rem, hanging above them and reaching neither. There
+ * was also a pulse travelling it, which on a diagram this small was a smudge
+ * moving through a gap.
  *
- * The marks are miniatures of the two things the page is about to show: the
- * grey block a declaration is printed in, and the black 600 by 600 panel. By
- * the time either appears full size below, it has been seen at this size, in
- * this order.
+ * Nothing replaced it, because nothing needed to. Three marks in a row, read
+ * left to right, in a column of prose that is read left to right, are already
+ * in sequence. A line between them was drawing a relationship the layout had
+ * already stated.
+ *
+ * What carries the sequence instead is the colour, and it is a progression
+ * rather than three choices: paper, then ink, then light. The first mark has no
+ * colour at all because a published list is inert. The second is the product's
+ * own accent because that is the step Dusky performs. The third is the emitted
+ * palette, the only place on this website it belongs, because what glasses do
+ * is emit. One gradient geometry across all three, so they read as one family
+ * sampled at three points.
  */
 .flow {
   list-style: none;
-  margin: 0 auto 2.6em;
+  margin: 0 auto 2.8em;
   padding: 0;
   width: 100%;
   max-width: 34rem;
@@ -64,62 +73,73 @@
 }
 
 .step {
-  position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 0.2rem;
   min-width: 0;
 }
 
-/*
- * The path, drawn per station rather than as one rule behind all three.
- *
- * A single line across the whole row overshot the first mark and the last, so
- * it read as three things standing near a line rather than as stations on one.
- * A segment owned by each step starts after its own mark and stops just short
- * of the next, which needs no arithmetic about column widths: the negative
- * right offset is exactly the grid gap.
- */
-.step:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 2rem;
-  right: calc(0.5rem - var(--dusky-s4));
-  top: 0.8rem;
-  height: 1px;
-  background: var(--dusky-hair);
-}
-
 .mark {
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 3.8rem;
+  height: 3.8rem;
   flex: none;
   margin-bottom: var(--dusky-s3);
-  border-radius: 5px;
+  border-radius: 18px;
+  background-image: linear-gradient(145deg, var(--mark-a), var(--mark-b));
+  /* Oversized and slowly repositioned, so the light in the corner moves without
+     anything on the page moving. No second element and no overlay. */
+  background-size: 190% 190%;
+  background-position: 18% 18%;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 20%),
+    0 8px 20px rgb(20 22 19 / 10%);
+  animation: mark-drift 15s ease-in-out infinite alternate;
 }
 
-/* A block of text, which is what a declaration looks like on this page. */
+@keyframes mark-drift {
+  to {
+    background-position: 82% 82%;
+  }
+}
+
+/* Paper. A published list is inert, so this one has no colour. */
 .mark[data-kind="list"] {
-  background:
-    repeating-linear-gradient(to bottom, var(--dusky-ink-faint) 0 1px, transparent 1px 4px) center /
-    60% 11px no-repeat,
-    color-mix(in srgb, var(--dusky-ink-strong) 8%, var(--dusky-surface));
-  border: 1px solid var(--dusky-hair);
+  --mark-a: var(--dusky-surface);
+  --mark-b: color-mix(in srgb, var(--dusky-ink-strong) 18%, var(--dusky-surface));
+  box-shadow:
+    inset 0 0 0 1px var(--dusky-hair),
+    0 8px 20px rgb(20 22 19 / 8%);
 }
 
+/* Ink. The step Dusky performs, in the product's own colour. */
 .mark[data-kind="dusky"] {
-  background: var(--dusky-accent);
+  --mark-a: var(--dusky-accent-soft);
+  --mark-b: var(--dusky-accent);
 }
 
-/* The waveguide, with one row lit on it. */
+/*
+ * Light. The emitted palette, which is what glasses do.
+ *
+ * Dark first, light second, which is the opposite way round from the mark
+ * beside it. Run the other way it was cyan fading to dark and read as a third
+ * teal square next to the second one; run this way it is a ground with light on
+ * it, which is both what a waveguide is and what tells the two apart.
+ */
 .mark[data-kind="lens"] {
-  background:
-    linear-gradient(var(--emit-accent), var(--emit-accent)) 50% 60% / 62% 2px no-repeat,
-    var(--emit-ground);
+  --mark-a: var(--emit-ground);
+  --mark-b: var(--emit-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
 }
 
 .who {
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   color: var(--dusky-ink-strong);
 }
 
@@ -136,22 +156,23 @@
     gap: var(--dusky-s5);
   }
   .step {
-    padding-left: 2.6rem;
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    gap: var(--dusky-s4);
+    flex-wrap: wrap;
   }
   .mark {
-    position: absolute;
-    left: 0;
-    top: 0;
+    width: 3rem;
+    height: 3rem;
     margin: 0;
   }
-  /* One column, so the path runs down the left edge instead of across it. */
-  .step:not(:last-child)::after {
-    left: 0.8rem;
-    right: auto;
-    top: 2rem;
-    bottom: calc(0.5rem - var(--dusky-s5));
-    width: 1px;
-    height: auto;
+  .who,
+  .what {
+    flex-basis: calc(100% - 4.5rem);
+  }
+  .what {
+    margin-left: auto;
   }
 }
 

@@ -70,17 +70,17 @@ export function Method() {
         */}
         <ol className={styles.flow}>
           <li className={styles.step}>
-            <span className={styles.mark} data-kind="list" aria-hidden="true" />
+            <span className={styles.mark} data-kind="list" data-squircle="" aria-hidden="true" />
             <span className={styles.who}>A website</span>
             <span className={styles.what}>publishes what it can do</span>
           </li>
           <li className={styles.step}>
-            <span className={styles.mark} data-kind="dusky" aria-hidden="true" />
+            <span className={styles.mark} data-kind="dusky" data-squircle="" aria-hidden="true" />
             <span className={styles.who}>Dusky</span>
             <span className={styles.what}>compiles it into screens</span>
           </li>
           <li className={styles.step}>
-            <span className={styles.mark} data-kind="lens" aria-hidden="true" />
+            <span className={styles.mark} data-kind="lens" data-squircle="" aria-hidden="true" />
             <span className={styles.who}>Your glasses</span>
             <span className={styles.what}>show one at a time</span>
           </li>
