@@ -139,11 +139,30 @@
 .secondary:hover {
   border-color: var(--dusky-ink-faint);
 }
-/* The one control on the page allowed to ask for attention, because it is the
-   only one that means something is broken for the person reading it. */
-.secondary[data-state="bad"] {
+.reqBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+  height: 2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--dusky-ink-dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.reqBtn:hover {
+  color: var(--dusky-ink-strong);
+}
+/* The one control here allowed to ask for attention, because it is the only
+   one that means something is broken for the person reading it. */
+.reqBtn[data-state="bad"] {
   border-color: color-mix(in srgb, var(--dusky-stop) 45%, transparent);
   background: color-mix(in srgb, var(--dusky-stop) 5%, var(--dusky-surface));
+  color: var(--dusky-ink);
 }
 
 /* ------------------------------------------------------------------ stage */
@@ -356,13 +375,4 @@
   box-shadow:
     0 2px 6px rgb(20 22 19 / 8%),
     0 24px 60px rgb(20 22 19 / 18%);
-}
-
-/* The derivation: the schema, the panel it compiled to, and the functions in
-   between. Collapsed by default so the front door stays one screen. */
-.examples {
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  padding: var(--dusky-s5);
-  scroll-margin-top: 5rem;
 }

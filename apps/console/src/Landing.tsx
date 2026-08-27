@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import styles from "./Landing.module.css";
 import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
@@ -19,11 +19,11 @@ import header from "./SiteHeader.module.css";
  * the first time something comes back unmet. Nothing is quieter for the people
  * who are fine and nothing is later for the people who are not.
  *
- * The argument for the claim is not on this page. It is a route of its own at
- * /method, because it was a drawer that unfolded a second screenful under a
- * hero and made this page two pages pretending to be one. A visitor who wants
- * to know how it works goes and finds out; a visitor who wants the product
- * presses the button.
+ * The argument for the claim is not on this page and no longer has a page of
+ * its own. /method was ten rebuilds of a schema printed beside the screen it
+ * compiled to, and a schema is not readable at a glance: every version needed
+ * a minute of reading to land an idea the page promised in five seconds. The
+ * recorded demo carries it instead, where a voice can do the explaining.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
@@ -31,33 +31,32 @@ const REPO = "https://github.com/twinkling-reality/dusky";
 const STAGE_ALT =
   "Dusky running: on the left the glasses view, headed Verdant Market, confirm, reading Add to " +
   "cart, oat-1, this spends money, and offering Confirm on enter or Cancel on escape. On the " +
-  "right the shop itself, with its catalogue, and a log of every WebMCP call as it happens.";
+  "right the shop itself, its cart still empty, and the catalogue the product was chosen from.";
 
 export function Landing() {
   const probe = useRequirements();
   const [reqOpen, setReqOpen] = useState(false);
 
-  /*
-   * Opened once, by the page, the first time a requirement comes back unmet.
-   *
-   * Once, and latched: a visitor who reads it and closes it has been told, and
-   * a panel that reopens on every re-probe is a panel nobody can get rid of.
-   * The mark on the button keeps the verdict either way, so closing it loses
-   * the remedy and never the answer.
-   */
-  const announced = useRef(false);
-  useEffect(() => {
-    if (announced.current || probe.verdict !== "bad") return;
-    announced.current = true;
-    setReqOpen(true);
-  }, [probe.verdict]);
-
   return (
     <>
       <SiteHeader>
-        <Link className={header.link} to="/method">
-          Method
-        </Link>
+        {/*
+          A verdict, not an action, so it sits with the other verdicts and the
+          way out rather than in the row of things to press. It was next to
+          "Open Dusky" in the identical pill shape, which made a status readout
+          look like the second thing to do on the page. The demo page already
+          carries it here, and two pages of one site should not disagree about
+          where the same control lives.
+        */}
+        <div className={styles.reqAnchor}>
+          <RequirementsButton
+            probe={probe}
+            open={reqOpen}
+            onToggle={() => setReqOpen((v) => !v)}
+            className={styles.reqBtn}
+          />
+          {reqOpen && <RequirementsPanel probe={probe} onClose={() => setReqOpen(false)} />}
+        </div>
         <a className={header.link} href={REPO} target="_blank" rel="noreferrer">
           GitHub
         </a>
@@ -72,18 +71,19 @@ export function Landing() {
           </p>
 
           {/*
-            Baseline-aligned with the subtitle rather than with the headline.
-            The headline is the page talking; the subtitle and the buttons are
-            the same sentence continuing into something you can press, and they
-            sit on one line for that reason.
+            Two ways in, side by side, decided once.
 
-            "Open Dusky", not "Open the demo". /demo is the console, and the
-            console is the product: it holds the site in an allow="tools"
-            frame, calls getTools, and drives the real Session over the real
-            relay. A wearer with hardware opens that same page and pairs a code
-            instead of embedding the panel. Calling it a demo understated it,
-            and understated it in exactly the place a reader decides how
-            finished this is.
+            This same question used to be asked twice: here, and again on the
+            start card behind /demo, which `?start=1` exists to skip. So the
+            front door offered one button and a floating underlined sentence,
+            and the page it linked to asked the whole question over again.
+
+            It is one decision and it belongs here, where somebody is deciding.
+            "Open Dusky" runs the glasses build in this browser, because almost
+            nobody arriving owns a pair and a first screen asking for a code off
+            a lens they do not have is what this page exists to replace. The
+            second button is the same size and the same row, because for the
+            people it is for it is not a footnote.
           */}
           <div className={styles.actions}>
             <Link className={styles.primary} to="/demo?start=1">
@@ -92,19 +92,9 @@ export function Landing() {
                 &rarr;
               </span>
             </Link>
-
-            {/* The dropdown hangs off this box, so it is anchored to the
-                control that opened it rather than placed somewhere pleasing
-                over the picture with no visible relationship to it. */}
-            <div className={styles.reqAnchor}>
-              <RequirementsButton
-                probe={probe}
-                open={reqOpen}
-                onToggle={() => setReqOpen((v) => !v)}
-                className={styles.secondary}
-              />
-              {reqOpen && <RequirementsPanel probe={probe} onClose={() => setReqOpen(false)} />}
-            </div>
+            <Link className={styles.secondary} to="/demo">
+              I have glasses
+            </Link>
           </div>
         </section>
 
@@ -126,8 +116,8 @@ export function Landing() {
             data-squircle=""
             src="/stage.png"
             alt={STAGE_ALT}
-            width={2208}
-            height={960}
+            width={2784}
+            height={900}
           />
         </div>
       </main>
