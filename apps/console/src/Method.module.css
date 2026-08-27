@@ -1,0 +1,206 @@
+/**
+ * A read, with the demonstrations as its figures.
+ *
+ * One column, one typographic register, and figures dropped between the
+ * paragraphs. There are no captions and no labels anywhere on this page,
+ * because every figure is introduced by the sentence directly above it.
+ */
+.page {
+  max-width: var(--dusky-page);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dusky-s6);
+  padding-top: clamp(2rem, 6vh, 3.5rem);
+  padding-bottom: var(--dusky-s7);
+  padding-inline: var(--dusky-s5);
+}
+
+/*
+ * A reading measure. Wide enough for the 600 by 600 panel to sit in it at the
+ * size the figures use, so the prose and the pictures share one edge and the
+ * column reads as a column rather than as text with things beside it.
+ */
+/*
+ * A title, at the size a title gets. Not the front door's display size: that
+ * page is making a claim and this one is explaining a mechanism, and the two
+ * jobs do not take the same weight.
+ */
+.title {
+  width: 100%;
+  max-width: 34rem;
+  margin: 0 auto 0.9em;
+  font-weight: 300;
+  font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--dusky-ink-strong);
+}
+
+/* ------------------------------------------------------------------ flow */
+
+/*
+ * The three stations, on one rule.
+ *
+ * No boxes. There is not a box anywhere on this site: there are hairlines, and
+ * things that sit on them and interrupt them, which is what the nav capsule
+ * does to the top rule. These marks do the same to this one, so the diagram is
+ * drawn in a vocabulary the reader has already met twice before arriving here.
+ *
+ * The marks are miniatures of the two things the page is about to show: the
+ * grey block a declaration is printed in, and the black 600 by 600 panel. By
+ * the time either appears full size below, it has been seen at this size, in
+ * this order.
+ */
+.flow {
+  list-style: none;
+  margin: 0 auto 2.6em;
+  padding: 0;
+  width: 100%;
+  max-width: 34rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--dusky-s4);
+}
+
+.step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+/*
+ * The path, drawn per station rather than as one rule behind all three.
+ *
+ * A single line across the whole row overshot the first mark and the last, so
+ * it read as three things standing near a line rather than as stations on one.
+ * A segment owned by each step starts after its own mark and stops just short
+ * of the next, which needs no arithmetic about column widths: the negative
+ * right offset is exactly the grid gap.
+ */
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 2rem;
+  right: calc(0.5rem - var(--dusky-s4));
+  top: 0.8rem;
+  height: 1px;
+  background: var(--dusky-hair);
+}
+
+.mark {
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  margin-bottom: var(--dusky-s3);
+  border-radius: 5px;
+}
+
+/* A block of text, which is what a declaration looks like on this page. */
+.mark[data-kind="list"] {
+  background:
+    repeating-linear-gradient(to bottom, var(--dusky-ink-faint) 0 1px, transparent 1px 4px) center /
+    60% 11px no-repeat,
+    color-mix(in srgb, var(--dusky-ink-strong) 8%, var(--dusky-surface));
+  border: 1px solid var(--dusky-hair);
+}
+
+.mark[data-kind="dusky"] {
+  background: var(--dusky-accent);
+}
+
+/* The waveguide, with one row lit on it. */
+.mark[data-kind="lens"] {
+  background:
+    linear-gradient(var(--emit-accent), var(--emit-accent)) 50% 60% / 62% 2px no-repeat,
+    var(--emit-ground);
+}
+
+.who {
+  font-size: 0.95rem;
+  color: var(--dusky-ink-strong);
+}
+
+.what {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--dusky-ink-faint);
+  text-wrap: balance;
+}
+
+@media (max-width: 620px) {
+  .flow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--dusky-s5);
+  }
+  .step {
+    padding-left: 2.6rem;
+  }
+  .mark {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0;
+  }
+  /* One column, so the path runs down the left edge instead of across it. */
+  .step:not(:last-child)::after {
+    left: 0.8rem;
+    right: auto;
+    top: 2rem;
+    bottom: calc(0.5rem - var(--dusky-s5));
+    width: 1px;
+    height: auto;
+  }
+}
+
+/* ------------------------------------------------------------------ read */
+
+.read {
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  font-size: 1.0625rem;
+  line-height: 1.68;
+  color: var(--dusky-ink);
+  text-wrap: pretty;
+}
+
+.read p {
+  margin: 0;
+  max-width: 62ch;
+}
+.read p + p {
+  margin-top: 1.1em;
+}
+
+.read code {
+  font-family: var(--dusky-mono);
+  font-size: 0.86em;
+  color: var(--dusky-accent);
+}
+
+/*
+ * A figure, in the sense the word has in a book: the thing the sentence above
+ * just introduced, set apart and left alone. No border, no background, no
+ * caption. It is not a card and it does not need to announce itself.
+ */
+.figure {
+  margin: 2.2em 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--dusky-s4);
+}
+
+/*
+ * The last figure needs more room than the reading measure, because it holds a
+ * declaration you can type in AND the screen answering it. It stays on the same
+ * centre line as the prose: a figure wider than its text is ordinary, a figure
+ * that also moves sideways is a second column.
+ */
+.wide {
+  width: min(58rem, 100%);
+  margin: 2.2em auto 0;
+}

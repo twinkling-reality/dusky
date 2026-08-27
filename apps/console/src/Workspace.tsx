@@ -119,7 +119,7 @@ export function Workspace() {
           </span>
         )}
         <Link className={header.link} to="/">
-          How it works
+          Home
         </Link>
       </SiteHeader>
 

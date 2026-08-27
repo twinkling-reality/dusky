@@ -93,10 +93,10 @@ test("the argument is a route of its own, reachable by keyboard", async ({ page 
   await expect(page.locator("div[data-kind]")).toHaveCount(0);
 
   // A page arguing that six keys are enough cannot need a mouse at its door.
-  const open = page.getByRole("link", { name: "Proof" });
+  const open = page.getByRole("link", { name: "Method" });
   await open.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/proof$/);
+  await expect(page).toHaveURL(/\/method$/);
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 
   // And the panel travelled with the declaration that drives it. On its own it
@@ -150,7 +150,7 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
 
   // The bar carries the live session state, and a way back to the argument.
   await expect(page.getByRole("banner").getByText(/open/)).toBeVisible();
-  await expect(page.getByRole("banner").getByRole("link", { name: "How it works" })).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "Home" })).toBeVisible();
 });
 
 test("the start card still works for somebody who arrives at /demo directly", async ({ page }) => {

@@ -24,7 +24,7 @@ const CONSOLE = "http://localhost:7803";
  * pretending to be two.
  */
 async function openSchema(page: Page) {
-  await page.goto(`${CONSOLE}/proof`);
+  await page.goto(`${CONSOLE}/method`);
   await expect(page.getByLabel("Tool definition")).toBeVisible();
 }
 

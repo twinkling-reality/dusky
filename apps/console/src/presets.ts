@@ -121,7 +121,7 @@ export const PRESETS: readonly Preset[] = [
 ];
 
 /**
- * The demonstration at the top of the proof page.
+ * The demonstration at the top of /method.
  *
  * One tool, twice, differing by a single property, so the claim can be READ
  * rather than performed. Everything before this asked a visitor to hand-edit

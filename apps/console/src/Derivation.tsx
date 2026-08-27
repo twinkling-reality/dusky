@@ -8,7 +8,7 @@ import styles from "./Derivation.module.css";
 import { CONTRAST, PRESETS, type Preset, type Side } from "./presets.js";
 
 /**
- * The figures for the read on /proof.
+ * The figures for the read on /method.
  *
  * Each one is the same `FrameView` the glasses run, driven by the same
  * `Session` state machine, over the same `@dusky/frames` compiler and the same
@@ -21,7 +21,7 @@ import { CONTRAST, PRESETS, type Preset, type Side } from "./presets.js";
  * demonstrations in a grid, a matrix, three columns, two columns, and every
  * time the labels needed to explain the grid became the thing nobody could
  * read. A figure needs no labels because the sentence above it introduced it.
- * The page that arranges them is Proof.tsx; this file only makes them.
+ * The page that arranges them is Method.tsx; this file only makes them.
  *
  * `useCompiled` is a hook because the page holds several of these at once. This
  * file was once split into a hook and two views for a different reason, to let

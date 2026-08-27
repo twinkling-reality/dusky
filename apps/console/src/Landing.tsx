@@ -20,9 +20,10 @@ import header from "./SiteHeader.module.css";
  * who are fine and nothing is later for the people who are not.
  *
  * The argument for the claim is not on this page. It is a route of its own at
- * /proof, because it was a drawer that unfolded a second screenful under a hero
- * and made this page two pages pretending to be one. A visitor who wants proof
- * goes and gets it; a visitor who wants the product presses the button.
+ * /method, because it was a drawer that unfolded a second screenful under a
+ * hero and made this page two pages pretending to be one. A visitor who wants
+ * to know how it works goes and finds out; a visitor who wants the product
+ * presses the button.
  */
 
 const REPO = "https://github.com/twinkling-reality/dusky";
@@ -54,17 +55,8 @@ export function Landing() {
   return (
     <>
       <SiteHeader>
-        {/*
-          "Proof", not "Examples".
-
-          That page exists to remove the need to trust a claim, and a gallery
-          of examples is not what removes it: an editable declaration compiling
-          to screens in front of you is. "Examples" also reads as optional, and
-          the one thing a sceptical reader is looking for is the opposite of
-          optional.
-        */}
-        <Link className={header.link} to="/proof">
-          Proof
+        <Link className={header.link} to="/method">
+          Method
         </Link>
         <a className={header.link} href={REPO} target="_blank" rel="noreferrer">
           GitHub

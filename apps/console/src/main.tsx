@@ -4,7 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import "@dusky/tokens/tokens.css";
 import "./console.css";
 import { Landing } from "./Landing.js";
-import { Proof } from "./Proof.js";
+import { Method } from "./Method.js";
 import { Workspace } from "./Workspace.js";
 
 /**
@@ -15,7 +15,7 @@ import { Workspace } from "./Workspace.js";
  * second origin that no site has granted, and every tool list on it would be
  * empty for a reason nobody could see.
  *
- * `/demo` and `/proof` are real paths rather than query parameters, which
+ * `/demo` and `/method` are real paths rather than query parameters, which
  * means the host has to serve index.html for them. See the rewrite in
  * vercel/console.json; without it a shared link to either one 404s.
  */
@@ -25,7 +25,7 @@ createRoot(document.getElementById("root")!).render(
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/demo" element={<Workspace />} />
-        <Route path="/proof" element={<Proof />} />
+        <Route path="/method" element={<Method />} />
         {/* Anything else is a mistyped link, and the front door is the most
             useful place to land. */}
         <Route path="*" element={<Landing />} />

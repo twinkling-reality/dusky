@@ -37,9 +37,9 @@ await shot("front-requirements");
 await page.keyboard.press("Escape");
 
 // The argument is a route of its own now, not a drawer under the hero.
-await page.goto(`${SITE}/proof`);
+await page.goto(`${SITE}/method`);
 await page.waitForTimeout(1200);
-await shot("proof", { fullPage: true });
+await shot("method", { fullPage: true });
 
 await page.setViewportSize({ width: 900, height: 1100 });
 await page.goto(SITE);

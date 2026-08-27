@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { Published, Sandbox, Screen } from "./Derivation.js";
-import styles from "./Proof.module.css";
+import styles from "./Method.module.css";
 import { CONTRAST } from "./presets.js";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
@@ -29,7 +29,7 @@ import header from "./SiteHeader.module.css";
 
 const REPO = "https://github.com/twinkling-reality/dusky";
 
-export function Proof() {
+export function Method() {
   return (
     <>
       <SiteHeader>
@@ -54,6 +54,37 @@ export function Proof() {
           no title above it is exactly as disorienting as it sounds.
         */}
         <h1 className={styles.title}>Where the screen comes from</h1>
+
+        {/*
+          The shape the rest of the page adds up to, before it is walked.
+
+          Everything below is sequential: a sentence, a figure, a sentence, a
+          figure. That is a good way to explain each step and a bad way to learn
+          that there are three of them, which is most of why this page could be
+          read start to finish and still leave somebody asking what it was.
+
+          Drawn in the idiom the site already has rather than in box-and-arrow.
+          There are no boxes anywhere on this site; there are hairlines, and
+          things that sit on them and break them. The nav capsule breaks the top
+          rule. These three marks break this one.
+        */}
+        <ol className={styles.flow}>
+          <li className={styles.step}>
+            <span className={styles.mark} data-kind="list" aria-hidden="true" />
+            <span className={styles.who}>A website</span>
+            <span className={styles.what}>publishes what it can do</span>
+          </li>
+          <li className={styles.step}>
+            <span className={styles.mark} data-kind="dusky" aria-hidden="true" />
+            <span className={styles.who}>Dusky</span>
+            <span className={styles.what}>compiles it into screens</span>
+          </li>
+          <li className={styles.step}>
+            <span className={styles.mark} data-kind="lens" aria-hidden="true" />
+            <span className={styles.who}>Your glasses</span>
+            <span className={styles.what}>show one at a time</span>
+          </li>
+        </ol>
 
         <article className={styles.read}>
           <p>
