@@ -18,10 +18,11 @@ import styles from "./Requirements.module.css";
  *
  * It used to be a permanent cell of the sheet, which meant a browser that met
  * all three requirements spent a third of the front door being told so. It is
- * now a dropdown hanging off its own button, plus one rule that keeps the old
- * guarantee: it OPENS ITSELF when a requirement comes back unmet. Nobody has to
- * press anything to be told the thing they need to know, and nobody who is
- * already fine has to read it.
+ * now a dropdown hanging off its own button, and the button carries the answer:
+ * "Requirements" when everything is met, and the failing line verbatim when it
+ * is not. Nothing opens by itself. A panel that appeared unbidden over the
+ * product was louder than the thing it was reporting on, and the shut button
+ * already says which part is missing.
  *
  * It hangs off the button rather than floating over the picture. A panel placed
  * somewhere pleasing on the stage is a panel with no visible relationship to
@@ -57,45 +58,44 @@ export type State = "checking" | "ok" | "bad" | "unknown";
 
 export interface Requirement {
   id: string;
+  /** The thing being checked, as a short noun. */
+  subject: string;
   /**
-   * The requirement as a statement that is either true or false here.
+   * This browser's answer, in two or three words.
    *
-   * Short, and in words a stranger owns. "Chrome 149+ with the WebMCP flag"
-   * named the remedy rather than the requirement, which meant the line read as
-   * an instruction to somebody who did not yet know why they were being given
-   * one. The remedy is in `fix`, one click down, where it belongs.
+   * Printed beside the subject, so a line reads "WebMCP  not enabled" and is
+   * done. Every line used to carry a sentence explaining why it was on the
+   * list at all, which tripled the panel to say nothing anybody had asked.
    */
-  need: string;
+  status: string;
   state: State;
-  /** Why it is on the list at all. One line, shown whatever the state. */
-  means: string;
-  /** What to actually do about it. Never just "failed". */
+  /** One directive, and only when there is something to do. */
   fix?: ReactNode;
   detail?: string;
 }
 
 const FLAG = "chrome://flags/#enable-webmcp-testing";
 
-/** Why each line is on the list. Stated once, used by the probe and the panel. */
-const MEANS = {
-  api: "Dusky reads another site's tools out of your own session. Only the browser can hand those over.",
-  works:
-    "The flag can be set and the API still fail on the first real call, which looks like Dusky being broken.",
-  relay:
-    "The relay holds the session that joins the glasses to this tab. Nothing pairs without it.",
-} as const;
-
 /** Stated before anything is probed, so the list never appears out of nowhere. */
 const PENDING: Requirement[] = [
-  { id: "api", need: "This browser speaks WebMCP", state: "checking", means: MEANS.api },
-  { id: "works", need: "Tools register and read back", state: "checking", means: MEANS.works },
-  { id: "relay", need: "Dusky's relay answers", state: "checking", means: MEANS.relay },
+  { id: "api", subject: "WebMCP", status: "checking", state: "checking" },
+  { id: "works", subject: "Tool registration", status: "checking", state: "checking" },
+  { id: "relay", subject: "Relay", status: "checking", state: "checking" },
 ];
 
 export interface Probe {
   reqs: Requirement[];
   /** The verdict for THIS browser, which is what the button's mark draws. */
   verdict: State;
+  /**
+   * What the button says.
+   *
+   * "Requirements" while everything is met, and the first unmet line verbatim
+   * when it is not, so a browser that cannot run Dusky is told which part is
+   * missing without opening anything. This panel no longer opens itself, and
+   * that is only safe while the shut state carries the answer.
+   */
+  headline: string;
   unmet: number;
   /** Met over total, which is what the panel's header counts. */
   met: number;
@@ -127,14 +127,13 @@ export function useRequirements(): Probe {
     const present = isWebMcpAvailable();
     out.push({
       id: "api",
-      need: "This browser speaks WebMCP",
-      means: MEANS.api,
+      subject: "WebMCP",
+      status: present ? "enabled" : "not enabled",
       state: present ? "ok" : "bad",
       fix: (
         <>
-          Enable <code>{FLAG}</code> and restart the browser, or use the ChatGPT desktop app&rsquo;s
-          built-in browser, which has it on by default. Dusky consumes another site&rsquo;s tools,
-          and only a browser can grant that.
+          Turn on <code>{FLAG}</code> and restart Chrome. The ChatGPT desktop browser has it on
+          already.
         </>
       ),
     });
@@ -171,24 +170,19 @@ export function useRequirements(): Probe {
         const seen = (await mc.getTools()).some((t) => t.name === probe);
         out.push({
           id: "works",
-          need: "Tools register and read back",
-          means: MEANS.works,
+          subject: "Tool registration",
+          status: seen ? "working" : "not working",
           state: seen ? "ok" : "bad",
-          fix: (
-            <>
-              The API is present but did not return a tool this page just registered. That usually
-              means the flag is set and the browser has not been fully restarted since.
-            </>
-          ),
+          fix: <>Restart Chrome. The flag is set but does not take effect until you do.</>,
         });
       } catch (err) {
         out.push({
           id: "works",
-          need: "Tools register and read back",
-          means: MEANS.works,
+          subject: "Tool registration",
+          status: "failing",
           state: "bad",
           detail: err instanceof Error ? err.message : String(err),
-          fix: <>Restart the browser after enabling the flag, then reload this page.</>,
+          fix: <>Restart Chrome, then reload this page.</>,
         });
       } finally {
         lifetime.abort();
@@ -197,10 +191,10 @@ export function useRequirements(): Probe {
       // Nothing to probe against. Saying so beats inventing either answer.
       out.push({
         id: "works",
-        need: "Tools register and read back",
-        means: MEANS.works,
+        subject: "Tool registration",
+        status: "not tested",
         state: "unknown",
-        fix: <>Nothing to test against until the line above passes.</>,
+        fix: <>Nothing to test against until WebMCP is on.</>,
       });
     }
 
@@ -210,23 +204,21 @@ export function useRequirements(): Probe {
       const body = (await res.json()) as { ok?: boolean };
       out.push({
         id: "relay",
-        need: "Dusky's relay answers",
-        means: MEANS.relay,
+        subject: "Relay",
+        status: body.ok === true ? "connected" : "unhealthy",
         state: body.ok === true ? "ok" : "bad",
-        fix: <>The relay answered but not with a healthy response. Try again in a minute.</>,
+        fix: <>It answered but not healthily. Try again in a minute.</>,
       });
     } catch (err) {
       out.push({
         id: "relay",
-        need: "Dusky's relay answers",
-        means: MEANS.relay,
+        subject: "Relay",
+        status: "no answer",
         state: "bad",
-        detail: err instanceof Error ? err.message : String(err),
+        detail: `${RELAY_HTTP} ${err instanceof Error ? err.message : String(err)}`,
         fix: (
           <>
-            <code>{RELAY_HTTP}</code> did not answer. It holds the session that joins the glasses to
-            this browser, so nothing will pair until it does. Running Dusky locally? Start it with{" "}
-            <code>pnpm dev</code>.
+            Running Dusky locally? Start it with <code>pnpm dev</code>.
           </>
         ),
       });
@@ -245,8 +237,10 @@ export function useRequirements(): Probe {
   const met = reqs.filter((r) => r.state === "ok").length;
   const checking = reqs.some((r) => r.state === "checking");
   const verdict: State = checking ? "checking" : unmet > 0 ? "bad" : "ok";
+  const first = reqs.find((r) => r.state === "bad");
+  const headline = first ? `${first.subject} ${first.status}` : "Requirements";
 
-  return { reqs, verdict, unmet, met, busy, run };
+  return { reqs, verdict, headline, unmet, met, busy, run };
 }
 
 /**
@@ -258,14 +252,13 @@ export function useRequirements(): Probe {
  * dash for the one that was never tested, a broken ring while it is still
  * being worked out. Colour is confirmation, not the message.
  *
- * The mark carries its own words in a <title>, which is why there is no visually
- * hidden span beside it. A picture and a caption saying the same thing is the
- * same thing said twice to a screen reader.
+ * The mark never carries words. Everywhere it appears the state is already in
+ * text beside it, on the row as a status and on the button as its own label, so
+ * a title here would be the same thing said twice to a screen reader.
  */
-function Mark({ state, label, className }: { state: State; label: string; className?: string }) {
+function Mark({ state, className }: { state: State; className?: string }) {
   const common = {
     className,
-    role: "img",
     viewBox: "0 0 16 16",
     width: 15,
     height: 15,
@@ -279,8 +272,7 @@ function Mark({ state, label, className }: { state: State; label: string; classN
   };
   if (state === "ok") {
     return (
-      <svg {...common}>
-        <title>{label}</title>
+      <svg {...common} aria-hidden="true">
         <circle cx="8" cy="8" r="6.4" />
         <path d="M5.2 8.2 7.1 10.1 10.9 5.9" />
       </svg>
@@ -288,8 +280,7 @@ function Mark({ state, label, className }: { state: State; label: string; classN
   }
   if (state === "bad") {
     return (
-      <svg {...common}>
-        <title>{label}</title>
+      <svg {...common} aria-hidden="true">
         <path d="M8 1.9 15 14.2H1z" />
         <path d="M8 6.2v3.1" />
         <path d="M8 11.7h.01" />
@@ -298,28 +289,18 @@ function Mark({ state, label, className }: { state: State; label: string; classN
   }
   if (state === "unknown") {
     return (
-      <svg {...common}>
-        <title>{label}</title>
+      <svg {...common} aria-hidden="true">
         <circle cx="8" cy="8" r="6.4" />
         <path d="M5.4 8h5.2" />
       </svg>
     );
   }
   return (
-    <svg {...common}>
-      <title>{label}</title>
+    <svg {...common} aria-hidden="true">
       <circle cx="8" cy="8" r="6.4" strokeDasharray="2.6 2.6" />
     </svg>
   );
 }
-
-/** The state in words, for the mark that draws it. */
-const SAYS: Record<State, string> = {
-  checking: "checking",
-  ok: "met",
-  bad: "unmet",
-  unknown: "not testable here",
-};
 
 /**
  * The button that opens the dropdown, carrying the verdict as a mark.
@@ -348,19 +329,22 @@ export function RequirementsButton({
       aria-expanded={open}
       aria-controls="requirements"
       data-state={probe.verdict}
+      /*
+        The visible text is the whole name when something is wrong, because it
+        IS the failure. Met and still-checking both read "Requirements", which
+        the mark tells apart and nothing else would, so those two say which
+        they are here.
+      */
+      aria-label={
+        probe.verdict === "bad"
+          ? probe.headline
+          : probe.verdict === "checking"
+            ? "Requirements, checking"
+            : "Requirements, all met"
+      }
     >
-      Requirements
-      <Mark
-        state={probe.verdict}
-        label={
-          probe.verdict === "checking"
-            ? "checking"
-            : probe.unmet > 0
-              ? `${probe.unmet} unmet in this browser`
-              : "all met in this browser"
-        }
-        className={styles.mark}
-      />
+      {probe.headline}
+      <Mark state={probe.verdict} className={styles.mark} />
     </button>
   );
 }
@@ -410,10 +394,10 @@ function IconButton({
  * Positioned by whatever wraps it, which is always the button's own anchor, so
  * this file never decides where on the page it lands.
  *
- * A heading with a count, two round controls, and one line per requirement that
- * opens for the detail. Every requirement used to print its whole remedy at
- * once, so the panel was four paragraphs deep and the two lines that had passed
- * were the same size as the one that had not.
+ * A heading with a count, two round controls, and one line per requirement:
+ * what was checked, what this browser answered, and one instruction under
+ * whichever line needs one. Nothing collapses, because with the prose gone
+ * there is nothing left worth hiding.
  */
 export function RequirementsPanel({ probe, onClose }: { probe: Probe; onClose: () => void }) {
   const { reqs, verdict, met, busy, run } = probe;
@@ -477,28 +461,25 @@ export function RequirementsPanel({ probe, onClose }: { probe: Probe; onClose: (
 
       <ul className={styles.list}>
         {reqs.map((r) => (
-          <li key={r.id}>
-            {/*
-              Open when it is not met, shut when it is.
+          /*
+            One line, and a directive under it when there is something to do.
 
-              The remedy is the only thing on this panel anybody needs, and it
-              belongs to whichever line failed. A met requirement still has to
-              be READABLE, because a list that only shows failures is a list
-              nobody read in time, but it does not have to be legible from
-              across the room.
-            */}
-            <details className={styles.item} data-state={r.state} open={r.state !== "ok"}>
-              <summary className={styles.itemHead}>
-                <Mark state={r.state} label={SAYS[r.state]} className={styles.mark} />
-                <span className={styles.need}>{r.need}</span>
-                <span className={styles.chev} aria-hidden="true" />
-              </summary>
-              <div className={styles.body}>
-                <p className={styles.means}>{r.means}</p>
-                {r.state !== "ok" && r.fix && <p className={styles.fix}>{r.fix}</p>}
-                {r.state !== "ok" && r.detail && <p className={styles.detail}>{r.detail}</p>}
-              </div>
-            </details>
+            Every line used to be a disclosure holding a sentence about why the
+            requirement exists and a second one about how to fix it, so a
+            browser missing one thing got four paragraphs and had to read all
+            of them to find the one instruction. A met line is now three words
+            and no body at all.
+          */
+          <li key={r.id} className={styles.item} data-state={r.state}>
+            <p className={styles.row}>
+              <Mark state={r.state} className={styles.mark} />
+              <span className={styles.need}>{r.subject}</span>
+              <span className={styles.status} data-state={r.state}>
+                {r.status}
+              </span>
+            </p>
+            {r.state !== "ok" && r.fix && <p className={styles.fix}>{r.fix}</p>}
+            {r.state !== "ok" && r.detail && <p className={styles.detail}>{r.detail}</p>}
           </li>
         ))}
       </ul>

@@ -152,24 +152,20 @@
   flex-direction: column;
 }
 
-/* One line each, opening for the detail. */
+/* One line each, plus a directive under whichever line needs one. */
 .item {
+  padding: var(--dusky-s3) 0;
   border-bottom: 1px solid var(--dusky-hair-soft);
 }
-.list > li:last-child .item {
+.list > .item:last-child {
   border-bottom: 0;
 }
 
-.itemHead {
+.row {
   display: flex;
   align-items: center;
   gap: var(--dusky-s3);
-  padding: var(--dusky-s3) 0;
-  cursor: pointer;
-  list-style: none;
-}
-.itemHead::-webkit-details-marker {
-  display: none;
+  margin: 0;
 }
 
 .need {
@@ -183,53 +179,35 @@
   color: var(--dusky-ink-dim);
 }
 
-/* The project's own chevron rather than the browser's triangle, which is the
-   one piece of default styling that announces a page was not designed. */
-.chev {
-  width: 0.38rem;
-  height: 0.38rem;
+/*
+ * The verdict, in the treatment this project gives machine output, because that
+ * is what it is: the answer this browser gave, not a sentence about it. It
+ * carries the same colour as the mark beside it, so shape and colour agree.
+ */
+.status {
   flex: none;
-  border-right: 1.5px solid var(--dusky-ink-faint);
-  border-bottom: 1.5px solid var(--dusky-ink-faint);
-  transform: rotate(45deg) translateY(-1px);
-  transition: transform var(--dusky-motion) var(--dusky-ease);
-}
-.item[open] > .itemHead .chev {
-  transform: rotate(225deg) translateY(-1px);
-}
-.itemHead:hover .chev {
-  border-color: var(--dusky-ink-strong);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chev {
-    transition: none;
-  }
-}
-
-/* Indented past the mark, so the detail hangs under the words rather than
-   under the icon. 15px is the mark's own width. */
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0 0 var(--dusky-s3) calc(15px + var(--dusky-s3));
-}
-
-/* Why the line is on the list at all. */
-.means {
-  margin: 0;
-  font-size: 0.84rem;
-  line-height: 1.5;
+  font-family: var(--dusky-mono);
+  font-size: 0.76rem;
   color: var(--dusky-ink-faint);
 }
+.status[data-state="ok"] {
+  color: var(--dusky-ok);
+}
+.status[data-state="bad"] {
+  color: var(--dusky-stop);
+}
 
-/* The whole point of probing: what to actually do about it. */
+/*
+ * The whole point of probing: what to actually do about it. Indented past the
+ * mark, so it hangs under the words rather than under the icon. 15px is the
+ * mark's own width.
+ */
 .fix {
-  margin: 0;
-  font-size: 0.84rem;
+  margin: var(--dusky-s2) 0 0;
+  padding-left: calc(15px + var(--dusky-s3));
+  font-size: 0.86rem;
   line-height: 1.5;
-  color: var(--dusky-ink-dim);
+  color: var(--dusky-ink);
 }
 .fix code {
   font-family: var(--dusky-mono);
@@ -239,7 +217,8 @@
 }
 
 .detail {
-  margin: 0;
+  margin: 0.3rem 0 0;
+  padding-left: calc(15px + var(--dusky-s3));
   font-family: var(--dusky-mono);
   font-size: 0.72rem;
   color: var(--dusky-ink-faint);
