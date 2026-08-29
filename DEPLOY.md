@@ -1,13 +1,19 @@
 # Deploying Dusky, and getting it onto the glasses
 
-## Live as of 2026-08-26
+## Live as of 2026-08-29
+
+The console holds every partner site at once, so all four static surfaces have
+to be up for the demo to be what it claims. `e2e/production.spec.ts` checks
+each of them, which is why it exists: `dusky-reservations` answered
+DEPLOYMENT_NOT_FOUND for a while with the whole suite green, because a claim
+nothing asserts is a claim nothing can catch.
 
 | Surface | URL |
 | --- | --- |
 | Display, for the glasses | https://dusky-display.vercel.app |
 | Website and demo | https://dusky-console.vercel.app |
 | Verdant Market | https://dusky-market.vercel.app |
-| Amber & Oak | https://dusky-reservations.vercel.app (not deployed yet) |
+| Amber & Oak | https://dusky-reservations.vercel.app |
 | Relay | https://dusky-relay.onrender.com |
 
 Two things are deliberately still manual, because they are credentials:
@@ -114,16 +120,9 @@ would rather they were.
 
 | Surface | Variable | Value |
 | --- | --- | --- |
-| relay | `DUSKY_SOURCE` | fallback label only; a console names its own source on connect |
 | relay | `DUSKY_PLANNER` | `on` to enable spoken requests, omit for menu-only |
 | relay | `ANTHROPIC_API_KEY` | required only when the planner is on |
 | relay | `DUSKY_AUDIT_DIR` | a directory that outlives the container, or unset for memory only |
-
-Trails on that disk are kept for a week and then expired, swept hourly and
-once at boot. That bounds a directory whose filenames are pairing codes, which
-anyone reaching the relay can invent. `/diagnostics/:id` answers "no trail for
-this code" once a trail has aged out, which is deliberately a statement about
-what is held rather than about what once happened.
 | display | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/display` |
 | console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
 | console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |
@@ -132,8 +131,23 @@ what is held rather than about what once happened.
 | market | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
 | reservations | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
 
-These are read at BUILD time by Vite, so changing one means redeploying that
-surface, not restarting it.
+The `VITE_*` values are read at BUILD time by Vite, so changing one means
+redeploying that surface, not restarting it.
+
+`DUSKY_SOURCE` used to be here and is gone. It named ONE partner site for a
+whole process, which was already a lie the moment a second site existed and is
+unanswerable now that a console holds every site at once: no business name is
+true above a menu containing another business's actions. A wearer reads the
+name of whichever site a frame is about, sent by the console, which is the
+surface that actually has them loaded. A session holding exactly one site still
+reads that site's own name, derived from the tools that arrived rather than
+from anything configured.
+
+Trails on the audit disk are kept for a week and then expired, swept hourly and
+once at boot. That bounds a directory whose filenames are pairing codes, which
+anyone reaching the relay can invent. `/diagnostics/:id` answers "no trail for
+this code" once a trail has aged out, which is deliberately a statement about
+what is held rather than about what once happened.
 
 ### The two failures worth knowing in advance
 
@@ -143,8 +157,10 @@ origin character by character. A trailing slash, a path, `http` instead of
 `https`, or a preview URL instead of the production one, and Dusky discovers
 zero tools. That failure looks identical to "WebMCP is broken", so check it
 first whenever the console shows an empty tool list. The `?agent=` query
-parameter on the market overrides it at runtime, which is the fastest way to
-confirm a mismatch is the cause.
+parameter, which each partner site reads, overrides it at runtime, and that is
+the fastest way to confirm a mismatch is the cause. Check every site: the
+console holds them all at once, so one site's grant being wrong shows up as a
+short list rather than an empty one.
 
 **`wss://`, never `ws://`.** An HTTPS page cannot open an insecure WebSocket;
 the browser blocks it as mixed content and the Display sits on "no connection".
