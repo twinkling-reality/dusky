@@ -5,7 +5,7 @@ import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requir
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 import { codeProblem, isCode, mintCode, type PairMode } from "./session.js";
-import { SOURCES, sourceFromQuery } from "./sources.js";
+import { originOf, type Source, sitesFromQuery } from "./sources.js";
 import { useConsoleLink } from "./useConsoleLink.js";
 import styles from "./Workspace.module.css";
 
@@ -35,7 +35,15 @@ const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:780
  * it the right home for text that only some people need. The last line is the
  * one that matters: it says what to press.
  */
-function WhatIsThis({ site, onClose }: { site: string; onClose: () => void }) {
+function WhatIsThis({
+  heading,
+  sites,
+  onClose,
+}: {
+  heading: string;
+  sites: readonly Source[];
+  onClose: () => void;
+}) {
   const box = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -64,16 +72,20 @@ function WhatIsThis({ site, onClose }: { site: string; onClose: () => void }) {
           <dd>The screen a wearer sees, running in this tab. A real pair loads the same page.</dd>
         </div>
         <div>
-          <dt>{site}</dt>
-          <dd>A live site. Dusky read the actions it publishes and built that screen from them.</dd>
+          <dt>{heading}</dt>
+          <dd>
+            {sites.length > 1
+              ? "Live sites, unrelated to each other. Dusky read the actions each one publishes and built that screen from all of them."
+              : "A live site. Dusky read the actions it publishes and built that screen from them."}
+          </dd>
         </div>
         <div>
           <dt>Declared actions</dt>
-          <dd>What the site published, and whether each one stops for you first.</dd>
+          <dd>What each site published, and whether each action stops for you first.</dd>
         </div>
         <div>
           <dt>Activity</dt>
-          <dd>Every call between Dusky and the site, as it happens.</dd>
+          <dd>Every call between Dusky and those sites, as it happens.</dd>
         </div>
       </dl>
       <p className={styles.whatDo}>Press a row on the glasses. Watch the cart change beside it.</p>
@@ -86,8 +98,28 @@ export function Workspace() {
   const [reqOpen, setReqOpen] = useState(false);
   const [whatOpen, setWhatOpen] = useState(false);
   const [params, setParams] = useSearchParams();
-  const source = useMemo(() => sourceFromQuery(params.toString()), [params]);
-  const origins = useMemo(() => [new URL(source.url).origin], [source]);
+  /*
+   * Every site at once, which is the whole product.
+   *
+   * This was one source wrapped in an array, and that array was the only thing
+   * holding Dusky to one business at a time: `getTools({ fromOrigins })` has
+   * always taken a list, tool identity has always been (origin, name), and the
+   * menu has always ordered a mixed registry. Nothing downstream changed to
+   * make this work.
+   *
+   * `?source=` still narrows it, and nothing on the page offers that. See the
+   * note on `sitesFromQuery`.
+   */
+  const sites = useMemo(() => sitesFromQuery(params.toString()), [params]);
+
+  /*
+   * What the relay is told, and it must be a STABLE array.
+   *
+   * The connect effect depends on this, so rebuilding it every render would
+   * reopen the socket every render. `sites` is memoised on the search string,
+   * so this is too.
+   */
+  const held = useMemo(() => sites.map((s) => ({ origin: originOf(s), name: s.name })), [sites]);
 
   /*
    * A code in the URL means somebody already started a session. `?start=1`
@@ -115,7 +147,19 @@ export function Workspace() {
   );
   const [typed, setTyped] = useState("");
 
-  const link = useConsoleLink(RELAY_URL, session ?? "", origins, session !== null, source.name);
+  const link = useConsoleLink(RELAY_URL, session ?? "", held, session !== null);
+
+  /**
+   * What to call the box holding the sites, and what to call a row's site.
+   *
+   * One site keeps its own name as the heading, which is what this page looked
+   * like when it could only hold one, and is what `?source=` still produces.
+   * Several of them get a plain label, because no business name is true above a
+   * box containing another business.
+   */
+  const heading = sites.length === 1 ? (sites[0] as Source).name : "Sites";
+  const nameOf = (origin: string) =>
+    held.find((h) => h.origin === origin)?.name ?? new URL(origin).host;
 
   // Arrow keys reach the panel only when the frame has focus, and a judge who
   // has to discover that is a judge who thinks the demo is broken.
@@ -183,12 +227,6 @@ export function Workspace() {
     setSession(code.toUpperCase());
   };
 
-  const switchSource = (id: string) => {
-    const next = new URLSearchParams(params);
-    next.set("source", id);
-    setParams(next, { replace: true });
-  };
-
   return (
     <>
       <SiteHeader>
@@ -202,6 +240,26 @@ export function Workspace() {
           only one that was ours to delete, and the component that says it
           properly already existed.
         */}
+        {/*
+          The way back to pairing, in the header with the other ways out.
+
+          It sat over the grid in a row of its own, beside two source buttons
+          for choosing which single site Dusky held. Those are gone with the
+          restriction they controlled: holding every site at once means a
+          control for choosing one of them is a control for using less of the
+          product, and it would have to be labelled "show me fewer of the things
+          you can do".
+
+          That left one link alone on a row costing the page fifty pixels it no
+          longer has, because two site frames and seven actions need the height.
+          It was never a control over the content anyway. It is the way to a
+          different mode, which is what the header is for.
+        */}
+        {session && mode === "embedded" && (
+          <button type="button" className={styles.pairLink} onClick={unpair}>
+            Pair glasses
+          </button>
+        )}
         {session && (
           <div className={styles.reqAnchor}>
             <button
@@ -213,7 +271,9 @@ export function Workspace() {
             >
               What is this?
             </button>
-            {whatOpen && <WhatIsThis site={source.name} onClose={() => setWhatOpen(false)} />}
+            {whatOpen && (
+              <WhatIsThis heading={heading} sites={sites} onClose={() => setWhatOpen(false)} />
+            )}
           </div>
         )}
         <div className={styles.reqAnchor}>
@@ -281,38 +341,6 @@ export function Workspace() {
         ) : (
           <>
             {/*
-              The source switcher, and nothing else.
-
-              The pair code used to sit here and it was a question with no
-              answer: a code is something a wearer reads off a lens and types
-              into this page, and in embedded mode the page minted it, opened
-              the Display itself and paired it. Nobody types it. It is on the
-              start card, which is where somebody who actually has glasses
-              arrives.
-
-              The row also had the caption "Same Dusky, different site" over
-              these buttons, which is a slogan, not a label.
-            */}
-            <div className={styles.controls}>
-              {SOURCES.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={styles.sourceBtn}
-                  data-on={s.id === source.id}
-                  onClick={() => switchSource(s.id)}
-                >
-                  {s.name}
-                </button>
-              ))}
-              {mode === "embedded" && (
-                <button type="button" className={styles.pairLink} onClick={unpair}>
-                  Pair glasses
-                </button>
-              )}
-            </div>
-
-            {/*
               Four cells on a two by two grid.
 
               Top row is the two live things, bottom row is the two records of
@@ -362,26 +390,47 @@ export function Workspace() {
               </section>
 
               <section className={styles.cell}>
-                <h2 className={styles.h2}>
-                  {source.name}
-                  {/* The origin is the one value worth printing beside a
-                      heading: it is how anybody can see the tools were read
-                      from somewhere other than this page. */}
-                  <span className={styles.origin}>{origins[0]}</span>
-                </h2>
+                <h2 className={styles.h2}>{heading}</h2>
                 {/*
-                  allow="tools" delegates the WebMCP permissions policy to this
-                  frame. Without it, and without the site naming our origin in
-                  exposedTo, getTools returns nothing. That is the intended
-                  security property.
+                  One frame per site, side by side rather than stacked.
+
+                  Side by side because the whole argument is on this row: two
+                  businesses that have never heard of each other, running in
+                  this browser, in this person's own session, driving one menu.
+                  Stacked they would not fit, and `frontdoor.spec.ts` holds the
+                  page to one 1440x900 screen because a page whose job is "look,
+                  it works" cannot ask anybody to scroll to find out whether it
+                  did.
                 */}
-                <iframe
-                  className={styles.frame}
-                  data-squircle=""
-                  title={source.name}
-                  src={`${source.url}?agent=${encodeURIComponent(location.origin)}`}
-                  allow="tools"
-                />
+                <div className={styles.sites}>
+                  {sites.map((s) => (
+                    <figure key={s.id} className={styles.site}>
+                      {/*
+                        allow="tools" delegates the WebMCP permissions policy to
+                        this frame. Without it, and without the site naming our
+                        origin in exposedTo, getTools returns nothing. That is
+                        the intended security property, and it is granted once
+                        per site rather than once for the page.
+                      */}
+                      <iframe
+                        className={styles.frame}
+                        data-squircle=""
+                        title={s.name}
+                        src={`${s.url}?agent=${encodeURIComponent(location.origin)}`}
+                        allow="tools"
+                      />
+                      {/* The origin is the one value worth printing beside a
+                          name: it is how anybody can see the tools were read
+                          from somewhere other than this page, and with several
+                          sites it is how they can see they are different
+                          somewheres. */}
+                      <figcaption className={styles.siteName}>
+                        {s.name}
+                        <span className={styles.origin}>{originOf(s)}</span>
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
               </section>
 
               <section className={styles.cell}>
@@ -399,6 +448,17 @@ export function Workspace() {
                             the lens beside them already says in the site's own
                             words. */}
                         <span className={styles.toolName}>{t.title ?? t.name}</span>
+                        {/* Whose action this is, on the row rather than in a
+                            heading above a group. One list is the claim being
+                            made: these arrived together, they order together,
+                            and one sentence can reach across them. Grouping
+                            them by site would draw the boundary the product
+                            exists to remove. Omitted entirely when there is
+                            only one site, because then every row would carry
+                            the same word. */}
+                        {sites.length > 1 && (
+                          <span className={styles.toolSite}>{nameOf(t.origin)}</span>
+                        )}
                         <span
                           className={styles.chip}
                           data-consequence={g.consequence}
@@ -409,18 +469,38 @@ export function Workspace() {
                       </li>
                     );
                   })}
-                  {link.tools.length === 0 && (
-                    <li className={styles.empty}>
-                      {link.discovered ? (
-                        <>
-                          No tools. A site has to name this exact origin in <code>exposedTo</code>{" "}
-                          before the browser will show Dusky anything.
-                        </>
-                      ) : (
-                        "Reading what this site declared."
-                      )}
-                    </li>
-                  )}
+                  {/*
+                    Said per site, because one site answering is not evidence
+                    about another.
+
+                    A shared flag would have reported every site still loading
+                    as having granted nothing, in the same breath as one that
+                    really had. Both sentences below are about what ARRIVED
+                    rather than about somebody else's page, which is the only
+                    kind that stays true: a site may have declared plenty and
+                    not named this origin, and none of that is visible here.
+                  */}
+                  {sites
+                    .filter((s) => !link.tools.some((t) => t.origin === originOf(s)))
+                    .map((s) => (
+                      <li key={s.id} className={styles.empty}>
+                        {link.problem ? (
+                          // Could not look, which is not the same as nothing
+                          // to see and must not be reported as it. The reason
+                          // itself is on the lens and in Activity; repeating
+                          // it once per site would be the same sentence
+                          // several times over.
+                          `Could not read what ${s.name} declared.`
+                        ) : link.settled(originOf(s)) ? (
+                          <>
+                            {s.name} offered nothing. A site has to name this exact origin in{" "}
+                            <code>exposedTo</code> before the browser will show Dusky anything.
+                          </>
+                        ) : (
+                          `Reading what ${s.name} declared.`
+                        )}
+                      </li>
+                    ))}
                 </ul>
               </section>
 

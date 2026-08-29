@@ -31,7 +31,9 @@ const REPO = "https://github.com/twinkling-reality/dusky";
 const STAGE_ALT =
   "Dusky running: on the left the glasses view, headed Verdant Market, confirm, reading Add to " +
   "cart, oat-1, this spends money, and offering Confirm on enter or Cancel on escape. On the " +
-  "right the shop itself, its cart still empty, and the catalogue the product was chosen from.";
+  "right two unrelated businesses live in the same browser tab, a shop with its cart still " +
+  "empty beside the catalogue the product was chosen from, and a restaurant listing the tables " +
+  "it has free.";
 
 export function Landing() {
   const probe = useRequirements();
@@ -64,10 +66,11 @@ export function Landing() {
 
       <main className={styles.page}>
         <section className={styles.hero}>
-          <h1 className={styles.claim}>Turn web actions into augmented reality.</h1>
+          <h1 className={styles.claim}>A remote control for everything you are signed into.</h1>
           <p className={styles.lede}>
-            Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for
-            AR displays.
+            Dusky reads what every site in your browser can do, over WebMCP, and puts all of it on a
+            pair of glasses as one list. One sentence can cross two businesses that have never heard
+            of each other. Nothing that costs you anything happens without you saying yes.
           </p>
 
           {/*
@@ -102,9 +105,9 @@ export function Landing() {
           The stage: the product on a field of light.
 
           A real capture of a real session, taken by scripts/stage.mjs against
-          a running system: the glasses view on the left, the site the tools are
-          running in on the right, and the protocol log under it. Nothing in it
-          is drawn for this page, so it cannot drift away from what Dusky does.
+          a running system: the glasses view on the left and every site the
+          tools are running in on the right. Nothing in it is drawn for this
+          page, so it cannot drift away from what Dusky does.
 
           A still standing in for the recording. The box does not care what
           size it is: the field is masked to nothing before it reaches an edge,
@@ -117,7 +120,7 @@ export function Landing() {
             src="/stage.png"
             alt={STAGE_ALT}
             width={2784}
-            height={900}
+            height={864}
           />
         </div>
       </main>

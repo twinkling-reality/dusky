@@ -33,6 +33,7 @@ import {
   parameters,
   paramFrame,
   resultFrame,
+  siteFromChoice,
   textFromResult,
   toolId,
   valueForParam,
@@ -76,7 +77,25 @@ export interface Planner {
 }
 
 export interface SessionOptions {
+  /**
+   * What the eyebrow says when no single site is in play.
+   *
+   * A menu spanning several businesses is about none of them, so it carries
+   * the product's own name rather than picking one of them to print. When
+   * exactly one site has offered tools the menu names THAT site instead, which
+   * is what a single-source deployment has always shown.
+   */
   source: string;
+  /**
+   * The name a wearer reads for the site that registered a tool.
+   *
+   * Every frame that is about one pending tool names that tool's site, because
+   * the frame where it matters most is the confirmation and the eyebrow is the
+   * only place it appears. Supplied by the transport, since the console is the
+   * surface that actually has the sites loaded. Defaults to `source`, so a
+   * session told about one place behaves exactly as it always did.
+   */
+  siteName?: (origin: string) => string;
   runner: ToolRunner;
   planner?: Planner;
   /** We enforce our own deadline because WebMCP cancellation is unreliable. */
@@ -171,6 +190,16 @@ export class Session {
    * abandoned call settled.
    */
   private executing: Pending | null = null;
+  /**
+   * The one site the wearer has stepped into, when the menu is grouped.
+   *
+   * Null at the top of the menu, which is either every action at once or a row
+   * per site depending on whether they fit. Navigation only: it narrows what a
+   * MENU draws and nothing else. The planner still ranks every site's tools
+   * together, `actions()` still reports them together, and a spoken request
+   * still crosses two businesses, because the registry was never partitioned.
+   */
+  private site: string | null = null;
   private intent = "";
   private frame: DisplayFrame;
 
@@ -264,16 +293,88 @@ export class Session {
     return this.o.planner !== undefined;
   }
 
-  private readOnly(): ToolDescriptor[] {
-    return this.tools.filter((t) => gate(t).consequence === "read");
+  /**
+   * The tools that may look something up on behalf of a target.
+   *
+   * Read-only, and SAME-ORIGIN AS THE TARGET. Both halves are enforced here and
+   * again in `packages/planner`, because a `Planner` is a port: another
+   * implementation reaches this machine without ever passing through that
+   * package, so a rule that lives only there is a rule a different planner does
+   * not have.
+   *
+   * The origin half is new, and it is new because it had nothing to forbid
+   * until now. A session held one site, so every read-only tool was already
+   * same-origin with every target and the constraint was invisible. Holding
+   * every site at once makes it the difference between a lookup and a leak: the
+   * wearer's spoken words are what fill a resolver's arguments, and this is the
+   * one path that runs with nobody watching, so an unconstrained version would
+   * quietly hand what somebody said to a business their request never mentioned.
+   *
+   * Refusing costs a lookup and buys a question. The wearer is asked for the
+   * value instead, which is the menu-driven path the product already has.
+   */
+  private resolversFor(target: ToolDescriptor): ToolDescriptor[] {
+    return this.tools.filter(
+      (t) => t.origin === target.origin && gate(t).consequence === "read" && t.name !== target.name,
+    );
   }
 
-  /** Discover tools and show the menu. Safe to call again on toolschange. */
+  /**
+   * The name a wearer reads for whoever registered a tool.
+   *
+   * Cosmetic, and deliberately so. The unspoofable fact about where a tool came
+   * from is its origin, which the browser supplies and which every audit entry
+   * carries. This is the version of that fact a person can read at a glance on
+   * a waveguide.
+   */
+  private siteOf(origin: string): string {
+    return this.o.siteName?.(origin) ?? this.o.source;
+  }
+
+  /**
+   * The eyebrow over a frame that is not about one particular tool.
+   *
+   * Derived from what actually arrived rather than from what the session was
+   * told to expect. Holding one site, a menu is entirely that site's and says
+   * so, which is what every single-source deployment has always shown. Holding
+   * several, it belongs to none of them and carries the product's own name:
+   * picking one of the businesses to print above a list containing another
+   * one's actions would be the same lie as a server-global label.
+   *
+   * It follows the tools, so a session whose second site never loads honestly
+   * names the one that did rather than claiming a breadth it does not have.
+   */
+  private menuSource(): string {
+    // Stepped into a site: the menu is entirely that site's and says so.
+    if (this.site) return this.siteOf(this.site);
+    const origins = new Set(this.tools.map((t) => t.origin));
+    if (origins.size !== 1) return this.o.source;
+    const [only] = [...origins];
+    return this.siteOf(only as string);
+  }
+
+  /**
+   * The menu, wherever the wearer currently is in it.
+   *
+   * One place builds it, because the alternative is nine call sites that have
+   * to remember to pass the site filter and the name lookup, and the one that
+   * forgets shows a wearer somebody else's actions under this site's name.
+   */
+  private menu(note?: string): DisplayFrame {
+    // A site whose tools have all gone is not a place to stand. Discovery can
+    // empty one while the wearer is looking at it, and a submenu of nothing
+    // with no way out but Escape is worse than being returned to the top.
+    if (this.site && !this.tools.some((t) => t.origin === this.site)) this.site = null;
+    return idleFrame(this.menuSource(), this.tools, this.page, this.canSpeak(), note, {
+      ...(this.site ? { site: this.site } : {}),
+      siteName: (origin) => this.siteOf(origin),
+    });
+  }
+
+  /** Discover tools and show the menu. Called when a console attaches. */
   async start(): Promise<DisplayFrame> {
     try {
-      this.tools = await this.o.runner.discover();
-      this.toolsChangedAt = this.now();
-      this.audit({ kind: "discover", detail: { count: this.tools.length } });
+      await this.discover();
       this.page = 0;
       // The question that was on screen is not on screen any more, so stop
       // waiting for its answer. Without this the wearer sees the menu while
@@ -289,11 +390,65 @@ export class Session {
         this.pending.awaiting = undefined;
         this.pending.candidates = undefined;
       }
-      this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
+      this.show(this.menu());
     } catch (err) {
-      this.show(errorFrame(this.o.source, "Cannot reach this source", msg(err), true));
+      this.show(errorFrame(this.menuSource(), "Cannot reach this source", msg(err), true));
     }
     return this.frame;
+  }
+
+  /**
+   * A site added or removed tools. Take the new registry; disturb nobody.
+   *
+   * `start()` was doing this job and it is the wrong shape for it, because
+   * start RESTARTS: it clears the parameter being collected and repaints the
+   * menu over whatever was on the lens. That was invisible while a console
+   * held one site, since a site registers its tools once, in a burst the
+   * console coalesces, before anybody has chosen anything.
+   *
+   * Holding several sites breaks every part of that. Each site registers on
+   * its own schedule, the console's debounce merges a burst but cannot merge
+   * bursts seconds apart, so N sites produce N of these. And any one of them
+   * can now arrive AFTER the wearer has started something: a site finishing
+   * its registration while somebody is halfway through choosing a table would
+   * have thrown their answer away and put them back on the menu, with no
+   * explanation and nothing they did to cause it.
+   *
+   * So a refresh repaints only when the wearer is looking at a menu, which is
+   * where new actions want to appear and where nothing is lost by redrawing.
+   * Mid-task the registry updates underneath and the screen holds still.
+   *
+   * Nothing is given up by not restarting. `toolsChangedAt` still moves, and
+   * `isConfirmationFresh` still refuses a confirmation shown before the tools
+   * changed, so the case where a site swaps what is about to be approved is
+   * covered by the check that was written for exactly it, rather than by a
+   * blunt repaint that also catches everybody else.
+   */
+  async refresh(): Promise<DisplayFrame> {
+    try {
+      await this.discover();
+    } catch (err) {
+      // A failed re-discovery is not news the wearer can act on, and replacing
+      // a live frame with an error because a background refresh failed would
+      // be the interruption this method exists to avoid. `start` still reports
+      // a failure, because there the wearer is waiting for the answer.
+      this.audit({ kind: "error", detail: { reason: "refresh failed", message: msg(err) } });
+      return this.frame;
+    }
+    if (this.frame.kind === "idle") this.show(this.menu());
+    return this.frame;
+  }
+
+  private async discover(): Promise<void> {
+    this.tools = await this.o.runner.discover();
+    this.toolsChangedAt = this.now();
+    this.audit({
+      kind: "discover",
+      detail: {
+        count: this.tools.length,
+        sites: new Set(this.tools.map((t) => t.origin)).size,
+      },
+    });
   }
 
   /** A spoken or typed request. Falls back to the menu when no planner exists. */
@@ -304,7 +459,7 @@ export class Session {
     // The wearer caused this wait, so they have to see it. The title echoes
     // what Dusky heard, because a misheard request is the thing they most
     // need to catch before it turns into an action.
-    this.show(busyFrame(this.o.source, text, "Finding the right action"));
+    this.show(busyFrame(this.menuSource(), text, "Finding the right action"));
 
     // A planner is assistance, never a dependency. Anything it does wrong,
     // including throwing, has to land the wearer on the menu they can already
@@ -322,7 +477,7 @@ export class Session {
     // and the last two would be telling them about our plumbing.
 
     // A planner that is unsure must produce a question, never a guess.
-    if (!pick) return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak(), UNHEARD));
+    if (!pick) return this.show(this.menu(UNHEARD));
 
     const tool = this.byName(pick.name);
     if (!tool) {
@@ -332,7 +487,7 @@ export class Session {
         toolName: pick.name,
         detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
       });
-      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak(), UNHEARD));
+      return this.show(this.menu(UNHEARD));
     }
 
     const args = declaredArgs(tool, pick.args ?? {});
@@ -368,20 +523,34 @@ export class Session {
           ...(inFlight ? { detail: { inFlight: true } } : {}),
         });
       }
+      /*
+       * Back steps out one level, not all the way home.
+       *
+       * With a grouped menu there are two places "back" can mean, and taking a
+       * wearer to the top from inside a task would throw away the site they
+       * chose along with the task they abandoned. Leaving something PENDING
+       * returns them to that site's own actions, which is where they were
+       * standing. Pressing Back again, with nothing pending, leaves the site.
+       *
+       * A wearer who is not in a site is already at the top and stays there,
+       * which is what this has always done.
+       */
+      const wasPending = this.pending !== null;
       this.pending = null;
       this.page = 0;
 
       if (inFlight) {
         return this.show(
           errorFrame(
-            this.o.source,
+            this.siteOf(inFlight.tool.origin),
             "Already sent",
             `${label(inFlight.tool)} was sent before you went back. It may still finish.`,
             false,
           ),
         );
       }
-      return this.show(idleFrame(this.o.source, this.tools, 0, this.canSpeak()));
+      if (!wasPending) this.site = null;
+      return this.show(this.menu());
     }
     if (choiceId === "__retry") {
       // The retry offered on a discovery failure has nothing pending behind
@@ -428,6 +597,29 @@ export class Session {
      * nothing to send and the wearer should stay where they are.
      */
     if (choiceId === "__compose" || choiceId === "__submit") return this.frame;
+
+    /*
+     * Stepping into one site's actions.
+     *
+     * Checked HERE, above the parameter branch, for the reason `__compose` and
+     * `__submit` are: that branch coerces whatever id arrives into the answer,
+     * and a reserved id becoming a parameter value is a mistake this file has
+     * already made once. `product_id` was set to the literal string
+     * `"__submit"` and walked on to a confirmation with it.
+     *
+     * Navigation, and nothing more. It narrows what the MENU draws; it does not
+     * narrow what the planner may rank, what an agent may be told about, or
+     * what a spoken request may cross.
+     */
+    const stepInto = siteFromChoice(choiceId);
+    if (stepInto !== null) {
+      // Only into a site that is actually offering something, so a stale frame
+      // cannot strand the wearer on an empty screen.
+      if (!this.tools.some((t) => t.origin === stepInto)) return this.frame;
+      this.site = stepInto;
+      this.page = 0;
+      return this.show(this.menu());
+    }
 
     // Selecting a value for the parameter currently on screen.
     if (this.pending?.awaiting) {
@@ -476,9 +668,11 @@ export class Session {
     if (p?.awaiting) {
       const missing = this.awaitingParam();
       if (!missing) return this.frame;
-      return this.show(paramFrame(this.o.source, p.tool, missing, p.candidates ?? [], this.page));
+      return this.show(
+        paramFrame(this.siteOf(p.tool.origin), p.tool, missing, p.candidates ?? [], this.page),
+      );
     }
-    return this.show(idleFrame(this.o.source, this.tools, this.page, this.canSpeak()));
+    return this.show(this.menu());
   }
 
   private async beginTool(
@@ -528,14 +722,19 @@ export class Session {
        * the intent is exactly what makes the lookup answerable.
        */
       if (missing.kind === "text" && this.o.planner && this.intent.trim() !== "") {
-        this.show(busyFrame(this.o.source, label(p.tool), "Looking up your options"));
+        this.show(busyFrame(this.siteOf(p.tool.origin), label(p.tool), "Looking up your options"));
         // One clock for the whole attempt, started before the planner is
         // asked anything, because the wearer is already waiting by then.
         const resolverStartedAt = this.now();
         let plan: { name: string; args: Record<string, unknown> } | null = null;
         try {
           const decided = await Session.within(
-            this.o.planner.planResolver(missing.name, p.tool, this.readOnly(), this.intent),
+            this.o.planner.planResolver(
+              missing.name,
+              p.tool,
+              this.resolversFor(p.tool),
+              this.intent,
+            ),
             RESOLVER_PLAN_BUDGET_MS,
           );
           if (decided.timedOut) {
@@ -560,11 +759,23 @@ export class Session {
 
         if (plan) {
           const resolver = this.byName(plan.name);
-          // Enforced in code: a resolver must be read-only. A planner that
-          // names a consequential tool is ignored, not trusted. This is the
-          // one path where a proposal runs with no human in front of it, so
-          // the refusal is recorded rather than merely happening.
-          const allowed = resolver !== undefined && gate(resolver).consequence === "read";
+          /*
+           * Enforced in code, twice: a resolver must be read-only AND from the
+           * target's own origin. A planner that names anything else is ignored,
+           * not trusted. This is the one path where a proposal runs with no
+           * human in front of it, so every refusal is recorded rather than
+           * merely happening.
+           *
+           * The origin check is not redundant with the filter above. That one
+           * decides what a planner is OFFERED; this one decides what it is
+           * allowed to have NAMED, and a model that answers with something it
+           * was never shown is exactly the case both packages exist to refuse.
+           * A cross-origin resolver would send the wearer's own words to a
+           * business their request never mentioned.
+           */
+          const wrongOrigin = resolver !== undefined && resolver.origin !== p.tool.origin;
+          const allowed =
+            resolver !== undefined && !wrongOrigin && gate(resolver).consequence === "read";
           if (!allowed) {
             this.audit({
               kind: "plan",
@@ -573,7 +784,12 @@ export class Session {
               detail: {
                 path: "planResolver",
                 accepted: false,
-                reason: resolver ? "not read-only" : "not a discovered tool",
+                reason: !resolver
+                  ? "not a discovered tool"
+                  : wrongOrigin
+                    ? "not same-origin as the target"
+                    : "not read-only",
+                ...(wrongOrigin ? { target: p.tool.origin } : {}),
               },
             });
           } else if (resolver) {
@@ -623,7 +839,9 @@ export class Session {
       }
 
       p.candidates = candidates;
-      return this.show(paramFrame(this.o.source, p.tool, missing, candidates, this.page));
+      return this.show(
+        paramFrame(this.siteOf(p.tool.origin), p.tool, missing, candidates, this.page),
+      );
     }
 
     // Ready to run. Ask a human first unless this is a read.
@@ -650,7 +868,9 @@ export class Session {
         origin: p.tool.origin,
         detail: { consequence: g.consequence, reason: g.reason },
       });
-      return this.show(confirmFrame(this.o.source, p.tool, p.targetLabel, p.consequence));
+      return this.show(
+        confirmFrame(this.siteOf(p.tool.origin), p.tool, p.targetLabel, p.consequence),
+      );
     }
     return this.execute();
   }
@@ -668,7 +888,7 @@ export class Session {
       this.pending = null;
       return this.show(
         errorFrame(
-          this.o.source,
+          this.siteOf(p.tool.origin),
           "This changed while you were deciding",
           "Choose again so you approve what will actually run.",
           false,
@@ -768,7 +988,7 @@ export class Session {
     if (this.executing === p) return this.frame;
     this.executing = p;
 
-    this.show(workingFrame(this.o.source, p.tool));
+    this.show(workingFrame(this.siteOf(p.tool.origin), p.tool));
 
     const budget = this.o.invokeTimeoutMs ?? 15_000;
     const retryable = gate(p.tool).consequence === "read";
@@ -793,7 +1013,7 @@ export class Session {
         // "did not happen". Retrying a write here could double-charge.
         this.show(
           errorFrame(
-            this.o.source,
+            this.siteOf(p.tool.origin),
             "No answer yet",
             "The site did not respond in time. It may still have run.",
             retryable,
@@ -816,11 +1036,15 @@ export class Session {
         // fallback only has to be honest about the case it is actually for.
         const facts = factsFromResult(outcome.raw);
         this.show(
-          resultFrame(this.o.source, `${label(p.tool)} ${said.ok ? "done" : "did not work"}`, {
-            ok: said.ok,
-            detail: said.message ?? (facts.length > 0 ? undefined : summarize(outcome.raw)),
-            facts,
-          }),
+          resultFrame(
+            this.siteOf(p.tool.origin),
+            `${label(p.tool)} ${said.ok ? "done" : "did not work"}`,
+            {
+              ok: said.ok,
+              detail: said.message ?? (facts.length > 0 ? undefined : summarize(outcome.raw)),
+              facts,
+            },
+          ),
         );
         this.pending = null;
       }
@@ -832,7 +1056,9 @@ export class Session {
         detail: { message: msg(err), ...(abandoned ? { abandoned: true } : {}) },
       });
       if (!abandoned) {
-        this.show(errorFrame(this.o.source, `${label(p.tool)} failed`, msg(err), retryable));
+        this.show(
+          errorFrame(this.siteOf(p.tool.origin), `${label(p.tool)} failed`, msg(err), retryable),
+        );
       }
     } finally {
       // Released on every exit, including the timeout, because the error frame

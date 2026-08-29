@@ -12,6 +12,10 @@
  * consequential tool stopping dead for a human yes is the property this project
  * is built around, and it is the one frame a screenshot can carry on its own.
  *
+ * Beside it now: every business Dusky is holding, live, in the same tab. The
+ * gate says what the product refuses to do without you; the row of sites says
+ * how much it is holding while it refuses.
+ *
  * Temporary: this is a still standing in for the recording. The <img> in
  * Landing.tsx becomes a <video> and nothing else about the stage changes.
  *
@@ -46,6 +50,16 @@ const page = await browser.newPage({
 await page.goto(`${SITE}/demo?start=1`);
 
 const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
+
+/*
+ * Into the shop first.
+ *
+ * Dusky holds every site at once, and seven actions do not fit a four-row
+ * panel, so the menu a wearer lands on is a row per business. `Add to cart` is
+ * behind the one that sells things. This step is the product, not a detour
+ * around it: the frame it leads to is the same frame it always was.
+ */
+await lens.getByRole("button", { name: /Verdant Market/ }).click();
 await lens.getByRole("button", { name: /Add to cart/ }).click();
 
 const compose = lens.locator('input[type="text"]');
@@ -77,17 +91,23 @@ await lens.getByRole("button", { name: /Confirm/ }).waitFor();
  */
 const clip = await page.evaluate(() => {
   const lens = document.querySelector('iframe[title="Dusky on the glasses"]');
-  const site = document.querySelector('iframe[title="Verdant Market"]');
-  if (!lens || !site) throw new Error("the two columns are not both on screen");
+  const sites = [...document.querySelectorAll("iframe[allow=tools]")];
+  if (!lens || sites.length === 0) throw new Error("the columns are not all on screen");
   // The lens's own box is the 600x600 frame scaled into a smaller stage, so the
   // clip is taken from that stage rather than from the frame inside it.
-  const a = (lens.closest("div") ?? lens).getBoundingClientRect();
-  const b = site.getBoundingClientRect();
+  // Every partner site is in the picture, because two businesses that have
+  // never heard of each other, live in one tab, is what there is to see.
+  const boxes = [
+    (lens.closest("div") ?? lens).getBoundingClientRect(),
+    ...sites.map((s) => s.getBoundingClientRect()),
+  ];
+  const left = Math.min(...boxes.map((b) => b.left));
+  const top = Math.min(...boxes.map((b) => b.top));
   return {
-    x: Math.min(a.left, b.left) + window.scrollX,
-    y: Math.min(a.top, b.top) + window.scrollY,
-    width: Math.max(a.right, b.right) - Math.min(a.left, b.left),
-    height: Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top),
+    x: left + window.scrollX,
+    y: top + window.scrollY,
+    width: Math.max(...boxes.map((b) => b.right)) - left,
+    height: Math.max(...boxes.map((b) => b.bottom)) - top,
   };
 });
 await page.waitForTimeout(600);

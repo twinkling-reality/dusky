@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, stat, unlink } from "node:fs/promises";
 import { type AuditStore, FileAuditStore, MemoryAuditStore, TeeAuditStore } from "@dusky/audit";
-import type { AuditEntry, ConsoleToServer, DisplayToServer } from "@dusky/contracts";
+import type { AuditEntry, ConsoleToServer, DisplayToServer, SiteRef } from "@dusky/contracts";
 import { CLOSE_NOT_A_CODE, isSessionCode } from "@dusky/contracts";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -21,8 +21,19 @@ import { plannerFactory } from "./planner.js";
  */
 
 const PORT = Number(process.env["PORT"] ?? 7900);
-/** Fallback only. A console that names its source overrides this on connect. */
-const SOURCE = process.env["DUSKY_SOURCE"] ?? "Verdant Market";
+
+/**
+ * What the eyebrow says when no single site is in play.
+ *
+ * A constant, and no longer an environment variable. `DUSKY_SOURCE` named ONE
+ * partner site for a whole process, which was already a lie the moment a
+ * second source existed and is unanswerable now that a console holds every
+ * site at once: no single business name is true above a menu containing
+ * another business's actions. A session holding exactly one site still reads
+ * that site's own name, because the machine derives it from the tools that
+ * actually arrived rather than from anything configured here.
+ */
+const SOURCE = "Dusky";
 
 /**
  * Where the audit trail is kept.
@@ -173,6 +184,55 @@ if (durable) {
   expireTrails();
 }
 
+/** An origin is only usable if the URL parser agrees it is one. */
+function isOrigin(raw: unknown): raw is string {
+  if (typeof raw !== "string" || raw === "") return false;
+  try {
+    return new URL(raw).origin === raw;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which sites a console says it is holding.
+ *
+ * Two shapes, because the console and the relay deploy separately and there is
+ * always a window where one is newer than the other. `sites` is the current
+ * one and carries a name per origin; `origins` is what every console sent
+ * before names became plural, and a console speaking it still works, with each
+ * site falling back to its host on the lens.
+ *
+ * Anyone who can reach this relay can send either, so nothing here is trusted:
+ * an origin has to survive the URL parser, a name is sanitized downstream
+ * before it reaches a lens, and anything malformed is dropped rather than
+ * failing the connection. A console with a broken parameter should land on an
+ * empty menu it can retry, not on a socket that will not open.
+ */
+function sitesFrom(params: URLSearchParams): SiteRef[] {
+  const raw = params.get("sites");
+  if (raw) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((entry) => {
+          if (typeof entry !== "object" || entry === null) return [];
+          const { origin, name } = entry as { origin?: unknown; name?: unknown };
+          if (!isOrigin(origin)) return [];
+          return [typeof name === "string" ? { origin, name } : { origin }];
+        });
+      }
+    } catch {
+      // Not JSON. Fall through to the older shape rather than refusing.
+    }
+  }
+  return (params.get("origins") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(isOrigin)
+    .map((origin) => ({ origin }));
+}
+
 function onConnection(ws: WebSocket, role: Role, url: URL): void {
   let sessionId: string | null = null;
 
@@ -223,12 +283,8 @@ function onConnection(ws: WebSocket, role: Role, url: URL): void {
         if (role === "display") {
           actor.attachDisplay(ws);
         } else {
-          const origins = (url.searchParams.get("origins") ?? "")
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          // The console knows which site it is holding; this process does not.
-          await actor.attachConsole(ws, origins, url.searchParams.get("source") ?? undefined);
+          // The console knows which sites it is holding; this process does not.
+          await actor.attachConsole(ws, sitesFrom(url.searchParams));
         }
         return;
       }

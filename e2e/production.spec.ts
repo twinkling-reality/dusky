@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { focusChoice } from "./drive.js";
 
 /**
  * The load-bearing round trip, against the live deployment.
@@ -36,45 +37,8 @@ const suffix = [0, 1, 2]
   .map((i) => ALPHABET[Math.floor(stamp / ALPHABET.length ** i) % ALPHABET.length])
   .join("");
 const CODE = `PRD${suffix}`;
-/** A second one, because a session holds exactly one source at a time. */
+/** A second one, for the session that is deliberately narrowed to one site. */
 const CODE_B = `RES${suffix}`;
-
-async function tryFocus(page: Page, label: RegExp): Promise<boolean> {
-  for (let i = 0; i < 10; i += 1) {
-    const focused = await page.locator('[data-focused="true"]').textContent();
-    if (focused && label.test(focused)) return true;
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(80);
-  }
-  return false;
-}
-
-async function focusChoice(page: Page, label: RegExp) {
-  if (!(await tryFocus(page, label)))
-    throw new Error(`never focused a choice matching ${String(label)}`);
-}
-
-/**
- * Focus a choice that may not be on the page the wearer landed on.
- *
- * The menu paginates at `MAX_CHOICES`, and two things push a gated tool off
- * page one: `menuOrder` sorts by what a press costs, so every read comes
- * first, and the composer takes a permanent slot whenever the deployment has
- * a planner. `add_to_cart` was on page one when this suite was written and is
- * not any more, which is why asserting it directly went stale.
- *
- * Paging is bounded because "More" wraps rather than clamps, so a few presses
- * visit every page and then start again.
- */
-async function focusChoiceAnyPage(page: Page, label: RegExp) {
-  for (let p = 0; p < 4; p += 1) {
-    if (await tryFocus(page, label)) return;
-    if (!(await tryFocus(page, /More/))) break;
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(300);
-  }
-  throw new Error(`never focused a choice matching ${String(label)} on any page`);
-}
 
 test("the relay is reachable and healthy", async ({ request }) => {
   const res = await request.get(`${RELAY}/health`);
@@ -120,8 +84,9 @@ test("the deployed console discovers the deployed market cross-origin", async ({
   // If this fails the browser has no WebMCP, and nothing below can pass.
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
 
-  // Four tools, and ONLY because dusky-market named dusky-console in
-  // exposedTo. A trailing slash or an http:// would produce zero here.
+  // The shop's four, and ONLY because dusky-market named dusky-console in
+  // exposedTo. A trailing slash or an http:// would produce zero here. The
+  // restaurant's three arrive alongside them and are asserted below.
   await expect(page.getByText("Search catalog")).toBeVisible();
   await expect(page.getByText("Add to cart")).toBeVisible();
   await expect(page.getByText("Empty cart")).toBeVisible();
@@ -134,41 +99,58 @@ test("the deployed console discovers the deployed market cross-origin", async ({
 });
 
 /**
- * The console holds the partner site in an iframe, and which URL it holds is
- * baked in at BUILD time by Vite. `sources.ts` falls back to
- * `http://localhost:7804` when `VITE_RESERVATIONS_URL` is absent, which is
- * correct for a developer and catastrophic on an HTTPS page: the browser
- * blocks it as mixed content and the wearer gets an empty menu with no
- * indication why.
+ * The console holds every partner site in an iframe, and which URLs it holds
+ * are baked in at BUILD time by Vite. `sources.ts` falls back to
+ * `http://localhost:7801` and `http://localhost:7804` when `VITE_MARKET_URL`
+ * and `VITE_RESERVATIONS_URL` are absent, which is correct for a developer and
+ * catastrophic on an HTTPS page: the browser blocks it as mixed content and
+ * the wearer gets an empty menu with no indication why.
  *
- * Nothing else in this suite can see that, because the fallback is a perfectly
+ * Nothing else in this suite can see that, because a fallback is a perfectly
  * valid string and the build succeeds.
+ *
+ * Every site is checked, not just the one that was added last. The reason this
+ * test exists is that a surface nobody asserted about was the surface that
+ * broke, so a loop over the list is the shape that keeps being true when a
+ * third site arrives.
  */
-test("the console's second source points at a deployment, not at a laptop", async ({ page }) => {
-  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+test("every site the console holds points at a deployment, not at a laptop", async ({ page }) => {
+  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
 
-  const src = await page.locator('iframe[title="Amber & Oak"]').getAttribute("src");
-  expect(
-    new URL(src ?? "about:blank").origin,
-    "VITE_RESERVATIONS_URL never reached the console's build",
-  ).toBe(RESERVATIONS);
+  for (const [title, expected] of [
+    ["Verdant Market", MARKET],
+    ["Amber & Oak", RESERVATIONS],
+  ] as const) {
+    const src = await page.locator(`iframe[title="${title}"]`).getAttribute("src");
+    expect(
+      new URL(src ?? "about:blank").origin,
+      `the build never got a deployed URL for ${title}`,
+    ).toBe(expected);
+  }
 });
 
 /**
- * The claim the second source exists to support, checked against the
- * deployment rather than against four dev servers.
+ * Two businesses, one session, checked against the deployment.
  *
- * The market's `exposedTo` being correct says nothing about this one: they are
- * separate projects, separately built, each naming `dusky-console` by hand. A
- * trailing slash or an `http://` in either produces zero tools here and a menu
+ * Each site's `exposedTo` says nothing about the other: they are separate
+ * projects, separately built, each naming `dusky-console` by hand. A trailing
+ * slash or an `http://` in either produces zero tools from that one and a list
  * that looks exactly like a site with nothing to offer.
+ *
+ * This test used to end by asserting `Add to cart` was ABSENT, under the
+ * comment "nothing from the other source has leaked into this session". That
+ * was the right invariant while a console held one site at a time and it is
+ * the opposite of the product now, so it is replaced rather than deleted: the
+ * separation that mattered was never between what a wearer can SEE, it was
+ * between what can act without them. That rule is `planResolver` refusing a
+ * cross-origin lookup, which `packages/planner` and `packages/session` each
+ * enforce and each test.
  */
-test("the deployed console discovers the deployed restaurant cross-origin", async ({ page }) => {
-  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+test("the deployed console holds both deployed sites at once", async ({ page }) => {
+  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
 
   const actions = page.getByTestId("actions");
-  await expect(actions.locator("li")).toHaveCount(3);
 
   // Amber & Oak declares a title on one tool out of three, deliberately. The
   // other two are listed under their raw names, which is what Chrome returning
@@ -177,8 +159,32 @@ test("the deployed console discovers the deployed restaurant cross-origin", asyn
   await expect(actions.getByText("book_table")).toBeVisible();
   await expect(actions.getByText("change_reservation")).toBeVisible();
 
-  // Nothing from the other source has leaked into this session.
+  // And the shop's four, on the same list rather than instead of them.
+  await expect(actions.getByText("Search catalog")).toBeVisible();
+  await expect(actions.getByText("Add to cart")).toBeVisible();
+  await expect(actions.locator("li")).toHaveCount(7);
+
+  // Every row says whose it is, which is the one thing a mixed list needs.
+  await expect(actions.getByText("Verdant Market")).toHaveCount(4);
+  await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
+});
+
+/**
+ * Narrowing still works, because the tests and the fallback both need it.
+ *
+ * `?source=` is not offered anywhere on the page. It survives so a spec can
+ * assert about one site's tools without another's arriving in the middle, and
+ * so anybody demonstrating a single site on a connection that will not carry
+ * several iframes has a way to.
+ */
+test("a session can still be narrowed to one deployed site", async ({ page }) => {
+  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+  await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
+
+  const actions = page.getByTestId("actions");
+  await expect(actions.locator("li")).toHaveCount(3);
   await expect(actions.getByText("Add to cart")).toHaveCount(0);
+  await expect(page.locator('iframe[title="Verdant Market"]')).toHaveCount(0);
 });
 
 test("a gesture on the deployed Display changes the deployed market", async ({ browser }) => {
@@ -193,7 +199,7 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
   await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
-  await focusChoiceAnyPage(displayPage, /Add to cart/);
+  await focusChoice(displayPage, /Add to cart/);
   await displayPage.keyboard.press("Enter");
 
   // How the product id gets collected depends on whether this deployment has

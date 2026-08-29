@@ -7,11 +7,13 @@ import {
   factsFromResult,
   idleFrame,
   isOperable,
+  label,
   MAX_CHOICES,
   nextMissingParam,
   outcomeFromResult,
   parameters,
   paramFrame,
+  siteFromChoice,
   textFromResult,
   toolId,
 } from "./index.js";
@@ -400,12 +402,12 @@ describe("saying what you want", () => {
 describe("the order of the wearer's menu", () => {
   const readOnly = { readOnlyHint: true, untrustedContentHint: false } as const;
 
-  /** Every tool row a wearer can page to, in the order they can page to it. */
-  const menuChoices = (tools: ToolDescriptor[], canSpeak = false): Choice[] => {
+  /** Every row on one menu, following "More" but not stepping into a site. */
+  const rowsOf = (tools: ToolDescriptor[], canSpeak: boolean, site?: string): Choice[] => {
     const out: Choice[] = [];
     const seen = new Set<string>();
     for (let page = 0; page < 64; page += 1) {
-      const f = idleFrame("Src", tools, page, canSpeak);
+      const f = idleFrame("Src", tools, page, canSpeak, undefined, site ? { site } : {});
       if (f.kind !== "idle") throw new Error("unreachable");
       let wrapped = false;
       for (const c of f.choices) {
@@ -421,6 +423,27 @@ describe("the order of the wearer's menu", () => {
       if (wrapped || !f.choices.some((c) => c.id === "__more")) break;
     }
     return out;
+  };
+
+  /**
+   * Every tool row a wearer can reach, in the order they can reach it.
+   *
+   * Follows "More" AND site rows, because a menu that will not fit on one
+   * screen shows a row per site and puts that site's actions behind it. What
+   * these tests are about is what a wearer can actually get to and in what
+   * order, so the walk has to go wherever they can.
+   */
+  const menuChoices = (tools: ToolDescriptor[], canSpeak = false): Choice[] =>
+    rowsOf(tools, canSpeak).flatMap((c) => {
+      const site = siteFromChoice(c.id);
+      return site ? rowsOf(tools, canSpeak, site) : [c];
+    });
+
+  /** Each screen of tool rows the wearer can land on, kept apart. */
+  const menuScreens = (tools: ToolDescriptor[], canSpeak = false): Choice[][] => {
+    const top = rowsOf(tools, canSpeak);
+    const sites = top.map((c) => siteFromChoice(c.id)).filter((o): o is string => o !== null);
+    return sites.length > 0 ? sites.map((site) => rowsOf(tools, canSpeak, site)) : [top];
   };
 
   const menuLabels = (tools: ToolDescriptor[], canSpeak = false): string[] =>
@@ -491,6 +514,9 @@ describe("the order of the wearer's menu", () => {
 
   it("does not change when the browser hands the same tools back in another order", () => {
     const forwards = menuChoices(ELSEWHERE).map((c) => c.id);
+    // Seven tools across four sites do not fit four rows, so the wearer meets
+    // a row per site first. Every one of them is still reachable, which is the
+    // property; how many presses away is the layout's business.
     expect(forwards, "every operable tool stays reachable").toHaveLength(ELSEWHERE.length);
 
     const rotate = (n: number) => [...ELSEWHERE.slice(n), ...ELSEWHERE.slice(0, n)];
@@ -513,20 +539,184 @@ describe("the order of the wearer's menu", () => {
    */
   it("puts a read under the wearer's thumb, whatever discovery returned first", () => {
     for (const led of ELSEWHERE) {
-      const f = idleFrame("Src", [led, ...ELSEWHERE.filter((t) => t !== led)], 0, true);
-      if (f.kind !== "idle") throw new Error("unreachable");
-      const top = toolFor(f.choices[0]?.id ?? "");
-      expect(classify(top), `discovery led with ${led.name}`).toBe("read");
+      const shuffled = [led, ...ELSEWHERE.filter((t) => t !== led)];
+      // Row zero of the TOP menu is a site row here, which is navigation and
+      // costs nothing at all: a stronger version of the same guarantee, since
+      // nothing on that screen can be run by accident.
+      const top = idleFrame("Src", shuffled, 0, true);
+      if (top.kind !== "idle") throw new Error("unreachable");
+      expect(siteFromChoice(top.choices[0]?.id ?? ""), `discovery led with ${led.name}`).not.toBe(
+        null,
+      );
+
+      // And row zero of every site's own screen is a read whenever that site
+      // offers one, which is where a press can actually cost something.
+      for (const screen of menuScreens(shuffled, true)) {
+        const first = toolFor(screen[0]?.id ?? "");
+        const offersRead = screen.some((c) => classify(toolFor(c.id)) === "read");
+        if (offersRead) expect(classify(first), `discovery led with ${led.name}`).toBe("read");
+      }
     }
   });
 
   it("never offers a consequential row above a read", () => {
-    const ranks = menuChoices(ELSEWHERE).map((c) => CEREMONY[classify(toolFor(c.id))]);
-    expect(
-      new Set(ranks).size,
-      "the fixtures must reach all four classes or this asserts nothing",
-    ).toBe(4);
-    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    // Per SCREEN, because a screen is what a wearer sees. Concatenating four
+    // sites' menus and sorting that would be asserting about a list nobody is
+    // ever shown, and it would be false for a reason that harms nobody: one
+    // site's read sitting below another site's write, on a different frame.
+    const screens = menuScreens(ELSEWHERE);
+    const classes = new Set(menuChoices(ELSEWHERE).map((c) => classify(toolFor(c.id))));
+    expect(classes.size, "the fixtures must reach all four classes or this asserts nothing").toBe(
+      4,
+    );
+    for (const screen of screens) {
+      const ranks = screen.map((c) => CEREMONY[classify(toolFor(c.id))]);
+      expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    }
+  });
+
+  /**
+   * What a wearer actually meets when Dusky holds more than one business.
+   *
+   * The arithmetic is the whole reason grouping exists, so it is measured here
+   * rather than reasoned about. `paginate` spends a slot on "More" and the
+   * composer spends another, so a flat menu of seven tools on a four-row panel
+   * is four pages of two.
+   */
+  describe("a menu too big for the panel", () => {
+    const SHOP = "https://shop.test";
+    const TABLES = "https://tables.test";
+    const many = [
+      tool({ origin: SHOP, name: "search_products", annotations: readOnly }),
+      tool({ origin: SHOP, name: "review_cart", annotations: readOnly }),
+      tool({ origin: SHOP, name: "add_to_cart", description: "Charged at checkout." }),
+      tool({ origin: SHOP, name: "empty_cart", description: "Erase the cart permanently." }),
+      tool({ origin: TABLES, name: "find_times", annotations: readOnly }),
+      tool({ origin: TABLES, name: "book_table" }),
+      tool({ origin: TABLES, name: "change_reservation" }),
+    ];
+    const named = (origin: string) => (origin === SHOP ? "Verdant Market" : "Amber & Oak");
+
+    it("offers one row per site rather than four pages of two", () => {
+      const f = idleFrame("Dusky", many, 0, true, undefined, { siteName: named });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.map((c) => c.label)).toEqual([
+        "Amber & Oak",
+        "Verdant Market",
+        "Say what you want",
+      ]);
+      // No pagination at all: three rows on a panel that holds four.
+      expect(f.choices.some((c) => c.id === "__more")).toBe(false);
+      // And each row says how much is behind it, so nothing is a mystery door.
+      expect(f.choices.map((c) => c.meta)).toEqual(["3 actions", "4 actions", "tap"]);
+    });
+
+    it("stays flat while everything still fits", () => {
+      // Two sites, three tools, a planner: three rows and a composer is exactly
+      // four. Grouping here would cost a press and buy nothing.
+      const few = [many[0] as ToolDescriptor, many[4] as ToolDescriptor, many[5] as ToolDescriptor];
+      const f = idleFrame("Dusky", few, 0, true, undefined, { siteName: named });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.map((c) => c.id).filter((id) => siteFromChoice(id))).toEqual([]);
+      expect(f.choices).toHaveLength(4);
+    });
+
+    it("stays flat for one site however many tools it has", () => {
+      // Nobody to group WITH. A single site's own menu pages, exactly as it
+      // always did, and `?source=` still produces this.
+      const f = idleFrame("Verdant Market", many.slice(0, 4), 0, true, undefined, {
+        siteName: named,
+      });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.map((c) => c.id).filter((id) => siteFromChoice(id))).toEqual([]);
+      expect(f.choices.some((c) => c.id === "__more")).toBe(true);
+    });
+
+    it("names each row's site once a menu holds more than one", () => {
+      // The slot used to carry the row's index, which is decoration: there is
+      // no numeric input on these glasses and "More 1/3" already says where
+      // the wearer is. Whose action it is, is the one thing a mixed list needs.
+      const mixed = [many[0] as ToolDescriptor, many[4] as ToolDescriptor];
+      const f = idleFrame("Dusky", mixed, 0, false, undefined, { siteName: named });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.map((c) => c.meta)).toEqual(["Amber & Oak", "Verdant Market"]);
+    });
+
+    it("keeps the index on a single site's menu, where every row shares a name", () => {
+      const f = idleFrame("Verdant Market", many.slice(0, 4), 0, false, undefined, {
+        siteName: named,
+      });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      expect(f.choices.map((c) => c.meta)).toEqual(["01", "02", "03", "04"]);
+    });
+
+    it("shows one site's actions and nobody else's once stepped into", () => {
+      const f = idleFrame("Amber & Oak", many, 0, true, undefined, {
+        site: TABLES,
+        siteName: named,
+      });
+      if (f.kind !== "idle") throw new Error("unreachable");
+      const labels = f.choices.map((c) => c.label);
+      expect(labels).toContain("Book table");
+      expect(labels).not.toContain("Add to cart");
+    });
+
+    /**
+     * The number grouping was chosen for, counted rather than estimated.
+     *
+     * Every arrow and every Enter is a real gesture on this hardware, so both
+     * count. The comparison is the SAME seven tools laid out both ways: from
+     * one origin they cannot group and the menu is flat, from two they can.
+     * Nothing else differs, so the difference is the layout.
+     */
+    it("costs fewer presses than paging the same tools flat", () => {
+      const pressesTo = (tools: ToolDescriptor[], want: string): number => {
+        // Focus starts on row zero of every frame, so reaching row N costs N
+        // arrows and one Enter. Turning a page or stepping into a site costs
+        // the same, and resets focus to the top of whatever comes next.
+        let presses = 0;
+        let page = 0;
+        let site: string | undefined;
+        for (let step = 0; step < 24; step += 1) {
+          const f = idleFrame("Dusky", tools, page, true, undefined, {
+            ...(site ? { site } : {}),
+            siteName: named,
+          });
+          if (f.kind !== "idle") throw new Error("unreachable");
+          const hit = f.choices.findIndex((c) => c.label === want);
+          if (hit >= 0) return presses + hit + 1;
+
+          // A wearer reads the site names, so they step into the right one
+          // rather than trying each in turn. Counting a wrong guess would be
+          // measuring their luck instead of the layout.
+          const stepInto = f.choices.findIndex((c) => {
+            const origin = siteFromChoice(c.id);
+            return origin !== null && tools.some((t) => t.origin === origin && label(t) === want);
+          });
+          if (stepInto >= 0) {
+            presses += stepInto + 1;
+            site = siteFromChoice(f.choices[stepInto]?.id ?? "") ?? undefined;
+            page = 0;
+            continue;
+          }
+          const more = f.choices.findIndex((c) => c.id === "__more");
+          if (more < 0) throw new Error(`${want} is unreachable`);
+          presses += more + 1;
+          page += 1;
+        }
+        throw new Error(`${want} took too long to reach`);
+      };
+
+      // The same seven tools, all published by one site, so nothing can group.
+      const flat = many.map((t) => ({ ...t, origin: SHOP }));
+      const flatPresses = pressesTo(flat, "Add to cart");
+      const groupedPresses = pressesTo(many, "Add to cart");
+
+      expect(groupedPresses).toBeLessThan(flatPresses);
+      // Pinned, so a layout change that quietly costs the wearer presses fails
+      // here rather than being noticed on hardware.
+      expect({ flatPresses, groupedPresses }).toEqual({ flatPresses: 8, groupedPresses: 6 });
+    });
   });
 
   it("orders by what a press costs before it orders by the alphabet", () => {

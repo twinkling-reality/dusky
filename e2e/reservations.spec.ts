@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { focusChoice } from "./drive.js";
 
 /**
  * The same Dusky, pointed at a site it has never seen.
@@ -15,17 +16,6 @@ import { expect, type Page, test } from "@playwright/test";
  * integer enum, and a boolean. Each produces a different frame, derived from
  * the schema alone.
  */
-
-async function focusChoice(page: Page, label: RegExp | string) {
-  const matcher = typeof label === "string" ? new RegExp(label) : label;
-  for (let i = 0; i < 8; i += 1) {
-    const focused = await page.locator('[data-focused="true"]').textContent();
-    if (focused && matcher.test(focused)) return;
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(60);
-  }
-  throw new Error(`never focused a choice matching ${String(label)}`);
-}
 
 /**
  * Pair a console holding Amber & Oak rather than the market.
@@ -154,7 +144,7 @@ test("a booking runs, stops for a human, and reports the site's own words", asyn
   await expect(displayPage.getByRole("button", { name: /Confirm/ })).toBeVisible();
 
   // And nothing has happened: the site's own book is still empty.
-  const book = consolePage.frameLocator("iframe").getByTestId("book");
+  const book = consolePage.frameLocator('iframe[title="Amber & Oak"]').getByTestId("book");
   await expect(book).toHaveText("none");
 
   await focusChoice(displayPage, /Confirm/);

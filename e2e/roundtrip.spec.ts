@@ -1,20 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-
-/**
- * Drive the Display exactly as the glasses do: arrow keys move focus, Enter
- * activates. Never assume a menu order, because `getTools` ordering is the
- * browser's business and not something the product should depend on.
- */
-async function focusChoice(page: Page, label: RegExp | string) {
-  const matcher = typeof label === "string" ? new RegExp(label) : label;
-  for (let i = 0; i < 8; i += 1) {
-    const focused = await page.locator('[data-focused="true"]').textContent();
-    if (focused && matcher.test(focused)) return;
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(60);
-  }
-  throw new Error(`never focused a choice matching ${String(label)}`);
-}
+import { expectReachable, focusChoice } from "./drive.js";
 
 /**
  * The load-bearing test for the entire product.
@@ -92,8 +77,11 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
 
   await displayPage.goto(`http://localhost:7802/?session=${CODE}`);
 
-  // The Display shows a menu built entirely from discovered tools.
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  // The Display shows a menu built entirely from discovered tools, and it is
+  // now built from SEVERAL sites' tools at once, so the row may be a page in.
+  // Reachable is the claim, not visible: a row the wearer can get to with the
+  // gestures they have is a row the product offers them.
+  await expectReachable(displayPage, /Add to cart/);
 
   // Drive it the way the glasses do: arrow keys and Enter, nothing else.
   await focusChoice(displayPage, /Add to cart/);
@@ -110,7 +98,7 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   await expect(displayPage.getByRole("button", { name: /Confirm/ })).toBeVisible();
 
   // Nothing has run yet: the partner site is untouched.
-  const cart = consolePage.frameLocator("iframe").getByTestId("cart");
+  const cart = consolePage.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
   await expect(cart).toHaveText("empty");
 
   await focusChoice(displayPage, /Confirm/);
@@ -151,7 +139,7 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${code}`);
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expectReachable(displayPage, /Add to cart/);
 
   await focusChoice(displayPage, /Add to cart/);
   await displayPage.keyboard.press("Enter");

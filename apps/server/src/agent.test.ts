@@ -42,6 +42,27 @@ const TOOLS: ToolDescriptor[] = [
   },
 ];
 
+/**
+ * A second business, sharing no vocabulary with the first.
+ *
+ * Here rather than in a fixture file because only the label tests need it, and
+ * because the point it makes is about the relay: two origins arriving through
+ * one console is the case a single `source` string could not describe.
+ */
+const ELSEWHERE: ToolDescriptor[] = [
+  {
+    name: "book_table",
+    description: "Reserve a table by slot id.",
+    origin: "https://tables.test",
+    inputSchema: {
+      type: "object",
+      properties: { slot_id: { type: "string", description: "Which slot?" } },
+      required: ["slot_id"],
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+];
+
 /** Enough of a socket for the actor: it only checks readyState and sends. */
 class FakeSocket {
   readyState = 1;
@@ -63,8 +84,9 @@ type Sock = Parameters<SessionActor["attachDisplay"]>[0];
  * An actor wired to a console that answers discover and invoke inline, so a
  * whole task can run without a relay, a browser or a network.
  */
-function actor(opts: { planner?: boolean } = {}) {
+function actor(opts: { planner?: boolean; tools?: ToolDescriptor[] } = {}) {
   const invoked: string[] = [];
+  const registry = opts.tools ?? TOOLS;
   const make = opts.planner
     ? () => ({
         pickTool: async (_intent: string, tools: ToolDescriptor[]) => {
@@ -75,7 +97,7 @@ function actor(opts: { planner?: boolean } = {}) {
       })
     : undefined;
 
-  const a = new SessionActor("ABC123", "Verdant Market", make);
+  const a = new SessionActor("ABC123", "Dusky", make);
   const consoleSock = new FakeSocket();
   const raw = consoleSock.send.bind(consoleSock);
   consoleSock.send = (text: string) => {
@@ -83,7 +105,7 @@ function actor(opts: { planner?: boolean } = {}) {
     const msg = JSON.parse(text) as { t: string; requestId?: string; toolName?: string };
     queueMicrotask(() => {
       if (msg.t === "discover" && msg.requestId) {
-        void a.onConsoleMessage({ t: "tools", requestId: msg.requestId, tools: TOOLS });
+        void a.onConsoleMessage({ t: "tools", requestId: msg.requestId, tools: registry });
       } else if (msg.t === "invoke" && msg.requestId) {
         invoked.push(msg.toolName ?? "");
         void a.onConsoleMessage({
@@ -100,7 +122,9 @@ function actor(opts: { planner?: boolean } = {}) {
 
 async function paired(opts: { planner?: boolean; withDisplay?: boolean } = {}) {
   const built = actor(opts);
-  await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+  await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+    { origin: "https://shop.test" },
+  ]);
   if (opts.withDisplay !== false) built.a.attachDisplay(new FakeSocket() as unknown as Sock);
   return built;
 }
@@ -115,7 +139,11 @@ describe("what an outside agent can see", () => {
     if (!r.ok) throw new Error("unreachable");
     expect(r.value).toMatchObject({
       session: "ABC123",
-      source: "Verdant Market",
+      // What is on the lens right now, not a label this process was started
+      // with. One site is held and it named nothing, so its host is what the
+      // wearer reads and therefore what an agent is told.
+      source: "shop.test",
+      sites: [{ origin: "https://shop.test", name: "shop.test" }],
       display_connected: true,
       state: "idle",
       accepting_tasks: true,
@@ -245,7 +273,7 @@ describe("what the glasses show before a browser pairs", () => {
     a.attachDisplay(display as unknown as Sock);
     expect(display.sent).toEqual([]);
 
-    await a.attachConsole(consoleSock as unknown as Sock, ["https://shop.test"]);
+    await a.attachConsole(consoleSock as unknown as Sock, [{ origin: "https://shop.test" }]);
     const frames = display.sent.map((s) => JSON.parse(s) as { t: string });
     expect(frames.some((f) => f.t === "frame")).toBe(true);
   });
@@ -254,37 +282,70 @@ describe("what the glasses show before a browser pairs", () => {
 /**
  * The wearer has to be told which site they are acting on, and the relay is
  * the one surface that cannot find out for itself: the console is what has
- * the partner site loaded.
+ * the sites loaded.
  *
- * The label is cosmetic and grants nothing. What it must not do is lie by
+ * A name is cosmetic and grants nothing. What it must not do is lie by
  * omission, which is what a server-global `DUSKY_SOURCE` did the moment a
  * second source existed: the glasses read VERDANT MARKET while a restaurant's
- * tools were on the menu.
+ * tools were on the menu. Holding every site at once makes a single label
+ * unanswerable rather than merely wrong, so the eyebrow follows the FRAME: a
+ * menu spanning several businesses carries the product's name, and everything
+ * about one pending tool carries that tool's own site.
  */
 describe("the source label a wearer reads", () => {
   it("comes from the console that is holding the site", async () => {
     const built = actor();
-    await built.a.attachConsole(
-      built.consoleSock as unknown as Sock,
-      ["https://shop.test"],
-      "Amber & Oak",
-    );
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test", name: "Amber & Oak" },
+    ]);
     built.a.attachDisplay(new FakeSocket() as unknown as Sock);
     expect(built.a.current().source).toBe("Amber & Oak");
   });
 
-  it("keeps the deployment's own default when a console names nothing", async () => {
+  /**
+   * The host, not the product name and not a deployment default.
+   *
+   * An origin nobody named is still a real place, and its host is derived from
+   * the origin the browser supplied rather than claimed by anyone. A wearer
+   * reading `shop.test` above a confirmation knows strictly more than one
+   * reading `Dusky`, and cannot be shown a business name that belongs to
+   * somebody else.
+   */
+  it("falls back to the site's own host when a console names nothing", async () => {
     const { a } = await paired();
-    expect(a.current().source).toBe("Verdant Market");
+    expect(a.current().source).toBe("shop.test");
+  });
+
+  /**
+   * The case a single string could never answer.
+   *
+   * Two businesses, one menu. No business name is true above a list holding
+   * another one's actions, so the menu carries the product's own name; the
+   * moment a tool is pending, the frame is about exactly one site again and
+   * says which.
+   */
+  it("names the product on a mixed menu and the site on a pending tool", async () => {
+    const built = actor({ tools: [...TOOLS, ...ELSEWHERE] });
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test", name: "Verdant Market" },
+      { origin: "https://tables.test", name: "Amber & Oak" },
+    ]);
+    built.a.attachDisplay(new FakeSocket() as unknown as Sock);
+    expect(built.a.current().source).toBe("Dusky");
+
+    await built.a.onDisplayMessage({
+      t: "choose",
+      frameId: "1",
+      choiceId: "https://tables.test book_table",
+    } as never);
+    expect(built.a.current().source).toBe("Amber & Oak");
   });
 
   it("cannot put control characters or an unbounded string on a 600x600 panel", async () => {
     const built = actor();
-    await built.a.attachConsole(
-      built.consoleSock as unknown as Sock,
-      ["https://shop.test"],
-      `Ev\u0000il\nShop ${"x".repeat(80)}`,
-    );
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test", name: `Ev\u0000il\nShop ${"x".repeat(80)}` },
+    ]);
     const shown = built.a.current().source;
     // biome-ignore lint/suspicious/noControlCharactersInRegex: asserting they are gone
     expect(shown).not.toMatch(/[\u0000-\u001f]/);
@@ -293,11 +354,9 @@ describe("the source label a wearer reads", () => {
 
   it("is not what decides anything: the gate still reads the tool", async () => {
     const built = actor();
-    await built.a.attachConsole(
-      built.consoleSock as unknown as Sock,
-      ["https://shop.test"],
-      "Totally Harmless Reader",
-    );
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test", name: "Totally Harmless Reader" },
+    ]);
     built.a.attachDisplay(new FakeSocket() as unknown as Sock);
     const r = await ask(built.a, { op: "actions" });
     if (!r.ok) throw new Error("unreachable");
@@ -347,7 +406,9 @@ describe("the wearer's screen before a browser has paired", () => {
     const built = actor();
     const display = new FakeSocket();
     built.a.attachDisplay(display as unknown as Sock);
-    await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test" },
+    ]);
     display.sent.length = 0;
 
     await built.a.onDisplayMessage({ t: "cancel", frameId: 1 } as never);
@@ -389,7 +450,7 @@ describe("what the wearer is told when discovery fails", () => {
     const { a, sock } = consoleThatCannotDiscover("WebMCP is not available in this browser");
     const display = new FakeSocket();
     a.attachDisplay(display as unknown as Sock);
-    await a.attachConsole(sock as unknown as Sock, ["https://shop.test"]);
+    await a.attachConsole(sock as unknown as Sock, [{ origin: "https://shop.test" }]);
 
     const frames = display.sent
       .map((t) => JSON.parse(t) as { t: string; frame?: { kind: string; note?: string } })
@@ -414,11 +475,15 @@ describe("a second window on the same pairing code", () => {
    */
   it("tells the console it replaced that it was replaced", async () => {
     const built = actor();
-    await built.a.attachConsole(built.consoleSock as unknown as Sock, ["https://shop.test"]);
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test" },
+    ]);
 
     // Not awaited: the eviction happens before this attach waits on discovery,
     // and the second socket is a plain fake that would never answer one.
-    void built.a.attachConsole(new FakeSocket() as unknown as Sock, ["https://shop.test"]);
+    void built.a.attachConsole(new FakeSocket() as unknown as Sock, [
+      { origin: "https://shop.test" },
+    ]);
 
     expect(built.consoleSock.closedWith?.code, "an eviction looked like an ordinary close").toBe(
       4001,

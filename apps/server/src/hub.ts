@@ -9,6 +9,7 @@ import type {
   DisplayToServer,
   ServerToConsole,
   ServerToDisplay,
+  SiteRef,
   ToolDescriptor,
 } from "@dusky/contracts";
 import { CLOSE_SUPERSEDED } from "@dusky/contracts";
@@ -118,6 +119,18 @@ export class SessionActor {
   private lastSent: string | null = null;
   private readonly hasPlanner: boolean;
   private readonly record: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
+  /**
+   * The name a wearer reads for each origin this console is holding.
+   *
+   * A map rather than a string, because a console holds every participating
+   * site at once and a single label could only ever be right about one of
+   * them. That was the failure a server-global `DUSKY_SOURCE` had: the glasses
+   * read VERDANT MARKET while a restaurant's tools were on the menu.
+   *
+   * Cosmetic throughout. Nothing here is consulted by the gate, recorded in
+   * the audit trail, or able to change what a frame does.
+   */
+  private siteNames = new Map<string, string>();
 
   constructor(
     readonly id: string,
@@ -143,6 +156,11 @@ export class SessionActor {
   private makeSession(): Session {
     return new Session({
       source: this.source,
+      // Falls back to the HOST rather than to the product name, because an
+      // origin nobody named is still a real place and its host is derived
+      // rather than claimed. A wearer reading `shop.example.com` above a
+      // confirmation knows more than one reading `Dusky`.
+      siteName: (origin) => this.siteNames.get(origin) ?? hostOf(origin),
       runner: this.runner,
       // One planner per session, so its proposals and refusals land in this
       // wearer's audit trail rather than a shared one.
@@ -246,30 +264,41 @@ export class SessionActor {
   }
 
   /**
-   * A console has arrived, holding some partner site.
+   * A console has arrived, holding every site it can reach.
    *
-   * The source label comes with it, because the console is the surface that
-   * actually has the site loaded and the relay does not. `DUSKY_SOURCE` stays
-   * as the fallback for a deployment that only ever points at one place.
+   * The list comes with it, because the console is the surface that actually
+   * has the sites loaded and the relay cannot find out for itself.
    *
-   * The label is COSMETIC and carries no authority. It is not consulted by the
+   * Each name is COSMETIC and carries no authority. It is not consulted by the
    * gate, it is not what the audit trail records, and no frame behaves
    * differently because of it: the unspoofable fact about where a tool came
    * from is its origin, which the browser supplies and which appears on every
-   * audit entry. It is sanitized on the way in for the same reason a tool
-   * description is, since it ends up rendered on a lens.
+   * audit entry. Names are sanitized on the way in for the same reason a tool
+   * description is, since they end up rendered on a lens.
+   *
+   * What restarts the machine is a change of ORIGINS, not a change of label.
+   * A different set of sites is a different task and the pending one may name
+   * a tool nobody is holding any more. A label is a word on a screen, and
+   * restarting for one used to throw away a wearer's pending confirmation
+   * every time a console holding anything other than the deployment default
+   * connected, which was every attach of the second source.
    */
-  async attachConsole(sock: WebSocket, origins: string[], source?: string): Promise<void> {
+  async attachConsole(sock: WebSocket, sites: SiteRef[]): Promise<void> {
     this.consoleSock?.close(CLOSE_SUPERSEDED, "another window took this session");
     this.consoleSock = sock;
+
+    const origins = sites.map((s) => s.origin);
+    const changed = !sameOrigins(this.runner.origins, origins);
     this.runner.origins = origins;
-    const named = displayLabel(source);
-    if (named && named !== this.source) {
-      this.source = named;
-      // The machine holds its source at construction, and a different source
-      // is a different task anyway, so this restarts rather than mutates.
-      this.session = this.makeSession();
-    }
+
+    this.siteNames = new Map(
+      sites.flatMap((s) => {
+        const named = displayLabel(s.name);
+        return named ? [[s.origin, named] as const] : [];
+      }),
+    );
+
+    if (changed) this.session = this.makeSession();
     await this.session.start();
   }
 
@@ -353,12 +382,32 @@ export class SessionActor {
     }
   }
 
+  /**
+   * Every site this session can currently reach, as an outside agent sees it.
+   *
+   * Read off the runner's origins rather than off the names, because an origin
+   * nobody named is still held and leaving it out would understate what the
+   * wearer is able to approve.
+   */
+  private sitesHeld(): { origin: string; name: string }[] {
+    return this.runner.origins.map((origin) => ({
+      origin,
+      name: this.siteNames.get(origin) ?? hostOf(origin),
+    }));
+  }
+
   private statusValue(): Record<string, unknown> {
     const frame = this.session.current();
     const busy = this.busyWith();
     return {
       session: this.id,
-      source: this.source,
+      // What the wearer is reading right now, rather than a label this actor
+      // was configured with. On a menu spanning several businesses those are
+      // different answers, and only one of them is checkable against the lens.
+      source: frame.source,
+      // The breadth, which `source` cannot carry and an agent genuinely needs:
+      // it is how a caller learns it may ask for something across two sites.
+      sites: this.sitesHeld(),
       display_connected: this.display?.readyState === 1,
       state: stateFor(frame.kind),
       showing: {
@@ -386,7 +435,10 @@ export class SessionActor {
         return { ok: true, value: this.statusValue() };
 
       case "actions":
-        return { ok: true, value: { source: this.source, actions: this.session.actions() } };
+        // Every site at once, because that is what the wearer can now be asked
+        // for. An agent reading this learns it may propose one errand that
+        // crosses two businesses, which is the whole point of holding both.
+        return { ok: true, value: { sites: this.sitesHeld(), actions: this.session.actions() } };
 
       case "task": {
         const text = request.text?.trim() ?? "";
@@ -450,9 +502,17 @@ export class SessionActor {
         else this.runner.settle(msg.requestId, undefined, msg.error);
         return;
       case "toolsChanged":
-        // A page added or removed tools. Re-discover and repaint so the wearer
-        // never selects something that has since disappeared.
-        await this.session.start();
+        // A page added or removed tools. Re-discover so the wearer never
+        // selects something that has since disappeared.
+        //
+        // A REFRESH, not a restart. This used to call `start()`, which clears
+        // the parameter being collected and repaints the menu over whatever is
+        // on the lens. One site registers once, in a burst the console
+        // coalesces, before anybody has chosen anything, so that was invisible.
+        // Several sites register on their own schedules, the console's 200ms
+        // debounce merges a burst but cannot merge bursts seconds apart, and
+        // any one of them can land after the wearer has started something.
+        await this.session.refresh();
         return;
       case "agent": {
         const reply = await this.onAgentRequest(msg.request);
@@ -471,6 +531,23 @@ export class SessionActor {
  * Returns undefined for anything that is not usable, so the caller keeps
  * whatever it already had.
  */
+/** Two lists naming the same places, whatever order they arrived in. */
+function sameOrigins(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((o, i) => o === sortedB[i]);
+}
+
+/** The readable half of an origin, for a site that offered no name. */
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
 function displayLabel(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const clean = raw

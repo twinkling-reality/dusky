@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { clickChoiceIn, expectReachableIn } from "./drive.js";
 
 /**
  * The path a judge actually takes.
@@ -18,7 +19,12 @@ test("the front door states what it is, once, without an acronym in the headline
   // Exactly one h1, and it is the page's own: the panel in the examples drops
   // to an h2 so it does not compete with the document around it.
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("web actions");
+  // The claim, in the words the product now supports. It used to be about
+  // turning web actions into AR, which was true of one site at a time and is
+  // the smaller half of what happens when the browser holds all of them.
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    "everything you are signed into",
+  );
 
   // No acronym in the headline itself. The subtitle names the protocol once,
   // which is where a judge scoring WebMCP leverage looks and where it costs a
@@ -149,12 +155,19 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   await expect(page).toHaveURL(/session=[A-Z]{6}/);
   await expect(page).not.toHaveURL(/start=/);
 
-  // Everything in one tab: the glasses view, the partner site, the log.
+  // Everything in one tab: the glasses view, EVERY partner site, the log.
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
-  await expect(lens.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expectReachableIn(lens, /Add to cart/);
   await expect(page.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart")).toHaveText(
     "empty",
   );
+  // The second business, in the same tab, at the same time. This is the claim
+  // the whole product makes and it is one assertion: two sites that have never
+  // heard of each other, both live, both reachable from one menu.
+  await expect(page.frameLocator('iframe[title="Amber & Oak"]').getByTestId("book")).toHaveText(
+    "none",
+  );
+  await expectReachableIn(lens, /Book table/);
   await expect(page.getByText("getTools({fromOrigins})")).toBeVisible();
 
   // The thing a judge must not have to discover by closing the tab. A footnote
@@ -186,7 +199,10 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
 
 test("the demo says what you are looking at, when asked", async ({ page }) => {
   await page.goto(`${SITE}/demo?start=1`);
-  await expect(page.getByTestId("actions").locator("li")).toHaveCount(4);
+  // Seven, because both sites are held. Named rather than counted would be
+  // better here, except that the count IS the claim on this page: the list is
+  // one list, not one list per business.
+  await expect(page.getByTestId("actions").locator("li")).toHaveCount(7);
 
   // Shut by default. This page carried a paragraph about the security model
   // above the fold and a caption under every heading, all of it cut because a
@@ -197,10 +213,11 @@ test("the demo says what you are looking at, when asked", async ({ page }) => {
   await page.getByRole("button", { name: "What is this?" }).click();
   const what = page.getByRole("region", { name: "What is this" });
 
-  // Every box on the page is named, including the one whose label is the site's
-  // own name and therefore changes with the source.
+  // Every box on the page is named, including the one holding the sites. That
+  // box used to be labelled with the single site's name; no business name is
+  // true above a box containing another business, so it is labelled plainly.
   await expect(what.getByText("Glasses", { exact: true })).toBeVisible();
-  await expect(what.getByText("Verdant Market", { exact: true })).toBeVisible();
+  await expect(what.getByText("Sites", { exact: true })).toBeVisible();
   await expect(what.getByText("Declared actions", { exact: true })).toBeVisible();
   await expect(what.getByText("Activity", { exact: true })).toBeVisible();
 
@@ -220,7 +237,7 @@ test("somebody who owns glasses can reach the pairing form from a running sessio
    * actually owns a pair had no route to it at all.
    */
   await page.goto(`${SITE}/demo?start=1`);
-  await expect(page.getByTestId("actions").locator("li")).toHaveCount(4);
+  await expect(page.getByTestId("actions").locator("li")).toHaveCount(7);
 
   await page.getByRole("button", { name: "Pair glasses" }).click();
 
@@ -239,11 +256,7 @@ test("the start card still works for somebody who arrives at /demo directly", as
   await page.goto(`${SITE}/demo`);
   await page.getByRole("button", { name: /Run it in this browser/ }).click();
   await expect(page).toHaveURL(/session=[A-Z]{6}/);
-  await expect(
-    page.frameLocator('iframe[title="Dusky on the glasses"]').getByRole("button", {
-      name: /Add to cart/,
-    }),
-  ).toBeVisible();
+  await expectReachableIn(page.frameLocator('iframe[title="Dusky on the glasses"]'), /Add to cart/);
 });
 
 test("a gesture in the embedded panel changes the partner site in the same tab", async ({
@@ -254,7 +267,7 @@ test("a gesture in the embedded panel changes the partner site in the same tab",
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
   const cart = page.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
 
-  await lens.getByRole("button", { name: /Add to cart/ }).click();
+  await clickChoiceIn(lens, /Add to cart/);
   const compose = lens.locator('input[type="text"]');
   await expect(compose).toBeVisible();
   await compose.fill("oat-1");
@@ -301,7 +314,7 @@ test("free text has somewhere for focus to go, and only once there is text", asy
   await page.goto(`${SITE}/demo?start=1`);
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
-  await lens.getByRole("button", { name: /Add to cart/ }).click();
+  await clickChoiceIn(lens, /Add to cart/);
 
   const compose = lens.locator('input[type="text"]');
   await expect(compose).toBeVisible();
@@ -330,7 +343,7 @@ test("a tool with no arguments is not named twice on the confirm frame", async (
   // empty_cart is gated and takes no arguments, which is the combination that
   // used to print the label as the title AND as the target: the wearer read
   // "Empty cart" over "Empty cart" and had to confirm it.
-  await lens.getByRole("button", { name: /Empty cart/ }).click();
+  await clickChoiceIn(lens, /Empty cart/);
 
   await expect(lens.getByText("This cannot be undone")).toBeVisible();
   await expect(lens.getByText("Empty cart", { exact: true })).toHaveCount(1);
@@ -339,7 +352,7 @@ test("a tool with no arguments is not named twice on the confirm frame", async (
   // fix removed a duplicate rather than the line. product_id is a plain string
   // on this site, so it arrives through the composer rather than as buttons.
   await lens.getByRole("button", { name: "Cancel" }).click();
-  await lens.getByRole("button", { name: /Add to cart/ }).click();
+  await clickChoiceIn(lens, /Add to cart/);
   const compose = lens.locator('input[type="text"]');
   await expect(compose).toBeVisible();
   await compose.fill("oat-1");
@@ -348,32 +361,53 @@ test("a tool with no arguments is not named twice on the confirm frame", async (
   await expect(lens.getByText("Add to cart", { exact: true })).toHaveCount(1);
 });
 
-test("the same tab can be pointed at a completely different site", async ({ page }) => {
+/**
+ * What replaced "the same tab can be pointed at a completely different site".
+ *
+ * That test drove the source switcher, and the switcher is gone with the
+ * restriction it controlled. Its real subject survives and is stronger stated
+ * this way: one tab, one session, one code, one menu, and two businesses that
+ * have never heard of each other reachable from it at the same time. Pointing
+ * at one site at a time was the thing being demonstrated; holding both is.
+ */
+test("one tab holds two unrelated businesses, on one menu", async ({ page }) => {
   await page.goto(`${SITE}/demo?start=1`);
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
-  await expect(lens.getByRole("button", { name: /Add to cart/ })).toBeVisible();
-
-  await page.getByRole("button", { name: "Amber & Oak" }).click();
 
   /*
    * Never accused of granting nothing while it is still answering.
    *
-   * Switching source clears the list and re-discovers, and the FIRST discovery
-   * legitimately returns zero because the new site's frame has not registered
-   * yet. The console reported that as "no tools, the grant is missing", which
-   * is a real failure with a real remedy, about a site that was fine. Polled
-   * rather than asserted once, because the bug lived in a window of a few
-   * hundred milliseconds and a single check would step over it.
+   * The sites load independently and the first discovery legitimately returns
+   * zero for a site whose frame has not registered yet. The console reported
+   * that as "the grant is missing", which is a real failure with a real remedy,
+   * about a site that was fine. Holding several sites makes this worse rather
+   * than better, because one site arriving is not evidence about another, so
+   * the console now settles each origin on its own. Polled rather than asserted
+   * once, because the bug lives in a window of a few hundred milliseconds and a
+   * single check would step over it.
    */
   for (let i = 0; i < 12; i++) {
-    await expect(page.getByText("No tools.")).toHaveCount(0);
+    await expect(page.getByText("offered nothing")).toHaveCount(0);
     await page.waitForTimeout(60);
   }
 
-  // Same session, same panel, same code. A different menu, because a
-  // different site declared different tools.
-  await expect(lens.getByRole("button", { name: /Book table/ })).toBeVisible();
-  await expect(lens.getByRole("button", { name: /Add to cart/ })).toHaveCount(0);
-  await expect(page.getByTestId("actions").locator("li")).toHaveCount(3);
+  // Both sites' actions, in one list, ordered by what a press costs rather than
+  // by which business published them.
+  const actions = page.getByTestId("actions");
+  await expect(actions.getByText("Add to cart")).toBeVisible();
+  await expect(actions.getByText("book_table")).toBeVisible();
+  await expect(actions.locator("li")).toHaveCount(7);
+
+  // And the rows say whose they are, which is the only new thing a wearer
+  // needs when a menu stops belonging to one place. Counted rather than looked
+  // for: EVERY row carries its site, so finding one proves nothing about the
+  // other six, and the shop's four plus the restaurant's three is the whole
+  // list accounted for.
+  await expect(actions.getByText("Verdant Market")).toHaveCount(4);
+  await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
+
+  // Same session, same panel, same code: both reachable from the one menu.
+  await expectReachableIn(lens, /Add to cart/);
+  await expectReachableIn(lens, /Book table/);
 });

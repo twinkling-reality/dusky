@@ -8,6 +8,17 @@
  */
 .page {
   --dusky-box: 16px;
+  /*
+   * How tall the live row is, for the panel and the sites alike.
+   *
+   * One number rather than two that happened to agree. The lens is a 600x600
+   * panel scaled to fit it, and each site frame is whatever is left of it under
+   * its caption, so the two boxes end on the same line by construction instead
+   * of by coincidence. It shrank from 450 when a second site arrived, because
+   * the page still has to land inside one 1440x900 screen and seven actions are
+   * taller than four.
+   */
+  --dusky-live: 432px;
 }
 
 .page {
@@ -131,21 +142,6 @@
   border-bottom: 1px solid var(--dusky-hair);
 }
 
-/*
- * The source switcher.
- *
- * This row was a status strip of four mono facts, then a pair code and a
- * caption. The facts were plumbing the page already reported where it mattered,
- * the code is not typed by anybody in this mode, and the caption was a slogan.
- * What is left is the one control.
- */
-.controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--dusky-s2);
-}
-
 .pair {
   display: flex;
   flex-direction: column;
@@ -217,7 +213,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--dusky-s3);
-  padding: 0.42rem 0;
+  /* Tighter than it was, because there are seven of these now rather than
+     four, and the page still has to fit one screen. */
+  padding: 0.3rem 0;
   border-bottom: 1px solid var(--dusky-hair-soft);
 }
 .tools > .tool:last-child {
@@ -228,6 +226,21 @@
   min-width: 0;
   font-size: 0.94rem;
   color: var(--dusky-ink-strong);
+}
+
+/*
+ * Whose action a row is, when more than one site is on the list.
+ *
+ * Quiet on purpose. It is the answer to "wait, which one of these is that",
+ * asked occasionally, and a row that shouts its origin turns a list of things
+ * you can do into a list of companies. `margin-left: auto` puts it against the
+ * chip rather than against the name, so the names stay a readable column.
+ */
+.toolSite {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--dusky-ink-faint);
+  white-space: nowrap;
 }
 
 .chip {
@@ -260,11 +273,60 @@
   font-size: 0.88rem;
 }
 
+/*
+ * Every site Dusky is holding, on one row.
+ *
+ * Side by side rather than stacked, because the claim being made is that these
+ * are separate businesses that have never heard of each other, and two frames
+ * one above the other read as one page with a scroll in it. Stacking also does
+ * not fit: `frontdoor.spec.ts` holds the whole demo to a single 1440x900
+ * screen, and a second 450px frame is more than the budget has.
+ *
+ * They wrap below the breakpoint, where the grid is a single column and there
+ * is width for exactly one of them.
+ */
+.sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dusky-s3);
+  align-items: stretch;
+  height: var(--dusky-live);
+}
+
+.site {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 260px;
+  /* Grid, not flex: the frame takes what is left after the caption, and `1fr`
+     means that in a grid row where `flex: 1` would collapse it to nothing. */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+}
+
+/*
+ * Whose frame this is, under the frame rather than over it.
+ *
+ * Over it, the name sat between the cell's own heading and the thing it named,
+ * which is two labels in a row saying different things. Under it the caption
+ * belongs to the picture above it, which is what a caption is.
+ */
+.siteName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+  color: var(--dusky-ink-strong);
+}
+
 /* Same height as the panel beside it, so the top row has one baseline at the
-   bottom as well as at the top. */
+   bottom as well as at the top. Minus the caption, which is new and which the
+   450px was measured without. */
 .frame {
   width: 100%;
-  height: 450px;
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--dusky-hair);
   border-radius: var(--dusky-box);
   background: var(--dusky-surface);
@@ -321,27 +383,11 @@
   filter: brightness(1.08);
 }
 
-.sourceBtn {
-  padding: 0.35em 0.8em;
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  background: none;
-  color: var(--dusky-ink-dim);
-  font: inherit;
-  font-size: 0.86rem;
-  cursor: pointer;
-}
-.sourceBtn[data-on="true"] {
-  border-color: var(--dusky-accent);
-  color: var(--dusky-ink-strong);
-  box-shadow: inset 0 0 0 1px var(--dusky-accent);
-}
-
 /* 600 x 600 is not negotiable, so the panel scales rather than reflows.
    Reflowing it would be showing something the glasses cannot show. */
 .stage {
-  width: 450px;
-  height: 450px;
+  width: var(--dusky-live);
+  height: var(--dusky-live);
   max-width: 100%;
   overflow: hidden;
   border: 1px solid var(--dusky-hair);
@@ -353,7 +399,9 @@
   height: 600px;
   border: 0;
   display: block;
-  transform: scale(0.75);
+  /* 432 / 600. The panel scales rather than reflows, because reflowing it would
+     be showing something the glasses cannot show. */
+  transform: scale(0.72);
   transform-origin: top left;
 }
 
@@ -363,28 +411,28 @@
  * The hardware route, as a control rather than a ghost.
  *
  * It was the same outlined pill as the two source buttons beside it, at the far
- * end of a row, under a page whose content is four large boxes. It read as a
- * third source. It carries the product's own accent now, which is the one thing
- * on this page that does.
+ * end of a row of its own, under a page whose content is four large boxes. It
+ * read as a third source. Those buttons are gone with the restriction they
+ * controlled, and the row they shared was costing the page fifty pixels that
+ * two site frames and seven actions now need, so this sits in the header with
+ * the other ways out. It carries the product's own accent, which is the one
+ * thing on this page that does.
  */
 .pairLink {
-  margin-left: auto;
-  padding: 0.42rem 1.1rem;
+  height: 2rem;
+  padding: 0 0.95rem;
   border: 1px solid var(--dusky-accent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--dusky-accent) 10%, var(--dusky-surface));
   font: inherit;
   font-size: 0.9rem;
   color: var(--dusky-ink-strong);
+  white-space: nowrap;
   cursor: pointer;
 }
 .pairLink:hover {
   background: var(--dusky-accent);
-  border-color: var(--dusky-accent);
   color: var(--dusky-surface);
-}
-.pairLink:hover {
-  color: var(--dusky-ink-strong);
 }
 
 /*

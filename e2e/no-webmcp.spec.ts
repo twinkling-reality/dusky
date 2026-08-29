@@ -58,16 +58,30 @@ test("the embedded panel says the same thing, on the path a judge actually takes
   await expect(panel).not.toContainText(/has not offered any actions/i);
   await expect(panel).not.toContainText(/No actions available/i);
 
-  // Retrying, switching source and reloading all keep telling the truth. Each
-  // one re-runs discovery, and each one is a chance to answer "empty" instead
-  // of "could not look".
+  // Retrying and reloading both keep telling the truth. Each one re-runs
+  // discovery, and each one is a chance to answer "empty" instead of "could not
+  // look". There used to be a third way in, clicking the source switcher, and
+  // that control is gone with the restriction it controlled.
   await lens.getByRole("button", { name: /Try again/ }).click();
-  await expect(panel).toContainText(/cannot reach this source/i);
-
-  await page.getByRole("button", { name: "Amber & Oak" }).click();
   await expect(panel).toContainText(/cannot reach this source/i);
   await expect(panel).not.toContainText(/has not offered any actions/i);
 
   await page.reload();
   await expect(panel).toContainText(/cannot reach this source/i, { timeout: 30_000 });
+
+  /*
+   * And no site is singled out as the one that failed.
+   *
+   * A browser with no WebMCP never reached ANY of them, so naming one would be
+   * a confident statement about a particular business made by something that
+   * never looked at it. The console's list says the same thing once per site,
+   * and every one of them is about what arrived here rather than about what
+   * anybody published.
+   */
+  const actions = page.getByTestId("actions");
+  await expect(actions.getByText(/offered nothing/)).toHaveCount(0);
+  await expect(actions.getByText(/exposedTo/)).toHaveCount(0);
+  // What it says instead, once per site: it could not read. True of a browser
+  // that never reached any of them, and true whatever those sites published.
+  await expect(actions.getByText(/Could not read what/)).toHaveCount(2);
 });

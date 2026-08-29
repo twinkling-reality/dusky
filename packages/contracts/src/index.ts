@@ -147,9 +147,30 @@ export type ServerToDisplay =
 /* ------------------------------------------------- console <-> server wire */
 
 /**
- * The console is Dusky's WebMCP client. It holds the partner site in an
- * allow="tools" iframe and is the only surface that can reach modelContext.
- * The server never touches a tool directly.
+ * One site a console is holding, as the relay is told about it.
+ *
+ * A console holds every site at once rather than one at a time, so what it
+ * announces on connect is a LIST. That was always half true: `origins` has
+ * been an array since the bridge was written, and only the label beside it was
+ * singular, which is why the relay could serve several origins and still tell
+ * the wearer it was somewhere else.
+ *
+ * The origin decides everything and the browser supplies it, so a site cannot
+ * forge one. The name decides nothing: it is written by whoever configured the
+ * console, it is what a wearer reads in a frame's eyebrow, and no gate, audit
+ * entry or frame behaviour consults it. Absent when the console has no name to
+ * offer, in which case the host is used, because a host is derived rather than
+ * claimed.
+ */
+export interface SiteRef {
+  origin: string;
+  name?: string;
+}
+
+/**
+ * The console is Dusky's WebMCP client. It holds every participating site in
+ * an allow="tools" iframe and is the only surface that can reach
+ * modelContext. The server never touches a tool directly.
  */
 export type ServerToConsole =
   | { t: "discover"; requestId: string; origins: string[] }

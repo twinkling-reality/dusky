@@ -3,11 +3,12 @@ import type {
   AgentRequest,
   ConsoleToServer,
   ServerToConsole,
+  SiteRef,
   ToolDescriptor,
 } from "@dusky/contracts";
 import { CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { isWebMcpAvailable, registerTools, WebMcpBridge } from "@dusky/webmcp";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { duskyTools } from "./duskyTools.js";
 
 /**
@@ -31,20 +32,39 @@ export interface ConsoleLink {
   webmcp: boolean;
   tools: ToolDescriptor[];
   /**
-   * Whether a discovery has finished for the source currently selected.
+   * Whether discovery has finished for ONE site, asked one site at a time.
    *
    * An empty list means two completely different things and a page that cannot
-   * tell them apart says the alarming one. Switching source clears the tools
-   * and re-discovers, so for the few hundred milliseconds in between the
-   * console announced that the site had granted nothing, which is a real
-   * failure with a real remedy, about a site that was simply still answering.
+   * tell them apart says the alarming one. That was already true of a single
+   * source, where a first discovery legitimately returns nothing because the
+   * frame has not registered yet and `ontoolchange` fetches the real answer a
+   * moment later, so an empty result has to hold still before it counts.
    *
-   * A zero is not enough on its own either. The FIRST discovery after a switch
-   * legitimately returns nothing, because the new site's frame has not
-   * registered yet, and `ontoolchange` is what fetches the real answer a moment
-   * later. So an empty result has to hold still before it counts.
+   * Holding several sites makes a single flag actively wrong rather than merely
+   * coarse. The sites load independently, so the FIRST one to answer would set
+   * a shared flag and every site still loading would be reported as having
+   * granted nothing, in the same breath as a site that really had. One answer
+   * is not evidence about another origin.
+   *
+   * So a site is settled once it has contributed a tool, and every site is
+   * settled once discovery has been quiet long enough that nothing more is
+   * coming. That second half is what keeps a site which genuinely granted
+   * nothing from looking like it is still loading forever.
    */
-  discovered: boolean;
+  settled: (origin: string) => boolean;
+  /**
+   * Why discovery could not run at all, if it could not.
+   *
+   * "We could not look" and "there was nothing to see" are different facts and
+   * only one of them is about the site. The relay learned this distinction when
+   * a browser without WebMCP produced "this source declared no usable tools" on
+   * a wearer's lens, which is a confident statement about a shop nothing had
+   * reached. The console's own list was making the same claim in its own words
+   * and now makes neither: with a problem in hand it says it could not read,
+   * and says which sites it could not read for, and names no business as
+   * having offered anything.
+   */
+  problem: string | null;
   activity: string[];
   /** Whether Dusky's own tools are registered for an agent in this browser. */
   provides: boolean;
@@ -83,30 +103,44 @@ const TOOLS_SETTLE_MS = 200;
 export function useConsoleLink(
   relayUrl: string,
   sessionId: string,
-  partnerOrigins: string[],
+  sites: readonly SiteRef[],
   ready: boolean,
-  sourceName: string,
 ): ConsoleLink {
   const [link, setLink] = useState<LinkState>("connecting");
   const [tools, setTools] = useState<ToolDescriptor[]>([]);
-  const [discovered, setDiscovered] = useState(false);
+  /** Whether discovery has gone quiet, which settles every site at once. */
+  const [quiet, setQuiet] = useState(false);
+  /** Set when discovery threw, so an empty list is not read as an empty site. */
+  const [problem, setProblem] = useState<string | null>(null);
   const emptyFor = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   /**
-   * Record what a discovery came back with.
+   * Note that a discovery answered, and restart the clock on the rest.
    *
-   * Anything found settles it at once. Nothing found starts a clock instead,
-   * because the re-discovery that `ontoolchange` triggers is usually already on
-   * its way, and a page that reported a missing grant in that window would be
-   * wrong about every source switch.
+   * Every answer restarts it, not only an empty one. With one site an arrival
+   * was the end of the story; with several it is evidence that MORE may still
+   * be arriving, because each site registers on its own schedule and each
+   * registration triggers another round. Ending the wait on the first answer
+   * would settle sites that have not spoken yet.
    */
-  const settleDiscovery = useCallback((found: number) => {
+  const sawDiscovery = useCallback(() => {
     clearTimeout(emptyFor.current);
-    if (found > 0) {
-      setDiscovered(true);
-      return;
-    }
-    emptyFor.current = setTimeout(() => setDiscovered(true), EMPTY_HOLD_MS);
+    setQuiet(false);
+    setProblem(null);
+    emptyFor.current = setTimeout(() => setQuiet(true), EMPTY_HOLD_MS);
+  }, []);
+
+  /**
+   * Discovery failed outright.
+   *
+   * That is an answer, so the list must stop saying "checking". It is NOT
+   * evidence about any site, so the reason is kept: with one in hand the list
+   * reports that it could not look, rather than reporting on somebody's page.
+   */
+  const gaveUp = useCallback((reason: string) => {
+    clearTimeout(emptyFor.current);
+    setQuiet(true);
+    setProblem(reason);
   }, []);
   const [activity, setActivity] = useState<string[]>([]);
   const webmcp = isWebMcpAvailable();
@@ -121,9 +155,11 @@ export function useConsoleLink(
     setActivity((a) => [...a.slice(-60), line]);
   }, []);
 
+  const origins = useMemo(() => sites.map((s) => s.origin), [sites]);
+
   useEffect(() => {
-    bridge.current = new WebMcpBridge(partnerOrigins);
-  }, [partnerOrigins]);
+    bridge.current = new WebMcpBridge(origins);
+  }, [origins]);
 
   const send = useCallback((msg: ConsoleToServer) => {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
@@ -167,21 +203,25 @@ export function useConsoleLink(
     let openedAt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // Pointing Dusky at a different source re-runs this effect. The previous
-    // site's tools are not this site's tools, and leaving them on screen until
-    // discovery finishes would show a menu that belongs to somewhere else.
+    // A different set of sites re-runs this effect. The previous set's tools
+    // are not this set's tools, and leaving them on screen until discovery
+    // finishes would show a menu that belongs to somewhere else.
     setTools([]);
-    setDiscovered(false);
+    setQuiet(false);
+    setProblem(null);
     clearTimeout(emptyFor.current);
 
     const connect = () => {
       if (disposed) return;
-      // The relay is told which site this console is holding, because it has
-      // no way to find out. The label is what a wearer reads in the frame's
-      // eyebrow; the origins are what actually decide anything.
-      const url =
-        `${relayUrl}?origins=${encodeURIComponent(partnerOrigins.join(","))}` +
-        `&source=${encodeURIComponent(sourceName)}`;
+      // The relay is told which sites this console is holding, because it has
+      // no way to find out. Names are what a wearer reads in a frame's eyebrow;
+      // origins are what actually decide anything.
+      //
+      // One parameter carrying both, rather than two lists that have to stay
+      // the same length and in the same order. A name may contain any
+      // character a person can type, including the separators a flat list would
+      // need, so JSON is what makes an arbitrary name safe to carry.
+      const url = `${relayUrl}?sites=${encodeURIComponent(JSON.stringify(sites))}`;
       const sock = new WebSocket(url);
       ws.current = sock;
 
@@ -216,8 +256,11 @@ export function useConsoleLink(
             try {
               const found = await b.discover();
               setTools(found);
-              settleDiscovery(found.length);
-              note(`getTools({fromOrigins}) -> ${found.length} tools`);
+              sawDiscovery();
+              const from = new Set(found.map((t) => t.origin)).size;
+              note(
+                `getTools({fromOrigins}) -> ${found.length} tools from ${from} of ${origins.length}`,
+              );
               send({ t: "tools", requestId: msg.requestId, tools: found });
             } catch (err) {
               // The reason used to go only into this panel's activity log,
@@ -226,8 +269,7 @@ export function useConsoleLink(
               const reason = errText(err);
               // Answered, badly. Still an answer: the log and the lens both
               // carry the reason, and the list must stop saying "checking".
-              clearTimeout(emptyFor.current);
-              setDiscovered(true);
+              gaveUp(reason);
               note(reason);
               send({ t: "tools", requestId: msg.requestId, tools: [], error: reason });
             }
@@ -302,7 +344,7 @@ export function useConsoleLink(
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, partnerOrigins, ready, sourceName, note, send, settleDiscovery]);
+  }, [relayUrl, sessionId, sites, origins, ready, note, send, sawDiscovery, gaveUp]);
 
   /**
    * Register Dusky's own tools, so an agent in this browser can drive the
@@ -338,7 +380,21 @@ export function useConsoleLink(
     };
   }, [ready, ask, note]);
 
-  return { link, webmcp, tools, discovered, activity, provides };
+  /**
+   * A site has answered for itself, or discovery has stopped answering at all.
+   *
+   * Asked per origin rather than once for the page, because one site arriving
+   * says nothing about another. Anything that has offered a tool has plainly
+   * answered; everything else waits for the quiet, which is the only evidence
+   * available that a site with nothing to show has finished having nothing to
+   * show.
+   */
+  const settled = useCallback(
+    (origin: string) => quiet || tools.some((t) => t.origin === origin),
+    [quiet, tools],
+  );
+
+  return { link, webmcp, tools, settled, problem, activity, provides };
 }
 
 function errText(e: unknown): string {

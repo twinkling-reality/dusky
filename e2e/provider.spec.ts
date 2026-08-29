@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { expectReachable, focusChoice } from "./drive.js";
 
 /**
  * Dusky as a WebMCP PROVIDER, against real Chrome.
@@ -37,27 +38,6 @@ interface ModelContextLike {
   executeTool(tool: unknown, input?: unknown): Promise<string>;
 }
 
-/**
- * Drive the Display exactly as the glasses do: arrow keys move focus, Enter
- * activates whatever the d-pad is on.
- *
- * Pressing Enter on the button itself is not the same act. `useDpad` keeps its
- * own index and selects THAT, so a press aimed at a row only worked while the
- * row happened to be the one under the wearer's thumb, which meant this test
- * quietly depended on `add_to_cart` being first. It is not first any more, and
- * per AGENTS.md it was never something to depend on. Same helper as
- * `e2e/roundtrip.spec.ts`, for the same reason.
- */
-async function focusChoice(page: Page, label: RegExp) {
-  for (let i = 0; i < 8; i += 1) {
-    const focused = await page.locator('[data-focused="true"]').textContent();
-    if (focused && label.test(focused)) return;
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(60);
-  }
-  throw new Error(`never focused a choice matching ${String(label)}`);
-}
-
 test("an agent in the browser can inspect and drive a Dusky session", async ({ browser }) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
@@ -72,15 +52,33 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   // BEFORE the relay has finished discovering the partner's. Pairing used to
   // take a form fill and two clicks, which hid that gap; a code in the URL
   // does not. Wait for discovery, or the agent asks an empty session.
-  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(4);
+  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(7);
 
   // Registering our own tools must not pollute what the WEARER sees. Chrome
   // returns this document's own tools from getTools({fromOrigins}) even when
-  // fromOrigins names only the partner, so @dusky/webmcp filters them out.
+  // fromOrigins names only the partners, so @dusky/webmcp filters them out.
+  //
+  // Exact equality, because that is what makes this a pollution check rather
+  // than a spot check: any extra name fails it. Every site's actions are on the
+  // one list now, which is also the answer an agent needs before it can propose
+  // an errand that crosses two businesses.
   const actions = await callDuskyTool(consolePage, "list_display_actions");
   expect(actions["ok"]).toBe(true);
   const names = (actions["actions"] as { name: string }[]).map((a) => a.name).sort();
-  expect(names).toEqual(["add_to_cart", "empty_cart", "review_cart", "search_products"]);
+  expect(names).toEqual([
+    "add_to_cart",
+    "book_table",
+    "change_reservation",
+    "empty_cart",
+    "find_times",
+    "review_cart",
+    "search_products",
+  ]);
+
+  // And it is told which site each one belongs to, because two businesses can
+  // publish the same name and a bare name is not an identity.
+  const origins = new Set((actions["actions"] as { origin: string }[]).map((a) => a.origin));
+  expect([...origins].sort()).toEqual(["http://localhost:7801", "http://localhost:7804"]);
 
   // An agent is told the ceremony Dusky will enforce, so it can be honest with
   // the person instead of promising something it cannot complete alone.
@@ -99,7 +97,7 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   expect(String(before["error"])).toContain(CODE);
 
   await displayPage.goto(`http://localhost:7802/?session=${CODE}`);
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expectReachable(displayPage, /Add to cart/);
 
   const status = await callDuskyTool(consolePage, "get_display_status");
   expect(status).toMatchObject({ ok: true, session: CODE, display_connected: true, state: "idle" });
@@ -130,12 +128,14 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   await expect(displayPage.getByRole("button", { name: /Confirm/ })).toBeVisible();
   await expect(displayPage.getByText("oat-1")).toBeVisible();
   // And the partner site was never touched.
-  await expect(consolePage.frameLocator("iframe").getByTestId("cart")).toHaveText("empty");
+  await expect(
+    consolePage.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart"),
+  ).toHaveText("empty");
 
   // Cancelling is always allowed, because it can only ever stop something.
   const cancelled = await callDuskyTool(consolePage, "cancel_active_task");
   expect(cancelled).toMatchObject({ ok: true, state: "idle" });
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expectReachable(displayPage, /Add to cart/);
 
   await ctx.close();
 });

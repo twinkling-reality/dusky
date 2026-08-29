@@ -54,6 +54,126 @@ function fakeRunner(over: Partial<ToolRunner> = {}): ToolRunner & { calls: strin
   } as ToolRunner & { calls: string[] };
 }
 
+/**
+ * A site arriving late must not take the wearer's place away.
+ *
+ * Sites load independently and register on their own schedules, so a
+ * re-discovery can land at any moment, including the middle of a task. It used
+ * to restart the machine: the parameter being collected was thrown away and
+ * the menu was painted over whatever was on the lens. With one site that was
+ * unreachable, because a site registers once before anybody has chosen
+ * anything. With several it is ordinary.
+ */
+describe("a site registering while the wearer is busy", () => {
+  const TABLES = "https://tables.test";
+  const BOOK = tool({
+    name: "book_table",
+    description: "Reserve a table by slot id.",
+    origin: TABLES,
+    inputSchema: {
+      type: "object",
+      properties: { slot_id: { type: "string", description: "Which slot?" } },
+      required: ["slot_id"],
+    },
+  });
+
+  it("keeps the question on screen and the answer already given", async () => {
+    let registry = [SEARCH, ADD];
+    const runner = fakeRunner({ discover: async () => registry });
+    const s = new Session({ source: "Dusky", runner });
+    await s.start();
+
+    // Halfway through: the wearer has chosen a tool and is being asked for a
+    // parameter.
+    const asked = await s.handle("add_to_cart");
+    expect(asked.kind).toBe("choose");
+
+    // A second site finishes registering.
+    registry = [SEARCH, ADD, BOOK];
+    const after = await s.refresh();
+
+    // The wearer is still being asked the same thing.
+    expect(after.kind, "a late site repainted the menu over a live question").toBe("choose");
+    expect(after).toEqual(asked);
+
+    // And the answer they now give still belongs to the tool they chose.
+    const f = await s.submitText("oat-1");
+    expect(f.kind).toBe("confirm");
+    if (f.kind !== "confirm") throw new Error("unreachable");
+    expect(f.target).toContain("oat-1");
+  });
+
+  it("does show a new site's actions once they are back on the menu", async () => {
+    // The other half: refusing to repaint is only correct while something else
+    // is on screen. A menu is exactly where new actions want to appear.
+    let registry = [SEARCH, ADD];
+    const runner = fakeRunner({ discover: async () => registry });
+    const s = new Session({ source: "Dusky", runner });
+    const before = await s.start();
+    if (before.kind !== "idle") throw new Error("unreachable");
+    expect(before.choices.map((c) => c.label)).not.toContain("Book table");
+
+    registry = [SEARCH, ADD, BOOK];
+    const after = await s.refresh();
+    if (after.kind !== "idle") throw new Error("unreachable");
+    expect(after.choices.map((c) => c.label)).toContain("Book table");
+  });
+
+  it("still refuses a confirmation the wearer approved before the change", async () => {
+    // Not repainting must not cost the protection the repaint was incidentally
+    // providing. `isConfirmationFresh` is what actually covers a site swapping
+    // what is about to be approved, and it reads `toolsChangedAt`.
+    let now = 1_000;
+    let registry = [SEARCH, ADD];
+    const runner = fakeRunner({ discover: async () => registry });
+    const s = new Session({ source: "Dusky", runner, now: () => now });
+    await s.start();
+    await s.handle("add_to_cart");
+    const gated = await s.submitText("oat-1");
+    expect(gated.kind).toBe("confirm");
+
+    now += 10;
+    registry = [SEARCH, ADD, BOOK];
+    await s.refresh();
+
+    now += 10;
+    const f = await s.handle("__confirm");
+    expect(f.kind, "a stale confirmation ran anyway").toBe("error");
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("does not put an error on the lens when a background refresh fails", async () => {
+    // A wearer waiting on `start` has to be told it failed. A wearer mid-task
+    // has not asked for anything and cannot act on it, so replacing their
+    // frame with an error would be the interruption this avoids.
+    let fail = false;
+    const runner = fakeRunner({
+      discover: async () => {
+        if (fail) throw new Error("the browser disconnected");
+        return [SEARCH, ADD];
+      },
+    });
+    const audit: { kind: string; detail?: Record<string, unknown> }[] = [];
+    const s = new Session({
+      source: "Dusky",
+      runner,
+      onAudit: (e) => audit.push({ kind: e.kind, detail: e.detail }),
+    });
+    await s.start();
+    const asked = await s.handle("add_to_cart");
+
+    fail = true;
+    const after = await s.refresh();
+    expect(after).toEqual(asked);
+    expect(audit).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        detail: expect.objectContaining({ reason: "refresh failed" }),
+      }),
+    );
+  });
+});
+
 describe("menu", () => {
   it("builds itself from discovered tools", async () => {
     const s = new Session({ source: "Verdant Market", runner: fakeRunner() });
@@ -492,6 +612,94 @@ describe("a planner the machine does not trust", () => {
       toolName: "add_to_cart",
       detail: { path: "planResolver", accepted: false, reason: "not read-only" },
     });
+  });
+
+  /**
+   * The rule the multi-site product turns on, checked HERE as well.
+   *
+   * `packages/planner` filters a target's own origin out of the candidate list
+   * before a model sees anything. This asserts the machine does not rely on
+   * that: a `Planner` is a port, and another implementation reaches this
+   * session without ever passing through that package, so a rule enforced only
+   * there is a rule a different planner does not have.
+   *
+   * What a cross-origin resolver would actually do is the reason it is refused
+   * rather than merely discouraged. The wearer's spoken words are what fill a
+   * resolver's arguments, this is the one path that runs with nobody watching,
+   * and the site being handed those words has nothing to do with what was
+   * asked. That is not a worse answer. It is somebody else's business learning
+   * what you said.
+   */
+  it("refuses a resolver that belongs to a different site than the target", async () => {
+    const elsewhere = tool({
+      name: "find_anything",
+      description: "Searches everything, everywhere.",
+      origin: "https://elsewhere.test",
+      inputSchema: {
+        type: "object",
+        properties: { q: { type: "string" } },
+        required: ["q"],
+      },
+      annotations: { readOnlyHint: true, untrustedContentHint: false },
+    });
+    const runner = fakeRunner({ discover: async () => [SEARCH, ADD, elsewhere] });
+    const audit: { kind: string; toolName?: string; detail?: Record<string, unknown> }[] = [];
+    const crossOrigin: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      planResolver: async () => ({ name: "find_anything", args: { q: "oat milk" } }),
+    };
+    const s = new Session({
+      source: "Dusky",
+      runner,
+      planner: crossOrigin,
+      onAudit: (e) => audit.push({ kind: e.kind, toolName: e.toolName, detail: e.detail }),
+    });
+    await s.start();
+    const f = await s.submitText("add the oat milk");
+
+    // Nothing was invoked on anybody's behalf.
+    expect(runner.calls, "a foreign site was called with the wearer's words").toEqual([]);
+    // And the wearer is asked for the value, which is the path they already had.
+    expect(f.kind).toBe("choose");
+    expect(audit).toContainEqual({
+      kind: "plan",
+      toolName: "find_anything",
+      detail: {
+        path: "planResolver",
+        accepted: false,
+        reason: "not same-origin as the target",
+        target: "https://shop.test",
+      },
+    });
+  });
+
+  it("still resolves through the target's own read-only tool", async () => {
+    // The other half of the same rule: refusing everything would also pass the
+    // test above, and this is the behaviour the resolver path exists for.
+    const elsewhere = tool({
+      name: "find_anything",
+      description: "Searches everything, everywhere.",
+      origin: "https://elsewhere.test",
+      annotations: { readOnlyHint: true, untrustedContentHint: false },
+    });
+    const runner = fakeRunner({ discover: async () => [SEARCH, ADD, elsewhere] });
+    let offered: string[] = [];
+    const sameOrigin: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      planResolver: async (_p, _t, readOnly) => {
+        offered = readOnly.map((t) => t.name);
+        return { name: "search_products", args: { query: "oat milk" } };
+      },
+    };
+    const s = new Session({ source: "Dusky", runner, planner: sameOrigin });
+    await s.start();
+    const f = await s.submitText("add the oat milk");
+
+    // The foreign tool was never even offered as a candidate.
+    expect(offered).toEqual(["search_products"]);
+    expect(runner.calls).toEqual(["search_products"]);
+    if (f.kind !== "choose") throw new Error("expected the search results as choices");
+    expect(f.choices.map((c) => c.label)).toContain("Organic oat milk");
   });
 
   it("keeps collecting the parameter when the resolver planner throws", async () => {

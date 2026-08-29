@@ -76,11 +76,13 @@ export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
     },
     {
       name: "list_display_actions",
-      title: "List what this source can do",
+      title: "List what the wearer can do",
       description:
-        "List the actions the website the wearer is connected to has declared, with the " +
-        "consequence Dusky assigns to each and whether it will stop for the wearer's " +
-        "approval. Use this to know what is possible before describing options to someone.",
+        "List every action declared by every website this Dusky session is holding, with " +
+        "the site each one belongs to, the consequence Dusky assigns it, and whether it " +
+        "will stop for the wearer's approval. The sites are unrelated to each other, so one " +
+        "task may reasonably span several of them. Use this to know what is possible before " +
+        "describing options to someone.",
       inputSchema: { type: "object", properties: {} },
       annotations: {
         readOnlyHint: true,
@@ -94,8 +96,9 @@ export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
       title: "Send a task to the glasses",
       description:
         "Hand the wearer something to act on, in plain words, for example 'find oat milk' " +
-        "or 'add the organic oat milk to my cart'. Dusky chooses a matching action on the " +
-        "connected website and puts it on the glasses. You are not performing the action: " +
+        "or 'add the organic oat milk to my cart'. Dusky chooses a matching action from any " +
+        "of the connected websites and puts it on the glasses. You are not performing the " +
+        "action: " +
         "anything that spends money or changes data stops and waits for the wearer to " +
         "approve it with a gesture, and you cannot approve it for them. Refused, with a " +
         "reason, if no glasses are connected or the wearer is already mid-decision.",

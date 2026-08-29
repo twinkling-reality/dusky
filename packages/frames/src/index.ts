@@ -322,7 +322,61 @@ function menuOrder(tools: readonly ToolDescriptor[]): ToolDescriptor[] {
 }
 
 /**
- * The menu: everything this source can currently do. Fully tool-derived.
+ * The id of a row that opens one site's actions rather than running something.
+ *
+ * Prefixed like every other control row, so it can never be mistaken for a
+ * parameter value. That is not hypothetical caution: pressing "Done" on an
+ * empty field once set `product_id` to the literal string `"__submit"` and
+ * walked on to a confirmation with it, because reserved ids were being coerced
+ * into answers by the branch that collects them.
+ */
+export const SITE_PREFIX = "__site:";
+
+/** The origin a site row opens, or null if this id is not one. */
+export function siteFromChoice(id: string): string | null {
+  return id.startsWith(SITE_PREFIX) ? id.slice(SITE_PREFIX.length) : null;
+}
+
+export interface MenuOptions {
+  /**
+   * The one site being browsed, when the wearer has stepped into one.
+   *
+   * Absent means the top of the menu, which is either every tool at once or a
+   * row per site, depending on whether they fit. See below.
+   */
+  site?: string;
+  /** What to call a site on a row. Falls back to its host, which is derived. */
+  siteName?: (origin: string) => string;
+}
+
+/**
+ * The menu: everything the wearer can currently do. Fully tool-derived.
+ *
+ * FLAT WHEN IT FITS, GROUPED WHEN IT DOES NOT.
+ *
+ * A panel four rows tall holding several businesses at once cannot show a flat
+ * list of everything, and the arithmetic is worse than it looks: `paginate`
+ * spends a slot on "More" and the composer spends another, so at seven tools
+ * with a planner configured a flat menu is FOUR pages of two rows. Measured,
+ * by running this function. Reaching `add_to_cart` from a cold menu took
+ * eleven presses that way, against four today.
+ *
+ * So when the list will not fit AND more than one site is offering, the top of
+ * the menu becomes one row per site and choosing one opens its actions. At two
+ * sites that is three rows and no pagination anywhere, and it costs nothing:
+ * the press that opens a site replaces the press that would have turned a
+ * page, so `add_to_cart` is still four presses away.
+ *
+ * This is NOT the restriction coming back. What was removed is Dusky holding
+ * one site at a time, so an agent could reach one business and a sentence could
+ * not cross two. The registry is combined regardless of what the menu draws:
+ * the planner ranks every site's tools together, `actions()` reports them
+ * together, and one spoken request still crosses two businesses. Grouping is
+ * navigation over a combined registry, not a partition of it.
+ *
+ * Grouping by `origin` is not a per-site branch. Nothing here learns which
+ * origin, only that two rows came from different ones, exactly as `menuLabel`
+ * already appends a host when two labels would collide.
  *
  * `canSpeak` adds the affordance for saying what you want rather than picking
  * from the list, and it is passed rather than assumed because a session
@@ -343,21 +397,47 @@ export function idleFrame(
    * through.
    */
   note?: string,
+  o: MenuOptions = {},
 ): DisplayFrame {
-  const operable = menuOrder(tools.filter(isOperable));
-  const all: Choice[] = operable.map((t, i) => ({
-    id: toolId(t),
-    label: menuLabel(t, operable),
-    meta: String(i + 1).padStart(2, "0"),
-  }));
+  const every = menuOrder(tools.filter(isOperable));
+  // Stepped into a site: only its actions, and nobody else's.
+  const operable = o.site ? every.filter((t) => t.origin === o.site) : every;
 
   // Speaking never occupies a paginated slot. Having to page through actions
   // to reach the affordance the whole product is built around would be
   // absurd, so it costs one slot from the tool list and is always present.
+  const budget = canSpeak ? MAX_CHOICES - 1 : MAX_CHOICES;
+
+  const origins = [...new Set(operable.map((t) => t.origin))];
+  const grouped = !o.site && origins.length > 1 && operable.length > budget;
+
+  const all: Choice[] = grouped
+    ? origins.map((origin) => {
+        const n = operable.filter((t) => t.origin === origin).length;
+        return {
+          id: `${SITE_PREFIX}${origin}`,
+          label: o.siteName?.(origin) ?? hostOf(origin),
+          meta: `${n} action${n === 1 ? "" : "s"}`,
+        };
+      })
+    : operable.map((t, i) => ({
+        id: toolId(t),
+        label: menuLabel(t, operable),
+        // Whose action this is, when the list holds more than one site's. The
+        // slot used to carry the row's index, which is decoration: there is no
+        // numeric input on these glasses, and "More 1/3" already says where
+        // the wearer is. Naming the business is the one thing a mixed list
+        // needs that a single site's never did.
+        meta:
+          origins.length > 1
+            ? (o.siteName?.(t.origin) ?? hostOf(t.origin))
+            : String(i + 1).padStart(2, "0"),
+      }));
+
   // It sits LAST so a new menu focuses an action: focus lands on choice zero,
   // and opening a text field in someone's eye every time they return to the
   // menu is not what anyone wants.
-  const { choices } = paginate(all, page, canSpeak ? MAX_CHOICES - 1 : MAX_CHOICES);
+  const { choices } = paginate(all, page, budget);
   if (canSpeak) choices.push({ id: "__compose", label: "Say what you want", meta: "tap" });
 
   return {
@@ -365,7 +445,14 @@ export function idleFrame(
     source,
     title: operable.length ? "What do you want to do?" : "No actions available here",
     note: operable.length
-      ? (note ?? (canSpeak ? "Tap to speak, or choose an action" : "Choose an action"))
+      ? (note ??
+        (grouped
+          ? canSpeak
+            ? "Tap to speak, or choose where"
+            : "Choose where"
+          : canSpeak
+            ? "Tap to speak, or choose an action"
+            : "Choose an action"))
       : // What reached us, never what the site chose.
         //
         // This used to read "This source declared no usable tools", which is a
