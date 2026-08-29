@@ -187,3 +187,27 @@ export const CORPUS: Labelled[] = [
   { intent: "any new mail", expect: "list_messages" },
   { intent: "tell dana I am running late", expect: "send_message" },
 ];
+
+/**
+ * Requests where every named end action has to survive the same shortlist.
+ * Missing either one is not partial credit, because the task cannot recover a
+ * tool the deterministic layer never allowed the model to see.
+ */
+export const COMPOUND_CORPUS: { intent: string; expect: string[] }[] = [
+  {
+    intent: "book a table for two tomorrow and add oat milk to my cart",
+    expect: ["book_table", "add_to_cart"],
+  },
+  {
+    intent: "check whether my flight is on time and tell dana I am running late",
+    expect: ["flight_status", "send_message"],
+  },
+  {
+    intent: "show me my cart and then empty it",
+    expect: ["review_cart", "empty_cart"],
+  },
+  {
+    intent: "find a table this weekend and show me any new mail",
+    expect: ["find_times", "list_messages"],
+  },
+];

@@ -13,6 +13,7 @@ import {
   outcomeFromResult,
   parameters,
   paramFrame,
+  resultFrame,
   siteFromChoice,
   textFromResult,
   toolId,
@@ -160,6 +161,21 @@ describe("results become the next frame's choices", () => {
     if (f.kind !== "choose") throw new Error("unreachable");
     // Not a composer prompt: real choices, derived from the earlier result.
     expect(f.choices[0]).toEqual({ id: "oat-1", label: "Organic oat milk", meta: "$4.29" });
+  });
+});
+
+describe("an intermediate result in a longer task", () => {
+  it("names the next action and the task position without inventing a success", () => {
+    const frame = resultFrame("Amber & Oak", "Book table done", {
+      ok: true,
+      facts: [{ label: "Reservation id", value: "AO-4417" }],
+      next: { label: "Add to cart", index: 2, total: 2 },
+    });
+    expect(frame).toMatchObject({
+      kind: "result",
+      choices: [{ id: "__next", label: "Next: Add to cart", meta: "2/2" }],
+      note: "Each action is checked and approved separately",
+    });
   });
 });
 

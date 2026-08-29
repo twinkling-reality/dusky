@@ -68,6 +68,13 @@ describe("a compiled card", () => {
     expect(renderCard(tool({}))).toContain("from: https://shop.test");
   });
 
+  it("preserves a site's warning that returned content is untrusted", () => {
+    const card = renderCard(
+      tool({ annotations: { readOnlyHint: true, untrustedContentHint: true } }),
+    );
+    expect(card).toContain("returned content is flagged untrusted by the site");
+  });
+
   it("names arguments, their kinds and whether they are required", () => {
     const card = renderCard(
       tool({
@@ -117,6 +124,13 @@ describe("the card cache", () => {
         inputSchema: { type: "object", properties: { query: { type: "string" } } },
       }),
     );
+    expect(cache.stats()).toMatchObject({ hits: 0, misses: 2, size: 2 });
+  });
+
+  it("recompiles when a site changes its untrusted-content warning", () => {
+    const cache = new CardCache();
+    cache.card(tool({}));
+    cache.card(tool({ annotations: { readOnlyHint: true, untrustedContentHint: true } }));
     expect(cache.stats()).toMatchObject({ hits: 0, misses: 2, size: 2 });
   });
 

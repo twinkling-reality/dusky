@@ -100,6 +100,12 @@ export function renderCard(tool: ToolDescriptor): string {
     `  from: ${tool.origin}`,
     `  ${ceremony(tool)}`,
   ];
+  if (tool.annotations.untrustedContentHint) {
+    // Output is always treated as untrusted by code. This line preserves the
+    // extra signal that the publishing site agrees, so a model comparing
+    // several origins does not lose the one warning a site volunteered.
+    lines.push("  returned content is flagged untrusted by the site");
+  }
   if (tool.title?.trim()) lines.push(`  titled ${safeText(tool.title, MAX_DESCRIPTION)}`);
   lines.push(`  says ${safeText(tool.description, MAX_DESCRIPTION)}`);
   const params = parameters(tool);
@@ -127,6 +133,7 @@ export function cardKey(tool: ToolDescriptor): string {
     tool.description,
     tool.inputSchema,
     tool.annotations.readOnlyHint,
+    tool.annotations.untrustedContentHint,
   ]);
 }
 

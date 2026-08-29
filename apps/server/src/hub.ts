@@ -370,6 +370,13 @@ export class SessionActor {
    * separately, so they cannot drift out of step with what is on the lens.
    */
   private busyWith(): string | null {
+    const task = this.session.taskProgress();
+    if (task && task.remaining > 0 && this.session.current().kind === "result") {
+      return `the wearer has ${task.remaining} more task ${task.remaining === 1 ? "step" : "steps"} waiting`;
+    }
+    if (task && task.remaining > 0 && this.session.current().kind === "error") {
+      return "a multi-step task needs the wearer's attention";
+    }
     switch (this.session.current().kind) {
       case "confirm":
         return "the wearer is being asked to approve an action";
@@ -399,6 +406,7 @@ export class SessionActor {
   private statusValue(): Record<string, unknown> {
     const frame = this.session.current();
     const busy = this.busyWith();
+    const task = this.session.taskProgress();
     return {
       session: this.id,
       // What the wearer is reading right now, rather than a label this actor
@@ -415,6 +423,7 @@ export class SessionActor {
         title: "title" in frame ? frame.title : undefined,
         target: frame.kind === "confirm" ? frame.target : undefined,
       },
+      task: task ?? undefined,
       can_interpret_requests: this.hasPlanner,
       accepting_tasks: busy === null && this.display?.readyState === 1,
       not_accepting_because: busy ?? undefined,

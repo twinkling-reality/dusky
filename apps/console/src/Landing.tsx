@@ -70,7 +70,8 @@ export function Landing() {
           <p className={styles.lede}>
             Dusky reads what every site in your browser can do, over WebMCP, and puts all of it on a
             pair of glasses as one list. One sentence can cross two businesses that have never heard
-            of each other. Nothing that costs you anything happens without you saying yes.
+            of each other, one visible step at a time. Nothing that costs you anything happens
+            without you saying yes to that step.
           </p>
 
           {/*

@@ -107,6 +107,30 @@ const STOPWORDS = new Set([
   "your",
 ]);
 
+/**
+ * Small, domain-neutral action families.
+ *
+ * Lexical ranking fails before a model can help when the wearer and a site use
+ * ordinary synonyms. "Tell Dana" did not admit `send_message`, and "find oat
+ * milk" admitted `find_times` but not `search_products`. Canonicalizing both
+ * sides keeps the ranking deterministic while making those verbs comparable.
+ *
+ * These are actions, not business nouns. Adding `milk -> product` or
+ * `table -> reservation` would be a per-site branch in different clothes.
+ */
+const ACTION_WORD = new Map<string, string>(
+  [
+    ["find", "search", "lookup"],
+    ["show", "list", "review"],
+    ["tell", "send", "message"],
+    ["add", "put"],
+    ["remove", "clear", "empty"],
+    ["book", "reserve", "hold"],
+    ["change", "move", "update"],
+    ["buy", "purchase", "order"],
+  ].flatMap((family) => family.map((word) => [word, family[0] as string] as const)),
+);
+
 /** Lowercase word tokens, punctuation and separators removed. */
 export function tokenize(text: string): string[] {
   return text
@@ -115,10 +139,15 @@ export function tokenize(text: string): string[] {
     .filter(Boolean);
 }
 
+/** Tokens reduced to stable action concepts for matching. */
+function conceptTokens(text: string): string[] {
+  return tokenize(text).map((token) => ACTION_WORD.get(token) ?? token);
+}
+
 /** Intent tokens worth matching on: no stopwords, no duplicates. */
 export function intentTokens(intent: string): string[] {
   const seen = new Set<string>();
-  for (const t of tokenize(intent)) {
+  for (const t of conceptTokens(intent)) {
     if (t.length < 2 || STOPWORDS.has(t)) continue;
     seen.add(t);
   }
@@ -152,11 +181,11 @@ export interface RankedTool {
  * comparisons between tools scored in the same call are meaningful.
  */
 export function scoreTool(tool: ToolDescriptor, tokens: string[]): RankedTool {
-  const nameList = tokenize(tool.name);
+  const nameList = conceptTokens(tool.name);
   const name = new Set(nameList);
-  const titleList = tokenize(tool.title ?? "");
+  const titleList = conceptTokens(tool.title ?? "");
   const title = new Set(titleList);
-  const descList = tokenize(tool.description.slice(0, DESCRIPTION_SCAN_CHARS));
+  const descList = conceptTokens(tool.description.slice(0, DESCRIPTION_SCAN_CHARS));
   const desc = new Set(descList);
 
   let score = 0;

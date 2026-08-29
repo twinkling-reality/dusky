@@ -166,6 +166,12 @@ at all.
    13/19 to 14/19 at the shipped shortlist size, which is exactly what doubling
    the shortlist to eight used to buy, for no tokens.
 
+   The ranker now also reduces a small set of ordinary ACTION synonyms to the
+   same concept on both sides of the match: `find/search`, `tell/send/message`,
+   `book/reserve/hold`. No business nouns belong in that list. Measured after
+   the change, single-action recall is 16/19 at six and joint coverage over four
+   compound requests is 4/4, both with the same shortlist and token ceiling.
+
 8. **`packages/policy` must stay dependency-free.** If it ever imports the agent
    or a transport, the deterministic guarantee is gone. This was prose with
    nothing enforcing it until `index.test.ts` grew a test that reads the source
@@ -179,6 +185,20 @@ at all.
    imports `classify` to order the wearer's menu. Policy is the deterministic
    layer everything else may consult, which is only true while it consults
    nothing.
+
+9. **A multi-step plan is accepted whole, bounded, and gated one step at a
+   time.** A planner may return up to four ordered end actions for one spoken
+   request. If any action names a tool it was not offered, names an ambiguous
+   tool, or cannot be driven on the display, the whole plan is refused. Running
+   the valid half would recreate the original bug in a more convincing form:
+   one half of a sentence succeeds while the other disappears.
+
+   A successful intermediate result stops on a visible next-step row. Crossing
+   into another business is therefore something the wearer sees and advances,
+   never a silent transition. The next tool is resolved against the browser's
+   live registry at that moment, its arguments are checked again against its
+   current schema, and its own policy gate runs independently. One approval can
+   never cover two calls.
 
 ## The planner, and why it cannot widen anything
 
@@ -262,6 +282,12 @@ Ranking treats the same text as adversarial. Name evidence outweighs prose, and
 description evidence is capped, so keyword stuffing can win a shortlist slot on
 a request nothing else matches but can never outrank a genuine name match.
 
+`untrustedContentHint` is advisory, but no longer discarded. Tool output is
+always treated as untrusted whether or not a site admits it. When a site does
+set the hint, its card says so and a fast task plan cannot be accepted without
+the careful tier reviewing it. The hint raises scrutiny and can never lower a
+gate.
+
 **Verified by execution, and what was not.** `packages/planner/src/anthropic.ts`
 is the only file that knows a model provider exists. Its request shape was
 checked against `@anthropic-ai/sdk` 0.120.0 by running it against a stub that
@@ -282,7 +308,11 @@ One of the four numbers is no longer a guess. `eval.fixtures.ts` and
 `eval.test.ts` measure shortlist recall over nineteen spoken requests against
 eleven tools from four domains, with no model and no credential, because
 ranking is deterministic. At the shipped size of six the right tool is on the
-list 14 times out of 19; at eight it is 15; with every slot free it is 19.
+list 16 times out of 19; at eight it is 16; with every slot free it is 19.
+
+The same eval has four compound requests. At six slots every expected action
+survives for 4/4 of them. This is joint coverage: a request only counts when
+every named end action reaches the model.
 
 Both of the numbers below 19 have moved once, and each time the eval was what
 found the reason rather than confirming a hunch. 19 used to be 17: `shortlist`
@@ -294,13 +324,16 @@ zero is alphabetical order. That change was made for the reason in rule 7, and
 buys at six exactly what doubling the shortlist to eight used to buy, for no
 tokens at all.
 
-Read the 14 carefully. It is not planner accuracy, because a model is what
-happens next, and it is not an argument for a bigger shortlist, because going
-to eight still buys one request. It says the binding constraint is the RANKER:
-"find me some oat milk" puts `find_times` above `search_products`, on the
-strength of the word "find" being in one name and nothing matching in the
-other. That is the case the model tier exists for. It is also the number to
-beat before anybody spends effort on the shortlist size.
+The next move was 14 to 16. Ordinary action synonyms are canonicalized on both
+sides, so "find me some oat milk" admits both `find_times` and
+`search_products`, and "tell Dana" admits `send_message`. The list contains
+only domain-neutral verbs. Adding `milk -> product` would be a per-site branch
+in different clothes.
+
+Read the 16 carefully. It is not planner accuracy, because a model is what
+happens next. It says only that the right tool is available to be chosen in
+sixteen cases, and that raising the shortlist to eight currently buys nothing
+on this small corpus.
 
 ## Dusky as a provider
 

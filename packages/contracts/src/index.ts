@@ -93,6 +93,8 @@ export type DisplayFrame =
       ok: boolean;
       title: string;
       detail?: string;
+      /** Guidance for an intermediate result in a longer task. */
+      note?: string;
       /** Short labelled values lifted from the result, for a glance. */
       facts?: Fact[];
       choices: Choice[];

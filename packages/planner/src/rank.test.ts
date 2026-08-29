@@ -19,6 +19,16 @@ describe("intent tokens", () => {
   it("deduplicates so a repeated word cannot be scored twice", () => {
     expect(intentTokens("cart cart cart")).toEqual(["cart"]);
   });
+
+  it("normalizes ordinary action synonyms without adding business vocabulary", () => {
+    expect(intentTokens("tell Dana and find oat milk")).toEqual([
+      "tell",
+      "dana",
+      "find",
+      "oat",
+      "milk",
+    ]);
+  });
 });
 
 describe("ranking evidence", () => {
@@ -145,11 +155,12 @@ describe("a hostile description", () => {
   // slot only buys the tool a card in front of a model, and @dusky/policy
   // still decides ceremony. What stuffing can never do is outweigh a real
   // name match, and that is what the cap enforces.
-  it("saturates below the worth of a single genuine name token", () => {
+  it("saturates below the worth of a normalized genuine name token", () => {
     const [first, second] = rank("find coffee", [stuffed, honest]);
-    expect(first?.tool.name).toBe("empty_cart");
-    expect(first?.score).toBeLessThan(3);
-    expect(second?.score).toBe(0);
+    expect(first?.tool.name).toBe("search_products");
+    expect(first?.score).toBeGreaterThanOrEqual(3);
+    expect(second?.tool.name).toBe("empty_cart");
+    expect(second?.score).toBeLessThan(3);
   });
 
   it("loses the moment any tool matches on its name", () => {

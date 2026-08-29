@@ -59,6 +59,18 @@ const EMPTY = tool({
 
 const ALL = [SEARCH, ADD, REVIEW, EMPTY];
 
+const BOOK = tool({
+  name: "book_table",
+  title: "Book table",
+  origin: "https://tables.test",
+  description: "Hold a table under a booking.",
+  inputSchema: {
+    type: "object",
+    properties: { party_size: { type: "integer", enum: [1, 2, 3, 4] } },
+    required: ["party_size"],
+  },
+});
+
 /** Records every request so tests can assert what a model was and was not shown. */
 function fakeClient(answers: Partial<Record<Tier, Decision | (() => Decision)>>) {
   const seen: ModelRequest[] = [];
@@ -78,6 +90,13 @@ const say = (tool: string, args = "{}", confidence: Decision["confidence"] = "hi
   arguments: args,
   confidence,
 });
+
+const sayTask = (
+  first: string,
+  args: string,
+  next: { tool: string; arguments: string }[],
+  confidence: Decision["confidence"] = "high",
+): Decision => ({ tool: first, arguments: args, next, confidence });
 
 function record() {
   const events: PlanEvent[] = [];
@@ -221,6 +240,61 @@ describe("tier escalation", () => {
     const p = new ModelPlanner({ client, onPlan });
     expect(await p.pickTool("search for oat milk", ALL)).toBeNull();
     expect(events.filter((e) => e.kind === "failed")).toHaveLength(2);
+  });
+});
+
+describe("planning every action in one spoken task", () => {
+  it("returns an ordered, independently validated cross-origin plan", async () => {
+    const answer = sayTask("book_table", '{"party_size":"2"}', [
+      { tool: "add_to_cart", arguments: '{"product_id":"oat-1"}' },
+    ]);
+    const { client, seen } = fakeClient({ fast: answer, careful: answer });
+    const p = new ModelPlanner({ client });
+
+    const plan = await p.pickTools("book a table for two and add oat milk to my cart", [
+      ...ALL,
+      BOOK,
+    ]);
+    expect(plan).toEqual([
+      { name: "book_table", args: { party_size: 2 } },
+      { name: "add_to_cart", args: { product_id: "oat-1" } },
+    ]);
+    // Multi-step always gets a second opinion. The gate still decides whether
+    // each resulting action needs the wearer.
+    expect(seen.map((request) => request.tier)).toEqual(["fast", "careful"]);
+  });
+
+  it("rejects the whole plan when one step was not on the shortlist", async () => {
+    const answer = sayTask("book_table", "{}", [
+      { tool: "wire_money", arguments: '{"amount":5000}' },
+    ]);
+    const { client } = fakeClient({ fast: answer, careful: answer });
+    const p = new ModelPlanner({ client });
+    expect(await p.pickTools("book a table and wire money", [...ALL, BOOK])).toBeNull();
+  });
+
+  it("refuses an unbounded queue even when a model client ignores the schema", async () => {
+    const answer = sayTask(
+      "review_cart",
+      "{}",
+      Array.from({ length: 4 }, () => ({ tool: "review_cart", arguments: "{}" })),
+    );
+    const { client } = fakeClient({ fast: answer, careful: answer });
+    const p = new ModelPlanner({ client });
+    expect(await p.pickTools("review my cart and review it again", ALL)).toBeNull();
+  });
+
+  it("consults a site's untrusted-content warning before accepting a fast answer", async () => {
+    const flagged = tool({
+      ...SEARCH,
+      annotations: { readOnlyHint: true, untrustedContentHint: true },
+    });
+    const answer = say("search_products", '{"query":"oat"}');
+    const { client, seen } = fakeClient({ fast: answer, careful: answer });
+    const p = new ModelPlanner({ client });
+    await p.pickTools("find oat milk", [flagged]);
+    expect(seen.map((request) => request.tier)).toEqual(["fast", "careful"]);
+    expect(seen[0]?.user).toContain("returned content is flagged untrusted by the site");
   });
 });
 

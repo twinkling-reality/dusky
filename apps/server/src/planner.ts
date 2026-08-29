@@ -77,6 +77,8 @@ function toAudit(e: PlanEvent): Omit<AuditEntry, "at" | "sessionId"> {
           tier: e.tier,
           confidence: e.confidence,
           droppedArgs: e.droppedArgs,
+          ...(e.step !== undefined ? { step: e.step } : {}),
+          ...(e.total !== undefined ? { total: e.total } : {}),
           ms: e.ms,
         },
       };

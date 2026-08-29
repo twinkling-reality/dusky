@@ -65,6 +65,16 @@ export interface Planner {
     tools: ToolDescriptor[],
   ): Promise<{ name: string; args: Record<string, unknown> } | null>;
   /**
+   * Choose every explicit action in one spoken request, in order.
+   *
+   * Optional so another Planner implementation can remain single-step. The
+   * session uses `pickTool` as its safe fallback when this is absent.
+   */
+  pickTools?(
+    intent: string,
+    tools: ToolDescriptor[],
+  ): Promise<{ name: string; args: Record<string, unknown> }[] | null>;
+  /**
    * Propose a read-only tool whose output would supply a missing parameter,
    * plus the arguments to call it with. Must only ever name a read-only tool.
    */
@@ -168,6 +178,15 @@ interface Pending {
   consequence?: string;
 }
 
+interface PlannedStep {
+  origin: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/** Independently enforced here, regardless of what a Planner promises. */
+const MAX_TASK_STEPS = 4;
+
 /**
  * A single wearer's task, as a state machine.
  *
@@ -201,6 +220,10 @@ export class Session {
    */
   private site: string | null = null;
   private intent = "";
+  /** Steps after the one currently on screen. */
+  private queued: PlannedStep[] = [];
+  private taskStep = 0;
+  private taskTotal = 0;
   private frame: DisplayFrame;
 
   constructor(private readonly o: SessionOptions) {
@@ -217,6 +240,12 @@ export class Session {
 
   current(): DisplayFrame {
     return this.frame;
+  }
+
+  /** Visible to the relay so another agent cannot interrupt between steps. */
+  taskProgress(): { current: number; total: number; remaining: number } | null {
+    if (this.taskTotal <= 1 || this.taskStep <= 0) return null;
+    return { current: this.taskStep, total: this.taskTotal, remaining: this.queued.length };
   }
 
   /**
@@ -453,7 +482,6 @@ export class Session {
 
   /** A spoken or typed request. Falls back to the menu when no planner exists. */
   async submitIntent(text: string): Promise<DisplayFrame> {
-    this.intent = text;
     if (!this.o.planner) return this.frame;
 
     // The wearer caused this wait, so they have to see it. The title echoes
@@ -464,11 +492,17 @@ export class Session {
     // A planner is assistance, never a dependency. Anything it does wrong,
     // including throwing, has to land the wearer on the menu they can already
     // drive rather than anywhere they cannot get out of.
-    let pick: { name: string; args: Record<string, unknown> } | null = null;
+    let picks: { name: string; args: Record<string, unknown> }[] | null = null;
+    const path = this.o.planner.pickTools ? "pickTools" : "pickTool";
     try {
-      pick = await this.o.planner.pickTool(text, this.tools.filter(isOperable));
+      if (this.o.planner.pickTools) {
+        picks = await this.o.planner.pickTools(text, this.tools.filter(isOperable));
+      } else {
+        const pick = await this.o.planner.pickTool(text, this.tools.filter(isOperable));
+        picks = pick ? [pick] : null;
+      }
     } catch (err) {
-      this.audit({ kind: "plan", detail: { path: "pickTool", failed: msg(err) } });
+      this.audit({ kind: "plan", detail: { path, failed: msg(err) } });
     }
 
     // Every way of failing to help says the same thing, deliberately. The
@@ -477,27 +511,57 @@ export class Session {
     // and the last two would be telling them about our plumbing.
 
     // A planner that is unsure must produce a question, never a guess.
-    if (!pick) return this.show(this.menu(UNHEARD));
-
-    const tool = this.byName(pick.name);
-    if (!tool) {
-      // Named something this session never discovered. Recorded, then ignored.
+    if (!picks || picks.length === 0) return this.show(this.menu(UNHEARD));
+    if (picks.length > MAX_TASK_STEPS) {
       this.audit({
         kind: "plan",
-        toolName: pick.name,
-        detail: { path: "pickTool", accepted: false, reason: "not a discovered tool" },
+        detail: { path, accepted: false, reason: "too many steps", count: picks.length },
       });
       return this.show(this.menu(UNHEARD));
     }
 
-    const args = declaredArgs(tool, pick.args ?? {});
-    this.audit({
-      kind: "plan",
-      toolName: tool.name,
-      origin: tool.origin,
-      detail: { path: "pickTool", accepted: true, args },
-    });
-    return this.beginTool(tool, args);
+    const planned: { tool: ToolDescriptor; args: Record<string, unknown> }[] = [];
+    for (const pick of picks) {
+      const tool = this.byName(pick.name);
+      if (!tool) {
+        // All or nothing. Running the valid half would silently discard the
+        // invalid half, which is the exact behavior multi-step fixes.
+        this.audit({
+          kind: "plan",
+          toolName: pick.name,
+          detail: { path, accepted: false, reason: "not a discovered tool" },
+        });
+        return this.show(this.menu(UNHEARD));
+      }
+      planned.push({ tool, args: declaredArgs(tool, pick.args ?? {}) });
+    }
+
+    for (const [index, step] of planned.entries()) {
+      this.audit({
+        kind: "plan",
+        toolName: step.tool.name,
+        origin: step.tool.origin,
+        detail: {
+          path,
+          accepted: true,
+          args: step.args,
+          step: index + 1,
+          total: planned.length,
+        },
+      });
+    }
+
+    const first = planned[0];
+    if (!first) return this.show(this.menu(UNHEARD));
+    this.intent = text;
+    this.taskStep = 1;
+    this.taskTotal = planned.length;
+    this.queued = planned.slice(1).map((step) => ({
+      origin: step.tool.origin,
+      name: step.tool.name,
+      args: step.args,
+    }));
+    return this.startStep(first.tool, first.args);
   }
 
   /** The single entry point for a gesture selection. */
@@ -538,6 +602,7 @@ export class Session {
       const wasPending = this.pending !== null;
       this.pending = null;
       this.page = 0;
+      this.clearTask();
 
       if (inFlight) {
         return this.show(
@@ -580,6 +645,7 @@ export class Session {
       return this.execute();
     }
     if (choiceId === "__confirm") return this.onConfirm();
+    if (choiceId === "__next") return this.startNextStep();
 
     /*
      * The composer's own rows are not values.
@@ -679,9 +745,65 @@ export class Session {
     tool: ToolDescriptor,
     args: Record<string, unknown>,
   ): Promise<DisplayFrame> {
+    // A menu choice is a new task. Keeping a previous spoken intent here would
+    // hand old words to a resolver for a later, unrelated action.
+    this.clearTask();
+    return this.startStep(tool, args);
+  }
+
+  private async startStep(
+    tool: ToolDescriptor,
+    args: Record<string, unknown>,
+  ): Promise<DisplayFrame> {
     this.pending = { tool, args: { ...args } };
     this.page = 0;
     return this.advance();
+  }
+
+  private clearTask(): void {
+    this.intent = "";
+    this.queued = [];
+    this.taskStep = 0;
+    this.taskTotal = 0;
+  }
+
+  /** Move from a completed step to the next independently gated action. */
+  private async startNextStep(): Promise<DisplayFrame> {
+    if (this.pending) return this.frame;
+    const planned = this.queued.shift();
+    if (!planned) return this.frame;
+
+    // Resolve against what the browser offers NOW. A queued ToolDescriptor is
+    // not authority to invoke a version that disappeared or changed while the
+    // wearer was completing the previous step.
+    const tool = this.tools.find(
+      (candidate) =>
+        candidate.origin === planned.origin &&
+        candidate.name === planned.name &&
+        isOperable(candidate),
+    );
+    if (!tool) {
+      const source = this.siteOf(planned.origin);
+      this.clearTask();
+      return this.show(
+        errorFrame(
+          source,
+          "The next action changed",
+          "Choose it again so Dusky uses what the site offers now.",
+          false,
+        ),
+      );
+    }
+
+    this.taskStep += 1;
+    const args = declaredArgs(tool, planned.args);
+    this.audit({
+      kind: "plan",
+      toolName: tool.name,
+      origin: tool.origin,
+      detail: { path: "task", stage: "started", step: this.taskStep, total: this.taskTotal },
+    });
+    return this.startStep(tool, args);
   }
 
   /** Collect the next missing parameter, or move to the gate. */
@@ -1035,6 +1157,12 @@ export class Session {
         // is the fallback for when it does not. Computing both means the
         // fallback only has to be honest about the case it is actually for.
         const facts = factsFromResult(outcome.raw);
+        this.pending = null;
+        const next = said.ok ? this.queued[0] : undefined;
+        const nextTool = next
+          ? this.tools.find((t) => t.origin === next.origin && t.name === next.name)
+          : undefined;
+        if (!next) this.clearTask();
         this.show(
           resultFrame(
             this.siteOf(p.tool.origin),
@@ -1043,10 +1171,18 @@ export class Session {
               ok: said.ok,
               detail: said.message ?? (facts.length > 0 ? undefined : summarize(outcome.raw)),
               facts,
+              ...(next
+                ? {
+                    next: {
+                      label: nextTool ? label(nextTool) : next.name,
+                      index: this.taskStep + 1,
+                      total: this.taskTotal,
+                    },
+                  }
+                : {}),
             },
           ),
         );
-        this.pending = null;
       }
     } catch (err) {
       const abandoned = this.pending !== p;

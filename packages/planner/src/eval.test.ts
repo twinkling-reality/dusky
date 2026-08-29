@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_TOOLS, CORPUS } from "./eval.fixtures.js";
+import { ALL_TOOLS, COMPOUND_CORPUS, CORPUS } from "./eval.fixtures.js";
 import { shortlist } from "./rank.js";
 
 /**
@@ -41,14 +41,17 @@ describe("how much the shortlist has to hold", () => {
   /**
    * The measured value, as a regression guard rather than as a target.
    *
-   * 14/19 at the shipped size of six. It was 13 until the leftover slots
-   * started being shared between origins instead of handed out in rank order,
-   * which with every score at zero is alphabetical order. That change was made
-   * for a security reason, because one site could otherwise name its way to
-   * every slot and starve the others, and the recall it bought was measured
-   * afterwards rather than aimed at: 12 to 13 at four slots, 13 to 14 at six,
-   * 14 to 15 at eight. Sharing buys at six exactly what DOUBLING the shortlist
-   * to eight used to buy, and costs no tokens at all.
+   * 16/19 at the shipped size of six. It was 14 before both sides of lexical
+   * matching reduced ordinary action synonyms to the same concept, so `find`
+   * can admit a `search` tool and `tell` can admit a `send_message` tool without
+   * adding a business noun to the ranker. The change also takes joint coverage
+   * over the compound corpus from 3/4 to 4/4 at the same size.
+   *
+   * The 14 was itself 13 until leftover slots started being shared between
+   * origins instead of handed out in rank order, which with every score at
+   * zero is alphabetical order. That change was made for a security reason,
+   * because one site could otherwise name its way to every slot and starve the
+   * others. Both gains were measured after the rule that produced them.
    *
    * Going to the whole registry still buys them all, so the binding constraint
    * is still not the SIZE: it is that lexical ranking puts `find_times` above
@@ -61,7 +64,7 @@ describe("how much the shortlist has to hold", () => {
    */
   it("keeps the right tool reachable at the size actually shipped", () => {
     const { hit, missed } = recallAt(6);
-    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(14);
+    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(16);
   });
 
   it("never drops a tool it had room for", () => {
@@ -86,5 +89,22 @@ describe("how much the shortlist has to hold", () => {
       expect(hit, `recall fell going to ${k}`).toBeGreaterThanOrEqual(last);
       last = hit;
     }
+  });
+});
+
+describe("a shortlist for a task with several actions", () => {
+  it("keeps every requested action reachable at the shipped size", () => {
+    const missed: string[] = [];
+    for (const task of COMPOUND_CORPUS) {
+      const names = shortlist(task.intent, ALL_TOOLS, 6).map((ranked) => ranked.tool.name);
+      const absent = task.expect.filter((name) => !names.includes(name));
+      if (absent.length > 0) {
+        missed.push(`${task.intent} -> missed ${absent.join(", ")}; got ${names.join(", ")}`);
+      }
+    }
+    console.log(
+      `compound shortlist coverage at 6: ${COMPOUND_CORPUS.length - missed.length}/${COMPOUND_CORPUS.length}`,
+    );
+    expect(missed, missed.join("\n")).toEqual([]);
   });
 });

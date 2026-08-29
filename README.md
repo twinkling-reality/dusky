@@ -48,6 +48,14 @@ become the place a person says yes: an agent may propose anything, across
 anything, and `packages/session` still stops every consequential step and waits
 for the wearer.
 
+That sentence is one task, not a slogan over two separate demos. The planner
+returns the restaurant action and the shop action as an ordered plan. Dusky
+validates the whole plan before starting, caps it at four actions, and refuses
+all of it if any action was not actually offered. After the first result, the
+lens shows the next action and its position in the task. The wearer advances it,
+then the second action reaches its own policy gate. One approval never covers
+two calls.
+
 One rule earns its keep the moment several sites are held at once. A lookup that
 fills in a missing value runs without asking anybody, so it may only ever use a
 tool from the SAME SITE as the action it is filling in. Otherwise what somebody
@@ -81,6 +89,10 @@ Three things worth pointing at:
 - **Dusky adds the confirmation step.** The site did not ask for it and cannot
   switch it off. Anything that spends money or deletes something stops and waits
   for you.
+- **One request can contain several actions.** Every action stays attached to
+  the site that offered it, is checked against that site's live schema before it
+  starts, and receives its own confirmation. A broken step rejects the plan
+  instead of disappearing from the sentence.
 - **Nothing is proxied.** The tool runs in the site's own page, in your browser,
   in your session. Dusky never sees a login or a password.
 
@@ -128,7 +140,7 @@ anybody wants; it is there for tests and for a slow connection.
 | `packages/frames` | The schema-to-frame compiler. Knows no site. |
 | `packages/policy` | Deterministic trust rules. No model, no network, no DOM. |
 | `packages/session` | The task machine. Intent in, frames out. |
-| `packages/planner` | Optional. Turns a spoken request into a proposal it cannot enforce. |
+| `packages/planner` | Optional. Turns a spoken request into a bounded plan it cannot enforce. |
 | `packages/webmcp` | The only file that knows what browsers actually do, versus what the spec says. |
 | `packages/lens`, `packages/tokens`, `packages/contracts` | The panel, the palettes, the shared types. |
 | `e2e` | The round trip, in real Chrome with the real flag. |

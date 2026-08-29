@@ -619,9 +619,13 @@ export interface ResultOptions {
   ok: boolean;
   detail?: string;
   facts?: Fact[];
+  /** Another independently gated action remains in the spoken task. */
+  next?: { label: string; index: number; total: number };
 }
 
 export function resultFrame(source: string, title: string, o: ResultOptions): DisplayFrame {
+  const nextLabel = o.next?.label.trim() ?? "";
+  const clippedNext = nextLabel.length > 28 ? `${nextLabel.slice(0, 25)}...` : nextLabel;
   return {
     kind: "result",
     source,
@@ -629,7 +633,16 @@ export function resultFrame(source: string, title: string, o: ResultOptions): Di
     title,
     detail: o.detail,
     facts: o.facts?.length ? o.facts : undefined,
-    choices: [{ id: "__home", label: "Do something else", meta: "enter" }],
+    choices: o.next
+      ? [
+          {
+            id: "__next",
+            label: `Next: ${clippedNext || "continue task"}`,
+            meta: `${o.next.index}/${o.next.total}`,
+          },
+        ]
+      : [{ id: "__home", label: "Do something else", meta: "enter" }],
+    ...(o.next ? { note: "Each action is checked and approved separately" } : {}),
   };
 }
 

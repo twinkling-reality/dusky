@@ -7,7 +7,7 @@
  *
  * Three choices here are load-bearing rather than incidental.
  *
- * ONE STABLE SCHEMA. Both planning paths return the same three-field object.
+ * ONE STABLE SCHEMA. Every planning path returns the same four-field object.
  * Structured outputs compile a schema on first use and cache it for 24 hours,
  * so a schema that varied per request, for instance an enum of that request's
  * candidate names, would pay compilation on nearly every call. Constraining
@@ -43,7 +43,7 @@ import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
 import type { Confidence, Decision, ModelClient, ModelRequest, Tier } from "./planner.js";
 
 /**
- * The answer shape, identical for both planning paths.
+ * The answer shape, identical for every planning path.
  *
  * `arguments` is a JSON object serialized as a string because structured
  * outputs cannot describe an object whose keys differ per request. WebMCP
@@ -53,15 +53,29 @@ import type { Confidence, Decision, ModelClient, ModelRequest, Tier } from "./pl
 const DECISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["tool", "arguments", "confidence"],
+  required: ["tool", "arguments", "next", "confidence"],
   properties: {
     tool: {
       type: "string",
-      description: 'Exact name of one candidate tool, or "" to decline.',
+      description: 'Exact name of the first candidate tool, or "" to decline.',
     },
     arguments: {
       type: "string",
       description: 'A JSON object serialized as a string, for example {"query":"oat milk"}.',
+    },
+    next: {
+      type: "array",
+      maxItems: 3,
+      description: "Additional requested actions after the first, in order.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["tool", "arguments"],
+        properties: {
+          tool: { type: "string" },
+          arguments: { type: "string" },
+        },
+      },
     },
     confidence: {
       type: "string",
@@ -88,9 +102,10 @@ export interface TierConfig {
  * or reaches for a tool that would cost the wearer money, so it runs on a
  * fraction of turns and a stronger model is affordable there.
  *
- * Careful runs at low effort deliberately. The task is picking one of six
- * described tools, not reasoning, and the ceiling that matters is a person
- * standing still waiting for a frame. Raise it if evaluation says otherwise.
+ * Careful runs at low effort deliberately. The task is choosing from six
+ * described tools, not open-ended reasoning, and the ceiling that matters is
+ * a person standing still waiting for a frame. Raise it if evaluation says
+ * otherwise.
  */
 const FAST: TierConfig = { model: "claude-haiku-4-5", maxTokens: 512 };
 /**
@@ -154,6 +169,16 @@ export class AnthropicModelClient implements ModelClient {
       return {
         tool: typeof parsed.tool === "string" ? parsed.tool : "",
         arguments: typeof parsed.arguments === "string" ? parsed.arguments : "{}",
+        next: Array.isArray(parsed.next)
+          ? parsed.next.flatMap((step) =>
+              typeof step === "object" &&
+              step !== null &&
+              typeof step.tool === "string" &&
+              typeof step.arguments === "string"
+                ? [{ tool: step.tool, arguments: step.arguments }]
+                : [],
+            )
+          : [],
         confidence: asConfidence(parsed.confidence),
       };
     } catch (err) {
@@ -169,7 +194,7 @@ export class AnthropicModelClient implements ModelClient {
   }
 }
 
-const DECLINE: Decision = { tool: "", arguments: "{}", confidence: "low" };
+const DECLINE: Decision = { tool: "", arguments: "{}", next: [], confidence: "low" };
 
 /** The schema constrains this, but an unexpected value must not read as high. */
 function asConfidence(v: unknown): Confidence {

@@ -84,18 +84,26 @@ type Sock = Parameters<SessionActor["attachDisplay"]>[0];
  * An actor wired to a console that answers discover and invoke inline, so a
  * whole task can run without a relay, a browser or a network.
  */
-function actor(opts: { planner?: boolean; tools?: ToolDescriptor[] } = {}) {
+function actor(
+  opts: {
+    planner?: boolean;
+    tools?: ToolDescriptor[];
+    taskSteps?: { name: string; args: Record<string, unknown> }[];
+  } = {},
+) {
   const invoked: string[] = [];
   const registry = opts.tools ?? TOOLS;
-  const make = opts.planner
-    ? () => ({
-        pickTool: async (_intent: string, tools: ToolDescriptor[]) => {
-          const t = tools.find((x) => x.name === "add_to_cart");
-          return t ? { name: t.name, args: { product_id: "oat-1" } } : null;
-        },
-        planResolver: async () => null,
-      })
-    : undefined;
+  const make =
+    opts.planner || opts.taskSteps
+      ? () => ({
+          pickTool: async (_intent: string, tools: ToolDescriptor[]) => {
+            const t = tools.find((x) => x.name === "add_to_cart");
+            return t ? { name: t.name, args: { product_id: "oat-1" } } : null;
+          },
+          ...(opts.taskSteps ? { pickTools: async () => opts.taskSteps ?? null } : {}),
+          planResolver: async () => null,
+        })
+      : undefined;
 
   const a = new SessionActor("ABC123", "Dusky", make);
   const consoleSock = new FakeSocket();
@@ -120,7 +128,14 @@ function actor(opts: { planner?: boolean; tools?: ToolDescriptor[] } = {}) {
   return { a, consoleSock, invoked };
 }
 
-async function paired(opts: { planner?: boolean; withDisplay?: boolean } = {}) {
+async function paired(
+  opts: {
+    planner?: boolean;
+    withDisplay?: boolean;
+    tools?: ToolDescriptor[];
+    taskSteps?: { name: string; args: Record<string, unknown> }[];
+  } = {},
+) {
   const built = actor(opts);
   await built.a.attachConsole(built.consoleSock as unknown as Sock, [
     { origin: "https://shop.test" },
@@ -233,6 +248,27 @@ describe("sending a task", () => {
     // An agent asked; the wearer has not answered, so nothing has run.
     expect(a.current().kind).toBe("confirm");
     expect(invoked).toEqual([]);
+  });
+
+  it("refuses another task while a cross-business task waits on its next step", async () => {
+    const { a } = await paired({
+      planner: true,
+      tools: [...TOOLS, ...ELSEWHERE],
+      taskSteps: [
+        { name: "add_to_cart", args: { product_id: "oat-1" } },
+        { name: "book_table", args: { slot_id: "ao-m-1930" } },
+      ],
+    });
+    expect((await ask(a, { op: "task", text: "add oat milk and book a table" })).ok).toBe(true);
+    await a.onDisplayMessage({ t: "choose", frameId: "2", choiceId: "__confirm" });
+
+    const status = await ask(a, { op: "status" });
+    if (!status.ok) throw new Error("unreachable");
+    expect(status.value["accepting_tasks"]).toBe(false);
+    expect(status.value["task"]).toEqual({ current: 1, total: 2, remaining: 1 });
+
+    const next = await ask(a, { op: "task", text: "replace that with something else" });
+    expect(next.ok).toBe(false);
   });
 
   it("declines an empty task rather than putting a blank frame on someone's face", async () => {

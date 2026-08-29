@@ -121,7 +121,14 @@ test("every site the console holds points at a deployment, not at a laptop", asy
     ["Verdant Market", MARKET],
     ["Amber & Oak", RESERVATIONS],
   ] as const) {
-    const src = await page.locator(`iframe[title="${title}"]`).getAttribute("src");
+    const frame = page.locator(`iframe[title="${title}"]`);
+    // Fail on the missing surface itself. Calling getAttribute directly waits
+    // for the suite's full two-minute ceiling, which made a stale deployment
+    // spend two minutes saying only that Amber & Oak was absent.
+    await expect(frame, `${title} should be loaded by the console`).toHaveCount(1, {
+      timeout: 30_000,
+    });
+    const src = await frame.getAttribute("src");
     expect(
       new URL(src ?? "about:blank").origin,
       `the build never got a deployed URL for ${title}`,
@@ -277,7 +284,7 @@ interface ModelContextLike {
  * does not validate a key at construction time, so a wrong key looks identical
  * until the first request. This is that first request.
  */
-test("a spoken request from an agent reaches the wearer", async ({ browser }) => {
+test("one spoken request becomes two cross-business steps", async ({ browser }) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
@@ -294,17 +301,23 @@ test("a spoken request from an agent reaches the wearer", async ({ browser }) =>
     const t = tools.find((x) => x.name === "send_task_to_display");
     if (!t) throw new Error("no send_task_to_display tool");
     return JSON.parse(
-      await mc.executeTool(t, JSON.stringify({ text: "add the organic oat milk to my cart" })),
+      await mc.executeTool(
+        t,
+        JSON.stringify({
+          text: "Book a table for two tomorrow and add the organic oat milk to my cart",
+        }),
+      ),
     ) as Record<string, unknown>;
   });
 
   console.log("send_task_to_display ->", JSON.stringify(sent, null, 2));
   expect(sent["ok"], `relay refused the task: ${String(sent["error"])}`).toBe(true);
+  expect(sent["task"]).toEqual({ current: 1, total: 2, remaining: 1 });
 
-  // The wearer is now looking at something the model chose. Which frame it is
-  // depends on whether the model could fill the product id from the request
-  // alone: it is told never to invent an identifier, so the honest outcome is
-  // a list of real products read from a search it ran first.
+  // The wearer is now inside the first action. Which frame it is depends on
+  // whether the model could fill the table arguments directly or planned a
+  // same-origin lookup first. The task count above is the deployment-level
+  // proof that the second business was not silently dropped.
   await expect(displayPage.locator('[data-kind="choose"], [data-kind="confirm"]')).toBeVisible({
     timeout: 60_000,
   });

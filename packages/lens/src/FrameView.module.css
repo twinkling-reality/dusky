@@ -213,13 +213,18 @@
 
 .label {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .meta {
   flex: none;
+  max-width: 42%;
   font-family: var(--dusky-mono);
   font-size: 17px;
   color: var(--emit-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .choice[data-focused="true"] .meta {

@@ -30,7 +30,7 @@
 
 import type { ToolDescriptor } from "@dusky/contracts";
 import { isOperable, parameters, valueForParam } from "@dusky/frames";
-import { gate } from "@dusky/policy";
+import { gate, siteFlagsUntrusted } from "@dusky/policy";
 import { CardCache, safeText } from "./cards.js";
 import { shortlist } from "./rank.js";
 
@@ -56,6 +56,8 @@ export interface Decision {
   tool: string;
   /** JSON object as a string. "{}" when nothing could be filled. */
   arguments: string;
+  /** Additional actions in the order the wearer asked for them. */
+  next?: { tool: string; arguments: string }[];
   confidence: Confidence;
 }
 
@@ -82,13 +84,14 @@ export interface ModelClient {
 
 /* ---------------------------------------------------------- observability */
 
-export type PlanPath = "pickTool" | "planResolver";
+export type PlanPath = "pickTool" | "pickTools" | "planResolver";
 
 export type RejectReason =
   | "unknown tool"
   | "ambiguous tool name"
   | "not read-only"
-  | "cannot be driven on the display";
+  | "cannot be driven on the display"
+  | "too many steps";
 
 /**
  * Every decision point, emitted as it happens.
@@ -105,6 +108,8 @@ export type PlanEvent =
       tool: string;
       confidence?: Confidence;
       droppedArgs: string[];
+      step?: number;
+      total?: number;
       ms: number;
     }
   | { kind: "rejected"; path: PlanPath; tier: Tier; tool: string; reason: RejectReason; ms: number }
@@ -129,11 +134,14 @@ const DEFAULTS = {
   escalateOnConsequential: true,
 } as const;
 
+/** One spoken task can hold this many independently gated actions. */
+export const MAX_TASK_STEPS = 4;
+
 export interface ModelPlannerOptions {
   client: ModelClient;
   /** How many tools a single request may show the model. */
   shortlistSize?: number;
-  /** Total wall clock for one `pickTool` or `planResolver`, tiers included. */
+  /** Total wall clock for one planning operation, tiers included. */
   budgetMs?: number;
   fastTimeoutMs?: number;
   carefulTimeoutMs?: number;
@@ -169,12 +177,16 @@ const UNTRUSTED_NOTICE = [
 
 const ANSWER_SHAPE = [
   "Answer with the given JSON object only.",
-  '- tool: the exact name of one candidate, copied character for character, or "" to decline.',
+  '- tool: the exact name of the first candidate, copied character for character, or "" to decline.',
   '- arguments: a JSON object serialized as a string, mapping argument names to values. "{}"',
   "  when you cannot fill anything from the request. Use only argument names listed under the",
   "  tool you chose. Never invent an identifier, quantity, price, recipient or address: leave",
   "  it out and the wearer will be asked for it.",
-  "- confidence: high only when a single candidate plainly matches.",
+  "- next: an ordered array of additional requested actions. Each item has the same tool and",
+  "  arguments fields. Use [] for one action. Never add setup or lookup tools merely to fill",
+  "  another action's argument; code handles those separately.",
+  "- confidence: high only when every chosen candidate plainly matches and no requested end",
+  "  action is missing.",
 ].join("\n");
 
 const PICK_SYSTEM = [
@@ -184,6 +196,21 @@ const PICK_SYSTEM = [
   "",
   'Prefer "" over a plausible guess. Declining costs the wearer one menu; guessing wrong',
   "costs them a wrong action they have to notice and undo.",
+  "",
+  UNTRUSTED_NOTICE,
+].join("\n");
+
+const TASK_SYSTEM = [
+  "You turn one spoken request into an ordered task of one or more tools on a heads-up display.",
+  "Choose one tool for each distinct end action the wearer explicitly requested, preserving",
+  "their order. A sentence joined by and, then, also or plus may need several tools. Do not",
+  "silently omit a requested action. Use no more than four actions.",
+  "",
+  ANSWER_SHAPE,
+  "",
+  'Prefer tool: "" over a plausible guess. Declining costs the wearer one menu; guessing wrong',
+  "costs them a wrong action they have to notice and undo. Every consequential action will",
+  "still stop for a separate approval that you cannot grant.",
   "",
   UNTRUSTED_NOTICE,
 ].join("\n");
@@ -321,6 +348,69 @@ export class ModelPlanner {
     ].join("\n");
 
     return this.escalate("pickTool", PICK_SYSTEM, user, candidates, false, started);
+  }
+
+  /**
+   * Plan every explicit action in one spoken request.
+   *
+   * One answer describes the whole task. Re-planning after each call would
+   * have no reliable stopping condition and could turn an ordinary request
+   * into a sequence the wearer never asked for.
+   */
+  async pickTools(
+    intent: string,
+    tools: ToolDescriptor[],
+  ): Promise<{ name: string; args: Record<string, unknown> }[] | null> {
+    const started = this.now();
+    if (this.muted()) {
+      this.emit({ kind: "abstained", path: "pickTools", tier: "none", ms: 0 });
+      return null;
+    }
+
+    const usable = tools.filter(isOperable);
+    if (usable.length === 0) {
+      this.emit({ kind: "abstained", path: "pickTools", tier: "none", ms: 0 });
+      return null;
+    }
+
+    const ranked = shortlist(intent, usable, this.o.shortlistSize ?? DEFAULTS.shortlistSize);
+    this.emit({
+      kind: "shortlist",
+      path: "pickTools",
+      considered: usable.length,
+      sent: ranked.length,
+    });
+    const candidates = ranked.map((r) => r.tool);
+
+    // Keep the free path for an unmistakable one-action request. A conjunction
+    // is enough reason to ask whether the request contains more than one end
+    // action, even when one argument-free tool wins the lexical ranking.
+    const decisive = decisiveWinner(ranked);
+    if (decisive && parameters(decisive).every((p) => !p.required) && !looksCompound(intent)) {
+      const verdict = accept(decisive.name, candidates, false);
+      if (!("reason" in verdict)) {
+        this.emit({
+          kind: "resolved",
+          path: "pickTools",
+          tier: "none",
+          tool: decisive.name,
+          droppedArgs: [],
+          step: 1,
+          total: 1,
+          ms: this.now() - started,
+        });
+        return [{ name: decisive.name, args: {} }];
+      }
+    }
+
+    const user = [
+      `Request: ${safeText(intent, 400)}`,
+      "",
+      "Candidates:",
+      this.cache.block(candidates),
+    ].join("\n");
+
+    return this.escalateTask(TASK_SYSTEM, user, candidates, intent, started);
   }
 
   /**
@@ -493,6 +583,47 @@ export class ModelPlanner {
     return escalateOnConsequential && gate(a.tool).consequence !== "read";
   }
 
+  private async escalateTask(
+    system: string,
+    user: string,
+    candidates: ToolDescriptor[],
+    intent: string,
+    started: number,
+  ): Promise<{ name: string; args: Record<string, unknown> }[] | null> {
+    const budget = this.o.budgetMs ?? DEFAULTS.budgetMs;
+    const remaining = () => budget - (this.now() - started);
+
+    const fast = await this.askTask(
+      "fast",
+      system,
+      user,
+      candidates,
+      started,
+      Math.min(this.o.fastTimeoutMs ?? DEFAULTS.fastTimeoutMs, remaining()),
+    );
+
+    if (fast && !this.taskNeedsSecondOpinion(fast, intent)) return fast.proposals;
+
+    const careful = await this.askTask(
+      "careful",
+      system,
+      user,
+      candidates,
+      started,
+      Math.min(this.o.carefulTimeoutMs ?? DEFAULTS.carefulTimeoutMs, remaining()),
+    );
+    return careful?.proposals ?? null;
+  }
+
+  private taskNeedsSecondOpinion(a: AcceptedTask, intent: string): boolean {
+    if (a.confidence !== "high") return true;
+    if (a.tools.length > 1 || looksCompound(intent)) return true;
+    if (a.tools.some(siteFlagsUntrusted)) return true;
+    const escalateOnConsequential =
+      this.o.escalateOnConsequential ?? DEFAULTS.escalateOnConsequential;
+    return escalateOnConsequential && a.tools.some((tool) => gate(tool).consequence !== "read");
+  }
+
   /**
    * Ask a model, and own the deadline rather than asking for it.
    *
@@ -607,12 +738,115 @@ export class ModelPlanner {
       proposal: { name: check.tool.name, args },
     };
   }
+
+  private async askTask(
+    tier: Tier,
+    system: string,
+    user: string,
+    candidates: ToolDescriptor[],
+    started: number,
+    timeoutMs: number,
+  ): Promise<AcceptedTask | null> {
+    if (timeoutMs <= 0) return null;
+
+    let decision: Decision;
+    try {
+      decision = await this.decideWithin({ tier, system, user, timeoutMs });
+      this.failures = 0;
+      this.mutedUntil = 0;
+    } catch (err) {
+      this.failures += 1;
+      if (this.failures >= MUTE_AFTER) this.mutedUntil = this.now() + MUTE_MS;
+      this.emit({
+        kind: "failed",
+        path: "pickTools",
+        tier,
+        message: err instanceof Error ? err.message : String(err),
+        ms: this.now() - started,
+      });
+      return null;
+    }
+
+    const ms = this.now() - started;
+    const first = decision.tool.trim();
+    if (first === "") {
+      this.emit({ kind: "abstained", path: "pickTools", tier, ms });
+      return null;
+    }
+
+    const rawSteps = [
+      { tool: first, arguments: decision.arguments },
+      ...(Array.isArray(decision.next) ? decision.next : []),
+    ];
+    if (rawSteps.length > MAX_TASK_STEPS) {
+      this.emit({
+        kind: "rejected",
+        path: "pickTools",
+        tier,
+        tool: first,
+        reason: "too many steps",
+        ms,
+      });
+      return null;
+    }
+
+    const accepted: AcceptedTask = {
+      tools: [],
+      confidence: decision.confidence,
+      proposals: [],
+    };
+    const parsed: { tool: ToolDescriptor; args: Record<string, unknown>; dropped: string[] }[] = [];
+
+    // All or nothing. Dropping one invalid step would recreate the exact bug
+    // multi-step planning exists to fix: half a sentence disappearing while
+    // the other half runs successfully.
+    for (const step of rawSteps) {
+      const name = typeof step.tool === "string" ? step.tool.trim() : "";
+      const check = accept(name, candidates, false);
+      if ("reason" in check) {
+        this.emit({
+          kind: "rejected",
+          path: "pickTools",
+          tier,
+          tool: name,
+          reason: check.reason,
+          ms,
+        });
+        return null;
+      }
+      const read = readArgs(typeof step.arguments === "string" ? step.arguments : "{}", check.tool);
+      parsed.push({ tool: check.tool, args: read.args, dropped: read.dropped });
+    }
+
+    for (const [index, step] of parsed.entries()) {
+      accepted.tools.push(step.tool);
+      accepted.proposals.push({ name: step.tool.name, args: step.args });
+      this.emit({
+        kind: "resolved",
+        path: "pickTools",
+        tier,
+        tool: step.tool.name,
+        confidence: decision.confidence,
+        droppedArgs: step.dropped,
+        step: index + 1,
+        total: parsed.length,
+        ms,
+      });
+    }
+    return accepted;
+  }
 }
 
 interface Accepted {
   tool: ToolDescriptor;
   confidence: Confidence;
   proposal: { name: string; args: Record<string, unknown> };
+}
+
+interface AcceptedTask {
+  tools: ToolDescriptor[];
+  confidence: Confidence;
+  proposals: { name: string; args: Record<string, unknown> }[];
 }
 
 /* -------------------------------------------------------------- checking */
@@ -695,4 +929,9 @@ function decisiveWinner(ranked: { tool: ToolDescriptor; score: number }[]): Tool
   const runnerUp = ranked[1];
   if (runnerUp && top.score - runnerUp.score < DECISIVE_MARGIN) return null;
   return top.tool;
+}
+
+/** A cheap reason to verify that a request is not being shortened to one action. */
+function looksCompound(intent: string): boolean {
+  return /(?:,|\b(?:and|then|also|plus|after that|before that)\b)/i.test(intent);
 }

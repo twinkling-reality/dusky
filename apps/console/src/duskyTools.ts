@@ -96,12 +96,11 @@ export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
       title: "Send a task to the glasses",
       description:
         "Hand the wearer something to act on, in plain words, for example 'find oat milk' " +
-        "or 'add the organic oat milk to my cart'. Dusky chooses a matching action from any " +
-        "of the connected websites and puts it on the glasses. You are not performing the " +
-        "action: " +
-        "anything that spends money or changes data stops and waits for the wearer to " +
-        "approve it with a gesture, and you cannot approve it for them. Refused, with a " +
-        "reason, if no glasses are connected or the wearer is already mid-decision.",
+        "or 'book a table and add oat milk to my cart'. Dusky chooses the matching end " +
+        "actions from any connected websites and puts them on the glasses in order. You are " +
+        "not performing the actions: each one that spends money or changes data stops for " +
+        "its own approval from the wearer, and you cannot approve it for them. Refused, with " +
+        "a reason, if no glasses are connected or the wearer is already mid-decision.",
       inputSchema: {
         type: "object",
         properties: {

@@ -79,6 +79,7 @@ describe("the request the adapter builds", () => {
     expect(d).toEqual({
       tool: "search_products",
       arguments: '{"query":"oat milk"}',
+      next: [],
       confidence: "high",
     });
 
@@ -93,7 +94,7 @@ describe("the request the adapter builds", () => {
     expect(format["type"]).toBe("json_schema");
     expect(format["schema"]).toMatchObject({
       type: "object",
-      required: ["tool", "arguments", "confidence"],
+      required: ["tool", "arguments", "next", "confidence"],
     });
     // Haiku 4.5 rejects output_config.effort, so the fast tier must not send it.
     expect(output["effort"]).toBeUndefined();
@@ -108,9 +109,25 @@ describe("the request the adapter builds", () => {
 
     expect(body()["model"]).toBe("claude-opus-5");
     expect(output["effort"]).toBe("low");
-    // One schema across both tiers and both planning paths, so the API's
+    // One schema across both tiers and every planning path, so the API's
     // 24-hour schema cache is hit rather than recompiled per request.
     expect((output["format"] as Record<string, unknown>)["schema"]).toEqual(fastSchema);
+  });
+
+  it("reads an ordered multi-action answer from the same stable schema", async () => {
+    answer({
+      tool: "book_table",
+      arguments: '{"party_size":2}',
+      next: [{ tool: "add_to_cart", arguments: '{"product_id":"oat-1"}' }],
+      confidence: "high",
+    });
+    const decision = await client().decide({
+      tier: "fast",
+      system: "SYSTEM",
+      user: "Request: book a table and add oat milk",
+      timeoutMs: 2_000,
+    });
+    expect(decision.next).toEqual([{ tool: "add_to_cart", arguments: '{"product_id":"oat-1"}' }]);
   });
 
   it("honours a tier override, so a deployment can run one model for both", async () => {
@@ -128,7 +145,7 @@ describe("an answer the adapter cannot use", () => {
   it("declines rather than throwing when the model returns nothing parseable", async () => {
     reply = "this is not the JSON you asked for";
     const d = await client().decide({ tier: "fast", system: "S", user: "U", timeoutMs: 2_000 });
-    expect(d).toEqual({ tool: "", arguments: "{}", confidence: "low" });
+    expect(d).toEqual({ tool: "", arguments: "{}", next: [], confidence: "low" });
   });
 
   it("never reads an unexpected confidence as high", async () => {

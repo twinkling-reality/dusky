@@ -905,6 +905,135 @@ describe("speaking from the glasses", () => {
   });
 });
 
+describe("one spoken task crossing several businesses", () => {
+  const BOOK = tool({
+    name: "book_table",
+    title: "Book table",
+    origin: "https://tables.test",
+    description: "Hold a table under a booking.",
+    inputSchema: { type: "object", properties: {} },
+  });
+
+  const planner = (steps: { name: string; args: Record<string, unknown> }[]): Planner => ({
+    pickTool: async () => steps[0] ?? null,
+    pickTools: async () => steps,
+    planResolver: async () => null,
+  });
+
+  const taskRunner = (registry: () => ToolDescriptor[] = () => [BOOK, ADD]) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      runner: fakeRunner({
+        discover: async () => registry(),
+        invoke: async (_origin, name) => {
+          calls.push(name);
+          return name === "book_table"
+            ? JSON.stringify({ ok: true, reservation_id: "AO-4417" })
+            : JSON.stringify({ ok: true, added: "Organic oat milk" });
+        },
+      }),
+    };
+  };
+
+  it("keeps every action, every origin and every confirmation separate", async () => {
+    const { runner, calls } = taskRunner();
+    const s = new Session({
+      source: "Dusky",
+      siteName: (origin) => (origin.includes("tables") ? "Amber & Oak" : "Verdant Market"),
+      runner,
+      planner: planner([
+        { name: "book_table", args: {} },
+        { name: "add_to_cart", args: { product_id: "oat-1" } },
+      ]),
+    });
+    await s.start();
+
+    const firstGate = await s.submitText(
+      "Book a table tomorrow and add the organic oat milk to my cart",
+    );
+    expect(firstGate).toMatchObject({ kind: "confirm", source: "Amber & Oak" });
+    expect(calls).toEqual([]);
+
+    const handoff = await s.handle("__confirm");
+    if (handoff.kind !== "result") throw new Error("expected an intermediate result");
+    expect(calls).toEqual(["book_table"]);
+    expect(handoff.choices).toEqual([{ id: "__next", label: "Next: Add to cart", meta: "2/2" }]);
+    expect(s.taskProgress()).toEqual({ current: 1, total: 2, remaining: 1 });
+
+    const secondGate = await s.handle("__next");
+    expect(secondGate).toMatchObject({ kind: "confirm", source: "Verdant Market" });
+    expect(calls).toEqual(["book_table"]);
+
+    const done = await s.handle("__confirm");
+    if (done.kind !== "result") throw new Error("expected the final result");
+    expect(calls).toEqual(["book_table", "add_to_cart"]);
+    expect(done.choices[0]?.id).toBe("__home");
+    expect(s.taskProgress()).toBeNull();
+  });
+
+  it("rejects the entire plan when any step names a tool that was not offered", async () => {
+    const { runner, calls } = taskRunner();
+    const s = new Session({
+      source: "Dusky",
+      runner,
+      planner: planner([
+        { name: "book_table", args: {} },
+        { name: "wire_money", args: { amount: 5_000 } },
+      ]),
+    });
+    await s.start();
+    const frame = await s.submitText("book a table and wire money");
+    expect(frame.kind).toBe("idle");
+    expect(calls).toEqual([]);
+    expect(s.taskProgress()).toBeNull();
+  });
+
+  it("re-resolves a future step against the live registry before starting it", async () => {
+    let registry = [BOOK, ADD];
+    const { runner, calls } = taskRunner(() => registry);
+    const s = new Session({
+      source: "Dusky",
+      runner,
+      planner: planner([
+        { name: "book_table", args: {} },
+        { name: "add_to_cart", args: { product_id: "oat-1" } },
+      ]),
+    });
+    await s.start();
+    await s.submitText("book a table and add oat milk");
+    await s.handle("__confirm");
+
+    registry = [BOOK];
+    await s.refresh();
+    const frame = await s.handle("__next");
+    expect(frame).toMatchObject({ kind: "error", title: "The next action changed" });
+    expect(calls).toEqual(["book_table"]);
+  });
+
+  it("does not carry an old spoken request into a later menu action", async () => {
+    let resolverCalls = 0;
+    const { runner } = taskRunner();
+    const s = new Session({
+      source: "Dusky",
+      runner,
+      planner: {
+        ...planner([{ name: "book_table", args: {} }]),
+        planResolver: async () => {
+          resolverCalls += 1;
+          return null;
+        },
+      },
+    });
+    await s.start();
+    await s.submitText("book a table");
+    await s.handle("__confirm");
+    await s.handle("__home");
+    await s.handle("https://shop.test add_to_cart");
+    expect(resolverCalls).toBe(0);
+  });
+});
+
 /**
  * Everything the Display can send is text: a choice id, or whatever the
  * on-glasses composer committed. What reaches the SITE has to be what that
