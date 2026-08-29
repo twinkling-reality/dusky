@@ -1,10 +1,13 @@
 # Dusky
 
-**Turn web actions into augmented reality.**
+**A remote control for everything you are signed into.**
 
-Dusky uses [WebMCP](https://github.com/webmachinelearning/webmcp) to turn website
-capabilities into dynamic, actionable interfaces for AR displays, starting with
-Meta Ray-Ban Display.
+Dusky reads what every site in your browser can do, over
+[WebMCP](https://github.com/webmachinelearning/webmcp), and puts all of it on a
+pair of glasses as one list. Starting with Meta Ray-Ban Display.
+
+One sentence can cross two businesses that have never heard of each other.
+Nothing that costs you anything happens without you saying yes.
 
 ## Why
 
@@ -27,6 +30,29 @@ sized for the lens. No app per site, no app store, no per-device port, and
 nothing for the site to build beyond declaring its tools.
 
 There is no code in this repository for any particular website.
+
+## The part that needs no integration
+
+Dusky holds every participating site at once, not one at a time. That is a
+smaller change than it sounds and a bigger claim than it looks.
+
+"Book a table for two tomorrow and add oat milk to my cart" is one errand across
+a restaurant and a shop. The two businesses have never heard of each other,
+there is no partnership, no connector and no code here that knows either exists.
+Doing that normally needs somebody to build the bridge. An app cannot do it at
+all, because an app belongs to one company.
+
+The browser is what makes it possible, because the browser is the one place that
+already holds all of your sessions. So the glasses stop being a screen and
+become the place a person says yes: an agent may propose anything, across
+anything, and `packages/session` still stops every consequential step and waits
+for the wearer.
+
+One rule earns its keep the moment several sites are held at once. A lookup that
+fills in a missing value runs without asking anybody, so it may only ever use a
+tool from the SAME SITE as the action it is filling in. Otherwise what somebody
+said out loud about a restaurant could be handed to a shop that has nothing to
+do with it, quietly, on the one path with nobody watching.
 
 ## How it works
 
@@ -67,11 +93,11 @@ ChatGPT desktop app's built-in browser**, which has it on already.
 pnpm install && pnpm dev
 ```
 
-Open <http://localhost:7803> and press **Open Dusky**. You get three things in
-one tab: the glasses view on the left, the shop on the right, and every WebMCP
-call underneath as it happens.
+Open <http://localhost:7803> and press **Open Dusky**. You get everything in one
+tab: the glasses view on the left, both partner sites on the right, and every
+WebMCP call underneath as it happens.
 
-Press a row on the glasses panel and watch the shop's cart change next to it.
+Press a row on the glasses panel and watch that site change next to it.
 That is the part worth looking at. The panel itself is a small black rectangle
 with text on it, because that is what a 600x600 additive waveguide renders, but
 pressing a row on it runs a real tool inside the real site and you can watch
@@ -81,8 +107,15 @@ Move with <kbd>↑</kbd><kbd>↓</kbd>, choose with <kbd>Enter</kbd>, back with
 <kbd>Esc</kbd>. Those six keys are the entire input surface of the real device,
 which is why the same build runs here and on the glasses unchanged.
 
-Then switch to Amber & Oak. It is a restaurant, it shares no vocabulary with the
-shop, and the interface changes while none of the code does.
+Both sites are live at the same time, and their actions are on one list. Amber &
+Oak is a restaurant, it shares no vocabulary with the shop, and Dusky builds a
+screen for each from the schema alone. Seven actions do not fit a four-row
+panel, so the menu you land on is a row per business and a site's own actions
+are one press behind it.
+
+Add `?source=market` to the URL to hold a single site instead. Nothing on the
+page offers that, because a control for using less of the product is not one
+anybody wants; it is there for tests and for a slow connection.
 
 ## What is in here
 
@@ -105,7 +138,8 @@ shop, and the interface changes while none of the code does.
 - **It does not work with any website.** A site has to name Dusky in
   `exposedTo` before the browser will hand over its tools. That rule is the
   browser's, and it is the right one: otherwise any page could read the tools of
-  every site you had open.
+  every site you had open. "Everything you are signed into" means everything
+  that has granted Dusky access, which today is two first-party test services.
 - **A model can be wrong.** Nothing consequential runs without you confirming
   it, and Dusky only reports success if the tool actually returned it.
 - **No microphone or camera on the glasses**, and no raw gestures. The OS moves

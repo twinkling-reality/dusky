@@ -18,7 +18,21 @@ Three surfaces, and confusing them is the most common mistake:
   sends one selection. It executes nothing and holds no state.
 - **`apps/console`** runs in a normal browser. It is the ONLY surface that can
   touch WebMCP, because tools live inside the partner site's document in the
-  user's own session. It holds the partner site in an `allow="tools"` iframe.
+  user's own session. It holds EVERY participating site at once, each in its own
+  `allow="tools"` iframe, and announces the list to the relay on connect.
+
+  Holding one site at a time was a single line, `[new URL(source.url).origin]`,
+  and nothing downstream ever agreed with it: `getTools({fromOrigins})` has
+  always taken a list, tool identity has always been `(origin, name)`, an
+  ambiguous name has always been refused, and `menuOrder` has always given a
+  mixed registry a total order. Removing the restriction needed no new
+  capability. It needed one new RULE, which is the same-origin resolver in
+  rule 6 below.
+
+  `?source=` still narrows a window to one site. Nothing on the page offers it:
+  a control for holding less of the web is a control for using less of the
+  product. It survives because end-to-end tests need to assert about one site's
+  tools without another's arriving mid-assertion.
 - **`apps/server`** owns the task state, so a console reload or a dropped socket
   replays the current frame rather than restarting the task.
 
@@ -46,8 +60,9 @@ at all.
    `factsFromResult` replaced it and knows no site. Do not reintroduce a key
    because it made the demo read nicely.
 
-   Two first-party sources exist to keep this honest. `apps/market` sells
-   things and `apps/reservations` holds tables, and they share no vocabulary:
+   Two first-party sources exist to keep this honest, and both are held at the
+   same time. `apps/market` sells things and `apps/reservations` holds tables,
+   and they share no vocabulary:
    one returns `cart_total`, the other `reservation_id` and `party_size`. The
    second one also declares a string enum, an integer enum and a boolean, none
    of which the market has, so three branches of `paramKind` are reachable at
@@ -112,7 +127,46 @@ at all.
    above still holds.
 5. **Never auto-retry anything that is not read-only.** A timeout is "unknown",
    not "did not happen".
-6. **`packages/policy` must stay dependency-free.** If it ever imports the agent
+6. **A resolver must be same-origin as its target.** The one path where a
+   proposal runs with no human in front of it is `planResolver`, and the
+   wearer's own spoken words are what fill the lookup's arguments. Left
+   unconstrained, a lookup published by one business receives what somebody said
+   about another one, silently, on the path that never reaches a confirmation
+   frame. It is also the baitable path: ranking scores tools on text their own
+   site wrote, so a site wanting other people's requests need only publish a
+   read-only tool that scores well against everything.
+
+   Enforced in `packages/planner`, which filters the candidate list before a
+   model sees it, and again in `packages/session`, which re-checks the answer,
+   because a `Planner` is a port and another implementation reaches the machine
+   without passing through that package. Two checks, one rule.
+
+   This rule had nothing to forbid while a session held one site: every
+   read-only tool was already same-origin with every target, which is why it
+   was never written down. It is the rule that makes holding every site at once
+   safe rather than merely possible.
+
+   The cost is real and is the right cost. A genuinely cross-site lookup, "add
+   what my recipe app lists to my cart", becomes a question for the wearer
+   instead of something a model does quietly. Bridging two businesses is a
+   decision a person should make.
+
+7. **One origin may not take the whole shortlist.** `rank` scores lexically, so
+   when an intent matches nothing every score is zero and "rank order" is
+   alphabetical order. Measured: six tools named `aaa_*` through `aaf_*` at one
+   origin took all six shortlist slots from a shop, whose tools never reached
+   the model. That was a site starving itself while Dusky held one site; holding
+   all of them it is one origin denying every other origin access to the model
+   for the price of renaming its tools. `fairFill` shares the unmatched
+   remainder round-robin across origins. Real lexical matches keep their slots
+   outright, so nothing can lose a place it earned.
+
+   It also made ranking better, which was not the point and is worth stating as
+   a measurement rather than a claim: recall over the eval corpus went from
+   13/19 to 14/19 at the shipped shortlist size, which is exactly what doubling
+   the shortlist to eight used to buy, for no tokens.
+
+8. **`packages/policy` must stay dependency-free.** If it ever imports the agent
    or a transport, the deterministic guarantee is gone. This was prose with
    nothing enforcing it until `index.test.ts` grew a test that reads the source
    and the manifest: one type import from `@dusky/contracts`, no other
@@ -228,19 +282,25 @@ One of the four numbers is no longer a guess. `eval.fixtures.ts` and
 `eval.test.ts` measure shortlist recall over nineteen spoken requests against
 eleven tools from four domains, with no model and no credential, because
 ranking is deterministic. At the shipped size of six the right tool is on the
-list 13 times out of 19; at eight it is 14; with every slot free it is 19. That
-last figure used to be 17, and finding out why is what the eval was for: the
-shortlist returned ONLY the tools with a nonzero score, so three matches meant
-three cards even when six slots were free, and the right tool could be excluded
-at every size. Fixed in `shortlist`.
+list 14 times out of 19; at eight it is 15; with every slot free it is 19.
 
-Read the 13 carefully. It is not planner accuracy, because a model is what
+Both of the numbers below 19 have moved once, and each time the eval was what
+found the reason rather than confirming a hunch. 19 used to be 17: `shortlist`
+returned ONLY the tools with a nonzero score, so three matches meant three
+cards even when six slots were free, and the right tool could be excluded at
+every size. 14 used to be 13, until the leftover slots started being shared
+between origins instead of handed out in rank order, which with every score at
+zero is alphabetical order. That change was made for the reason in rule 7, and
+buys at six exactly what doubling the shortlist to eight used to buy, for no
+tokens at all.
+
+Read the 14 carefully. It is not planner accuracy, because a model is what
 happens next, and it is not an argument for a bigger shortlist, because going
-to eight buys one request. It says the binding constraint is the RANKER: "find
-me some oat milk" puts `find_times` above `search_products`, on the strength of
-the word "find" being in one name and nothing matching in the other. That is
-the case the model tier exists for. It is also the number to beat before
-anybody spends effort on the shortlist size.
+to eight still buys one request. It says the binding constraint is the RANKER:
+"find me some oat milk" puts `find_times` above `search_products`, on the
+strength of the word "find" being in one name and nothing matching in the
+other. That is the case the model tier exists for. It is also the number to
+beat before anybody spends effort on the shortlist size.
 
 ## Dusky as a provider
 
@@ -301,10 +361,18 @@ These are in `packages/webmcp`, the only file allowed to know them:
 - Tool ordering from `getTools` is the browser's business. Never depend on it.
   The wearer's menu did, until `menuOrder` in `packages/frames` gave it a total
   order of its own: the ceremony `packages/policy` assigns, then the label,
-  then `toolId`. That is why the row a wearer lands on is a read whenever the
-  source offers one, and why the same source produces the same menu twice. The
-  argument for that order, and the three alternatives it turns down, are in the
-  comment above it rather than here.
+  then `toolId`. That is why the row a wearer lands on cannot cost them
+  anything, and why the same sites produce the same menu twice. The argument
+  for that order, and the three alternatives it turns down, are in the comment
+  above it rather than here.
+
+  A menu spanning several sites that will not fit four rows shows a row per
+  site instead, and that site's actions one press behind it. Measured: seven
+  tools flat is four pages of two with a planner configured, and reaching
+  `add_to_cart` costs eight presses against six grouped. Grouping is navigation
+  over a combined registry, never a partition of one: the planner still ranks
+  every site's tools together and one spoken request still crosses two
+  businesses.
 - **`getTools({fromOrigins})` also returns THIS document's own registered tools**,
   even when `fromOrigins` names only other origins. Verified 2026-08-26 against
   151.0.7922.174, the day Dusky started registering tools of its own and
