@@ -286,6 +286,43 @@ test("a gesture in the embedded panel changes the partner site in the same tab",
   if (frame && seat) expect(seat.y - frame.y + seat.height).toBeLessThanOrEqual(frame.height);
 });
 
+/*
+ * Found by wearing the glasses, 2026-08-28.
+ *
+ * The composer commits on Enter or on blur, and on real hardware neither was
+ * reachable. A tap on a focused text field is taken by the OS to open its own
+ * writing surface, so it never arrives as `Enter`, and `useDpad` wraps focus
+ * with `% count`, which for a frame offering only the composer never moves.
+ * A wearer could write `oat`, watch it sit in the field, and have no way to
+ * send it. "Done" is what focus moves to, and leaving the input is what
+ * commits.
+ */
+test("free text has somewhere for focus to go, and only once there is text", async ({ page }) => {
+  await page.goto(`${SITE}/demo?start=1`);
+
+  const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
+  await lens.getByRole("button", { name: /Add to cart/ }).click();
+
+  const compose = lens.locator('input[type="text"]');
+  await expect(compose).toBeVisible();
+
+  // Nothing written yet, so there is nothing to send and no row offering to.
+  // A row that accepts a press and does nothing reads as a hang on a panel
+  // with no cursor.
+  await expect(lens.getByRole("button", { name: "Done" })).toHaveCount(0);
+
+  await compose.fill("oat-1");
+
+  // Now there is something to send, so there is somewhere for focus to go.
+  const done = lens.getByRole("button", { name: "Done" });
+  await expect(done).toBeVisible();
+
+  // And moving focus off the input is what commits, which is the whole point:
+  // clicking Done blurs the field, and the blur sends the value.
+  await done.click();
+  await expect(lens.getByRole("button", { name: /Confirm/ })).toBeVisible();
+});
+
 test("a tool with no arguments is not named twice on the confirm frame", async ({ page }) => {
   await page.goto(`${SITE}/demo?start=1`);
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');

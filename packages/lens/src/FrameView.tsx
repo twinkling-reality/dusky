@@ -1,5 +1,5 @@
 import type { Choice, DisplayFrame } from "@dusky/contracts";
-import { type Ref, useRef, useState } from "react";
+import { type Ref, useEffect, useRef, useState } from "react";
 import styles from "./FrameView.module.css";
 import { useDpad } from "./useDpad.js";
 
@@ -53,8 +53,32 @@ export function FrameView({
   keyboard = true,
   headingLevel = 1,
 }: Props) {
-  const choices = choicesOf(frame);
+  const all = choicesOf(frame);
   const Title = headingLevel === 1 ? "h1" : "h2";
+
+  /*
+   * Whether the composer has anything in it yet.
+   *
+   * "Done" exists so focus has somewhere to go, because leaving the input is
+   * what commits the text. But on an empty field it is a control that cannot
+   * do anything, and offering one of those is the failure this panel refuses
+   * everywhere else: on a display with no cursor, a row that accepts a press
+   * and changes nothing is indistinguishable from a hang.
+   *
+   * Safe to drive from the input's value because the field is CONTROLLED. The
+   * on-glasses composer commits through ordinary `input` events, so text
+   * appearing on the panel at all is proof this state already updated. Worn,
+   * on 2026-08-28, `oat` showed in the field, which is that proof.
+   */
+  const [written, setWritten] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: frameKey is the trigger; a new frame starts with an empty field
+  useEffect(() => {
+    setWritten(false);
+  }, [frameKey]);
+
+  // Hidden rather than disabled. A disabled row still takes a focus stop on a
+  // panel that is navigated one press at a time.
+  const choices = all.filter((c) => c.id !== "__submit" || written);
 
   const { index, register } = useDpad({
     count: choices.length,
@@ -149,6 +173,7 @@ export function FrameView({
                   placeholder={c.label}
                   focused={index === i}
                   onCommit={onText}
+                  onWritten={setWritten}
                 />
               ) : (
                 <button
@@ -188,11 +213,14 @@ function Composer({
   placeholder,
   focused,
   onCommit,
+  onWritten,
 }: {
   ref: Ref<HTMLInputElement>;
   placeholder: string;
   focused: boolean;
   onCommit: (value: string) => void;
+  /** Told when there is something worth offering a way to send. */
+  onWritten?: (written: boolean) => void;
 }) {
   const [value, setValue] = useState("");
   // Enter commits and the frame changes, which unmounts a focused input and
@@ -215,7 +243,10 @@ function Composer({
       placeholder={placeholder}
       value={value}
       data-focused={focused}
-      onChange={(e) => setValue(e.currentTarget.value)}
+      onChange={(e) => {
+        setValue(e.currentTarget.value);
+        onWritten?.(e.currentTarget.value.trim() !== "");
+      }}
       // Fires when the on-glasses composer commits, and on blur in a browser.
       onBlur={(e) => commit(e.currentTarget.value)}
       onKeyDown={(e) => {
