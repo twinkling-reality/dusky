@@ -48,24 +48,41 @@ const browser = await chromium.launch({
 });
 
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
-await page.goto(`${consoleUrl}/?session=${pairing}`);
 
-if (
-  await page
-    .getByText("WebMCP is not enabled")
-    .isVisible()
-    .catch(() => false)
-) {
+/*
+ * `mode=glasses` is not optional here, and leaving it off is destructive.
+ *
+ * A session holds exactly one Display, and attaching a second closes the
+ * first. Without this parameter the console defaults to `embedded`, mounts a
+ * Display of its own in an iframe, and evicts the actual glasses: the wearer
+ * gets "Another window took over" from the very script that was supposed to
+ * pair them.
+ *
+ * The workspace also lives at `/demo`. `/` is the landing page, which has no
+ * session on it at all.
+ */
+await page.goto(`${consoleUrl}/demo?session=${pairing}&mode=glasses`);
+
+// Ask the browser directly rather than matching on a sentence in the UI. The
+// wording has changed once already and a stale locator here reports "no
+// WebMCP" for a browser that has it.
+const hasWebMcp = await page.evaluate(() => "modelContext" in document);
+if (!hasWebMcp) {
   console.error("This Chrome did not accept --enable-features=WebMCPTesting. Is it 149 or newer?");
   await browser.close();
   process.exit(1);
 }
 
-await page.getByLabel("Pairing code from your glasses").fill(pairing);
-await page.getByRole("button", { name: "Pair" }).click();
+// No form to fill: a code in the URL pairs on arrival, which is also the path
+// the demo link uses.
 
 // Tool discovery is the moment that proves the exposedTo grant is right.
-await page.getByText("Add to cart").waitFor({ timeout: 30_000 });
+// Any declared action will do, and naming one tool would tie this script to
+// one partner site.
+await page
+  .locator("li", { hasText: /gated|read/ })
+  .first()
+  .waitFor({ timeout: 30_000 });
 console.log(`paired to ${pairing} against ${consoleUrl}`);
 
 // Report through Dusky's own tools, which is also a live check that the

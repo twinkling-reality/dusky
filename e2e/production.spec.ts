@@ -39,14 +39,41 @@ const CODE = `PRD${suffix}`;
 /** A second one, because a session holds exactly one source at a time. */
 const CODE_B = `RES${suffix}`;
 
-async function focusChoice(page: Page, label: RegExp) {
+async function tryFocus(page: Page, label: RegExp): Promise<boolean> {
   for (let i = 0; i < 10; i += 1) {
     const focused = await page.locator('[data-focused="true"]').textContent();
-    if (focused && label.test(focused)) return;
+    if (focused && label.test(focused)) return true;
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(80);
   }
-  throw new Error(`never focused a choice matching ${String(label)}`);
+  return false;
+}
+
+async function focusChoice(page: Page, label: RegExp) {
+  if (!(await tryFocus(page, label)))
+    throw new Error(`never focused a choice matching ${String(label)}`);
+}
+
+/**
+ * Focus a choice that may not be on the page the wearer landed on.
+ *
+ * The menu paginates at `MAX_CHOICES`, and two things push a gated tool off
+ * page one: `menuOrder` sorts by what a press costs, so every read comes
+ * first, and the composer takes a permanent slot whenever the deployment has
+ * a planner. `add_to_cart` was on page one when this suite was written and is
+ * not any more, which is why asserting it directly went stale.
+ *
+ * Paging is bounded because "More" wraps rather than clamps, so a few presses
+ * visit every page and then start again.
+ */
+async function focusChoiceAnyPage(page: Page, label: RegExp) {
+  for (let p = 0; p < 4; p += 1) {
+    if (await tryFocus(page, label)) return;
+    if (!(await tryFocus(page, /More/))) break;
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+  }
+  throw new Error(`never focused a choice matching ${String(label)} on any page`);
 }
 
 test("the relay is reachable and healthy", async ({ request }) => {
@@ -102,7 +129,7 @@ test("the deployed console discovers the deployed market cross-origin", async ({
 
   // Dusky's own tools are registered for this browser's agent, and are NOT
   // mixed into what the wearer sees.
-  await expect(page.getByText("registered for this browser agent")).toBeVisible();
+  await expect(page.getByText(/for this browser's agent/)).toBeVisible();
   await expect(page.getByText("send_task_to_display")).toHaveCount(0);
 });
 
@@ -164,9 +191,9 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
 
   // The Display connects over wss:// to a relay on a different host entirely.
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
-  await focusChoice(displayPage, /Add to cart/);
+  await focusChoiceAnyPage(displayPage, /Add to cart/);
   await displayPage.keyboard.press("Enter");
 
   // How the product id gets collected depends on whether this deployment has
@@ -210,10 +237,10 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
   const displayPage = await ctx.newPage();
 
   await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
-  await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
+  await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
   const status = await consolePage.evaluate(async () => {
     const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
@@ -250,10 +277,10 @@ test("a spoken request from an agent reaches the wearer", async ({ browser }) =>
   const displayPage = await ctx.newPage();
 
   await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
-  await expect(consolePage.getByText("registered for this browser agent")).toBeVisible();
+  await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
-  await expect(displayPage.getByRole("button", { name: /Add to cart/ })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
   const sent = await consolePage.evaluate(async () => {
     const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
