@@ -92,22 +92,69 @@
   color: var(--emit-danger);
 }
 
-.pulse {
+/*
+ * Work in progress, said in the one currency this display actually has.
+ *
+ * The first attempt swept a brightness gradient through the title, from
+ * `--emit-body` up to `--emit-bright`, on the reasoning that an additive
+ * waveguide must never animate DOWNWARD into dimness. That reasoning was
+ * right and the result was still wrong: worn, the sweep is invisible. Those
+ * two colours are a small luminance step, and a smooth ramp between them,
+ * over a room the wearer can see through, reads as nothing happening at all.
+ *
+ * The mistake was treating brightness as the channel. On a panel with no
+ * background, the strongest contrast available is not bright against dim, it
+ * is LIT AGAINST NOTHING: black emits no photons, so a dot that switches off
+ * has not gone grey, it has gone. Presence and absence, at full brightness,
+ * beats any gradient between two lit values.
+ *
+ * So the title stays fully lit and still, and three dots after it arrive one
+ * at a time. Nothing dims, nothing moves the words, and the thing that
+ * changes is whether a mark exists.
+ */
+.ellipsis {
   display: inline-block;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  margin-right: 12px;
-  background: var(--emit-accent);
-  animation: pulse 1.1s ease-in-out infinite;
+  margin-left: 2px;
+  color: var(--emit-accent);
 }
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.25;
+
+.ellipsis span {
+  opacity: 0;
+  /* `steps(1)` on purpose. A fade is a luminance ramp again, and a ramp is
+     what was invisible. Each dot is on or off, never in between. */
+  animation: blink 1.5s steps(1, end) infinite;
+}
+
+.ellipsis span:nth-child(1) {
+  animation-delay: 0s;
+}
+.ellipsis span:nth-child(2) {
+  animation-delay: 0.375s;
+}
+.ellipsis span:nth-child(3) {
+  animation-delay: 0.75s;
+}
+
+@keyframes blink {
+  0% {
+    opacity: 0;
   }
-  50% {
+  25%,
+  100% {
     opacity: 1;
+  }
+}
+
+/*
+ * Anyone who has asked for less motion gets the words with nothing after them.
+ *
+ * Not a dimmer title. Removing the animation must not also remove light, or
+ * the accessibility setting would make the panel harder to read in a bright
+ * room, which is the opposite of what it was asked for.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ellipsis {
+    display: none;
   }
 }
 

@@ -77,8 +77,13 @@ export function FrameView({
       <div className={styles.body}>
         {frame.kind === "working" ? (
           <Title className={styles.title}>
-            <span className={styles.pulse} aria-hidden="true" />
             {frame.title}
+            {/* Decoration, and it spells a word out loud if it is not hidden. */}
+            <span className={styles.ellipsis} aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
           </Title>
         ) : frame.kind === "result" ? (
           <Title className={styles.title}>
