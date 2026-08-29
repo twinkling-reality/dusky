@@ -149,7 +149,10 @@ describe("resolving a parameter from a prior read", () => {
     const runner = fakeRunner();
     const s = new Session({ source: "Shop", runner, planner });
     await s.start();
-    const f = await s.handle("add_to_cart");
+    // Spoken, not picked off the menu. The resolver exists to turn a REQUEST
+    // into candidates, and with nothing requested there is nothing to resolve
+    // from, so the menu path deliberately skips it.
+    const f = await s.submitText("some oat milk");
 
     expect(runner.calls).toEqual(["search_products"]);
     expect(f.kind).toBe("choose");
@@ -172,6 +175,166 @@ describe("resolving a parameter from a prior read", () => {
     await s.start();
     await s.handle("add_to_cart");
     expect(runner.calls).toEqual([]);
+  });
+});
+
+/*
+ * The wearer's clock, not the model's.
+ *
+ * These exist because the budget that forbids exactly this was being applied
+ * to the wrong half. `RESOLVER_BUDGET_MS` bounded the tool invocation and not
+ * the planning in front of it, so choosing `search_products` on the deployed
+ * stack sat on a working frame for 4.8s across two model tiers, both correctly
+ * abstaining, and the constant's own comment says a lookup must not cost more
+ * than the typing would.
+ */
+describe("the resolver's budget covers deciding, not just looking up", () => {
+  it("gives up on a planner that will not answer, and asks the wearer instead", async () => {
+    vi.useFakeTimers();
+    const runner = fakeRunner();
+    const slow: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      // Never settles, which is the limit of "slow".
+      planResolver: () => new Promise(() => {}),
+    };
+    const s = new Session({ source: "Shop", runner, planner: slow });
+    await s.start();
+
+    const p = s.submitText("some oat milk");
+    await vi.advanceTimersByTimeAsync(3_000);
+    const f = await p;
+
+    // The composer, which is where they were always going to end up.
+    expect(f.kind).toBe("choose");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit"]);
+    expect(f.note).toBe("Tap to write or speak, then Done");
+    // And nothing was invoked on the wearer's behalf while they waited.
+    expect(runner.calls).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it("records that it gave up deciding, rather than failing silently", async () => {
+    vi.useFakeTimers();
+    const seen: string[] = [];
+    const slow: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      planResolver: () => new Promise(() => {}),
+    };
+    const s = new Session({
+      source: "Shop",
+      runner: fakeRunner(),
+      planner: slow,
+      onAudit: (e) => {
+        if (e.kind === "plan") seen.push(JSON.stringify(e.detail));
+      },
+    });
+    await s.start();
+    const p = s.submitText("some oat milk");
+    await vi.advanceTimersByTimeAsync(3_000);
+    await p;
+
+    // A wearer sent to the composer because a model was slow must be
+    // distinguishable afterwards from one sent there because no tool could
+    // have helped. Those want different fixes.
+    expect(seen.some((d) => d.includes("undecided"))).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("spends the whole attempt inside one budget, not one budget per half", async () => {
+    vi.useFakeTimers();
+    let invokeBudgetSeen = Number.POSITIVE_INFINITY;
+    const runner = fakeRunner({
+      invoke: async (_o, _n, _a, signal) => {
+        // The deadline is enforced by an abort, so how long this call is
+        // allowed is observable as how long until that fires.
+        const started = Date.now();
+        await new Promise<void>((resolve) => {
+          signal?.addEventListener("abort", () => {
+            invokeBudgetSeen = Date.now() - started;
+            resolve();
+          });
+        });
+        return "{}";
+      },
+    });
+    // Deciding eats 2s of the 6s attempt, so the lookup must get about 4s,
+    // never a fresh 6s of its own.
+    const dawdling: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      planResolver: () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ name: "search_products", args: { query: "oat" } }), 2_000);
+        }),
+    };
+    const s = new Session({ source: "Shop", runner, planner: dawdling });
+    await s.start();
+    const p = s.submitText("some oat milk");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await p;
+
+    expect(invokeBudgetSeen).toBeLessThanOrEqual(4_100);
+    expect(invokeBudgetSeen).toBeGreaterThan(0);
+    vi.useRealTimers();
+  });
+});
+
+/*
+ * Found by wearing the glasses, 2026-08-28.
+ *
+ * The composer commits on Enter or on blur and neither was reachable from a
+ * frame that offered only the composer. A tap on a focused text field is taken
+ * by the OS to open its writing surface, so it never arrives as `Enter`, and
+ * `useDpad` wraps focus with `% count`, which for one row never moves. A
+ * wearer could write `oat`, watch it sit in the field, and have no way to send
+ * it.
+ */
+describe("free text can actually be sent from the glasses", () => {
+  it("offers somewhere for focus to go, so blur can fire", async () => {
+    const s = new Session({ source: "Shop", runner: fakeRunner() });
+    await s.start();
+    const f = await s.handle("add_to_cart");
+
+    expect(f.kind).toBe("choose");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    // More than one focusable row is the whole fix: `% count` can only move
+    // focus off the input when there is a second row to move to, and moving
+    // off the input is what fires the blur that commits.
+    expect(f.choices.length).toBeGreaterThan(1);
+    expect(f.choices.map((c) => c.id)).toContain("__submit");
+  });
+
+  it("never lets the composer's own rows become the answer", async () => {
+    const runner = fakeRunner();
+    const s = new Session({ source: "Shop", runner });
+    await s.start();
+    await s.handle("add_to_cart");
+
+    // Pressing Done on an empty field used to fall through to the parameter
+    // branch and set product_id to the literal string "__submit", then walk on
+    // to the gate carrying it.
+    const f = await s.handle("__submit");
+    expect(f.kind).toBe("choose");
+    if (f.kind !== "choose") throw new Error("unreachable");
+    expect(f.title).toBe("Which product?");
+    expect(runner.calls).toEqual([]);
+
+    // Same hole, same guard.
+    const g = await s.handle("__compose");
+    expect(g.kind).toBe("choose");
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("still sends a real value the ordinary way", async () => {
+    const runner = fakeRunner();
+    const s = new Session({ source: "Shop", runner });
+    await s.start();
+    await s.handle("add_to_cart");
+    const f = await s.submitText("oat-1");
+    // Straight to the gate, carrying the wearer's text and nothing else.
+    expect(f.kind).toBe("confirm");
+    if (f.kind !== "confirm") throw new Error("unreachable");
+    expect(f.target).toContain("oat-1");
   });
 });
 
@@ -216,8 +379,11 @@ describe("failure handling", () => {
  * broken, and the machine has to be the thing that holds.
  */
 describe("a planner the machine does not trust", () => {
+  // Names a consequential tool as a "resolver", which is the one path that
+  // would otherwise run with nobody in front of it. `pickTool` has to name
+  // something for the request to get far enough to ask for a resolver at all.
   const consequentialResolver: Planner = {
-    pickTool: async () => null,
+    pickTool: async () => ({ name: "add_to_cart", args: {} }),
     planResolver: async () => ({ name: "add_to_cart", args: { product_id: "oat-1" } }),
   };
 
@@ -319,7 +485,7 @@ describe("a planner the machine does not trust", () => {
       onAudit: (e) => audit.push({ kind: e.kind, toolName: e.toolName, detail: e.detail }),
     });
     await s.start();
-    await s.handle("add_to_cart");
+    await s.submitText("some oat milk");
     expect(runner.calls).toEqual([]);
     expect(audit).toContainEqual({
       kind: "plan",
@@ -342,7 +508,7 @@ describe("a planner the machine does not trust", () => {
     // The wearer is asked for the value instead of being stranded.
     expect(f.kind).toBe("choose");
     if (f.kind !== "choose") throw new Error("unreachable");
-    expect(f.choices.map((c) => c.id)).toEqual(["__compose"]);
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit"]);
     expect(runner.calls).toEqual([]);
   });
 });
@@ -396,15 +562,17 @@ describe("what the wearer sees while waiting", () => {
 
   it("shows that it is looking up options before the candidates appear", async () => {
     const planner: Planner = {
-      pickTool: async () => null,
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
       planResolver: async () => ({ name: "search_products", args: { query: "oat" } }),
     };
     const { s, seen } = watched(planner);
     await s.start();
     seen.length = 0;
-    await s.handle("add_to_cart");
-    expect(seen.map((f) => f.kind)).toEqual(["working", "choose"]);
-    expect(seen[0]?.kind === "working" && seen[0].note).toBe("Looking up your options");
+    await s.submitText("some oat milk");
+    // Two waits, and the wearer has to see both: one to work out which tool,
+    // then one to look up what to put in it.
+    expect(seen.map((f) => f.kind)).toEqual(["working", "working", "choose"]);
+    expect(seen[1]?.kind === "working" && seen[1].note).toBe("Looking up your options");
   });
 });
 

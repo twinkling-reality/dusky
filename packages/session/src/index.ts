@@ -97,8 +97,36 @@ export interface SessionOptions {
 /** Shown on the menu when a spoken request did not turn into anything. */
 const UNHEARD = "Could not tell what that meant. Choose an action";
 
-/** A lookup that saves typing must not cost more than the typing would. */
+/**
+ * A lookup that saves typing must not cost more than the typing would.
+ *
+ * This bounds the WHOLE attempt, deciding included. It used to bound only the
+ * invocation, which left the expensive half unbounded: choosing `search_products`
+ * on the deployed stack spent 1138ms on a fast model and 3696ms on a careful
+ * one, both correctly abstaining, before the wearer was shown the composer
+ * they were always going to get. Nearly five seconds, outside the budget whose
+ * comment forbids exactly that, on the most common action in the product.
+ */
 const RESOLVER_BUDGET_MS = 6_000;
+
+/**
+ * How much of that a planner may spend DECIDING what to look up.
+ *
+ * Deliberately much less than half. The two costs are not worth the same: time
+ * spent deciding buys nothing on its own, while time spent invoking is what
+ * actually produces the choices. A budget split evenly between them can be
+ * fully consumed and still leave the wearer with an empty list.
+ *
+ * It is also the cheaper thing to give up on. If a planner cannot say what to
+ * look up within this, asking the wearer is a better answer than making them
+ * watch, because the composer was always the fallback and every extra second
+ * of shimmer is a second they could have been writing.
+ *
+ * `search_products` is the case that sets the number. Its parameter is a
+ * search query, so no upstream tool can ever supply one, and no amount of
+ * model time changes that. The first tier reached that answer in 1138ms.
+ */
+const RESOLVER_PLAN_BUDGET_MS = 2_500;
 
 /* ------------------------------------------------------------------ state */
 
@@ -384,6 +412,23 @@ export class Session {
     }
     if (choiceId === "__confirm") return this.onConfirm();
 
+    /*
+     * The composer's own rows are not values.
+     *
+     * Both fall through to the parameter branch below otherwise, which coerces
+     * whatever id arrives into the answer: pressing "Done" on an empty field
+     * set the parameter to the literal string "__submit" and walked on to the
+     * gate with it. `__compose` had the same hole and had simply never been
+     * reachable on a frame with something pending.
+     *
+     * Ignoring them is right rather than merely safe. "Done" exists so focus
+     * can leave the input, and leaving the input is what commits the text, so
+     * by the time this id arrives the real answer has already been sent by
+     * `submitText` and this frame is gone. When the field was empty there is
+     * nothing to send and the wearer should stay where they are.
+     */
+    if (choiceId === "__compose" || choiceId === "__submit") return this.frame;
+
     // Selecting a value for the parameter currently on screen.
     if (this.pending?.awaiting) {
       this.pending.args[this.pending.awaiting] = coerce(choiceId, this.awaitingParam());
@@ -455,19 +500,60 @@ export class Session {
       p.awaiting = missing.name;
       let candidates: Choice[] = [];
 
-      // A bare string is where a prior read-only tool earns its keep: rather
-      // than asking the wearer to spell a product id, run something that
-      // produces them and offer the results as choices.
-      if (missing.kind === "text" && this.o.planner) {
+      /*
+       * A bare string is where a prior read-only tool earns its keep: rather
+       * than asking the wearer to spell a product id, run something that
+       * produces them and offer the results as choices.
+       *
+       * ONLY when the wearer actually said something. `this.intent` is set by
+       * `submitIntent` and by nothing else, so it is empty for every tool
+       * chosen off the menu, which is most of them.
+       *
+       * With no intent there is nothing to resolve FROM. The planner is being
+       * asked which arguments a lookup needs on behalf of somebody who
+       * requested nothing, so it can only invent them, and inventing arguments
+       * is the one thing this planner is built not to do: it "never fills an
+       * argument by lexical similarity, because a wrong argument is exactly
+       * what a model is there to avoid". Nothing is a weaker basis than
+       * lexical similarity.
+       *
+       * That is not theoretical. Choosing "Search catalog" off the menu spent
+       * 1138ms on a fast model and 3696ms on a careful one, both correctly
+       * abstaining, and choosing "Book table" got as far as calling
+       * `find_times({})` after both proposed arguments were dropped for not
+       * being declared enum members. Neither could have produced a candidate,
+       * and the wearer waited on a working frame to find that out.
+       *
+       * A wearer who SPOKE is the case this path was written for, and there
+       * the intent is exactly what makes the lookup answerable.
+       */
+      if (missing.kind === "text" && this.o.planner && this.intent.trim() !== "") {
         this.show(busyFrame(this.o.source, label(p.tool), "Looking up your options"));
+        // One clock for the whole attempt, started before the planner is
+        // asked anything, because the wearer is already waiting by then.
+        const resolverStartedAt = this.now();
         let plan: { name: string; args: Record<string, unknown> } | null = null;
         try {
-          plan = await this.o.planner.planResolver(
-            missing.name,
-            p.tool,
-            this.readOnly(),
-            this.intent,
+          const decided = await Session.within(
+            this.o.planner.planResolver(missing.name, p.tool, this.readOnly(), this.intent),
+            RESOLVER_PLAN_BUDGET_MS,
           );
+          if (decided.timedOut) {
+            // Recorded rather than silent. A wearer sent to the composer
+            // because a model was slow looks identical to one sent there
+            // because no tool could have helped, and those want different
+            // fixes.
+            this.audit({
+              kind: "plan",
+              detail: {
+                path: "planResolver",
+                stage: "undecided",
+                ms: this.now() - resolverStartedAt,
+              },
+            });
+          } else {
+            plan = decided.value;
+          }
         } catch (err) {
           this.audit({ kind: "plan", detail: { path: "planResolver", failed: msg(err) } });
         }
@@ -498,26 +584,39 @@ export class Session {
               origin: resolver.origin,
               detail: { path: "planResolver", accepted: true, args },
             });
-            try {
-              // Shorter than an action's budget on purpose: this is a lookup
-              // meant to save the wearer some typing, and it is better to ask
-              // them than to hold a frame while a site thinks about it.
-              const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, RESOLVER_BUDGET_MS);
-              const out = await this.invokeWithin(resolver.origin, resolver.name, args, budget);
-              if (out.timedOut) {
-                this.audit({
-                  kind: "error",
-                  toolName: resolver.name,
-                  origin: resolver.origin,
-                  detail: { reason: "resolver timeout" },
-                });
-                candidates = [];
-              } else {
-                this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
-                candidates = candidatesFromResult(out.raw);
-              }
-            } catch {
+            // What is LEFT of the attempt, not the whole budget over again.
+            // Deciding and looking up used to get `RESOLVER_BUDGET_MS` each,
+            // so the ceiling the constant names could be exceeded without
+            // either half going over it.
+            const left = RESOLVER_BUDGET_MS - (this.now() - resolverStartedAt);
+            const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, left);
+            if (budget <= 0) {
+              // Nothing left to look up with. Say so and let them write.
+              this.audit({
+                kind: "error",
+                toolName: resolver.name,
+                origin: resolver.origin,
+                detail: { reason: "no resolver budget left after planning" },
+              });
               candidates = [];
+            } else {
+              try {
+                const out = await this.invokeWithin(resolver.origin, resolver.name, args, budget);
+                if (out.timedOut) {
+                  this.audit({
+                    kind: "error",
+                    toolName: resolver.name,
+                    origin: resolver.origin,
+                    detail: { reason: "resolver timeout" },
+                  });
+                  candidates = [];
+                } else {
+                  this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
+                  candidates = candidatesFromResult(out.raw);
+                }
+              } catch {
+                candidates = [];
+              }
             }
           }
         }
@@ -613,6 +712,37 @@ export class Session {
           .then((raw) => ({ timedOut: false as const, raw })),
         deadline,
       ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Race any promise against a deadline.
+   *
+   * `invokeWithin` does this for tool calls and can abort them. This one
+   * cannot cancel what it is racing, because a `Planner` is a port with no
+   * signal in its contract, so a model call that loses the race goes on
+   * running and its answer is dropped. That is the correct trade here: the
+   * wearer's time is the scarce thing, and the alternative is holding a frame
+   * for whatever a third party's model decides to spend.
+   */
+  private static async within<T>(
+    work: Promise<T>,
+    ms: number,
+  ): Promise<{ timedOut: true } | { timedOut: false; value: T }> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<{ timedOut: true }>((resolve) => {
+      timer = setTimeout(() => resolve({ timedOut: true }), ms);
+    });
+    const settled = work.then((value) => ({ timedOut: false as const, value }));
+    // A rejection arriving AFTER the deadline was already reported has nobody
+    // left to catch it, and an unhandled rejection can take a process down.
+    // This keeps that case handled without hiding one that arrives in time,
+    // which `Promise.race` below still rejects on.
+    settled.catch(() => {});
+    try {
+      return await Promise.race([settled, deadline]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }

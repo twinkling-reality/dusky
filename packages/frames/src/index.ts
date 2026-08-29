@@ -425,14 +425,35 @@ export function paramFrame(
     };
   }
 
-  // text and number both route to the on-glasses composer, which the wearer
-  // opens with focus then tap. Handwriting or dictation, their choice.
+  /*
+   * text and number both route to the on-glasses composer, which the wearer
+   * opens with focus then tap. Handwriting or dictation, their choice.
+   *
+   * TWO rows, and the second one is not decoration.
+   *
+   * The composer commits on Enter or on blur, and on real glasses neither was
+   * reachable from a frame that offered only the composer. A tap on a focused
+   * text field is taken by the OS to open its own writing surface, so it never
+   * arrives as `Enter`; tapping again just reopens that surface. And `useDpad`
+   * moves focus with `(i +/- 1 + count) % count`, which for `count === 1` is
+   * always 0, so focus could not leave the input and blur could not fire
+   * either. A wearer could write `oat`, see it sitting in the field, and have
+   * no way whatsoever to send it. Verified on hardware 2026-08-28.
+   *
+   * A second row fixes it at the root rather than by adding a third commit
+   * path: arrowing to it moves real DOM focus off the input, which fires the
+   * blur that was always supposed to commit. Selecting it is then a no-op that
+   * the session ignores, because by then the value has already gone.
+   */
   return {
     kind: "choose",
     source,
     title,
-    note: "Tap to write or speak",
-    choices: [{ id: "__compose", label: "Enter a value", meta: "tap" }],
+    note: "Tap to write or speak, then Done",
+    choices: [
+      { id: "__compose", label: "Enter a value", meta: "tap" },
+      { id: "__submit", label: "Done", meta: "enter" },
+    ],
   };
 }
 
