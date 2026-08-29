@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router";
 import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
-import { isCode, mintCode, type PairMode } from "./session.js";
+import { codeProblem, isCode, mintCode, type PairMode } from "./session.js";
 import { SOURCES, sourceFromQuery } from "./sources.js";
 import { useConsoleLink } from "./useConsoleLink.js";
 import styles from "./Workspace.module.css";
@@ -275,7 +275,7 @@ export function Workspace() {
                   Pair
                 </button>
               </div>
-              <p className={styles.hint}>The six letters on the lens.</p>
+              <p className={styles.hint}>{codeProblem(typed) ?? "The six letters on the lens."}</p>
             </form>
           </section>
         ) : (
@@ -324,6 +324,26 @@ export function Workspace() {
             <div className={styles.grid}>
               <section className={styles.cell}>
                 <h2 className={styles.h2}>Glasses</h2>
+                {/*
+                  Which window is driving this session.
+
+                  `useConsoleLink` has computed `superseded` since two tabs on
+                  one code were first made to stop fighting, and nothing ever
+                  rendered it. So the window that LOST kept its heading, its
+                  tool list and its activity log, and looked exactly like the
+                  one that won. With two browsers open, which is the ordinary
+                  case the moment somebody needs a second one with the WebMCP
+                  flag, there was no way to tell them apart at all.
+
+                  Same shape as `workingFrame` being computed and never
+                  transmitted: a state the code knows and the person does not.
+                */}
+                {link.link === "superseded" && (
+                  <p className={styles.hint} role="status">
+                    <strong>Another window took over this session.</strong> Nothing here is live any
+                    more. Close this window, or pair it again to take the session back.
+                  </p>
+                )}
                 {mode === "embedded" ? (
                   <div className={styles.stage} data-squircle="">
                     <iframe
