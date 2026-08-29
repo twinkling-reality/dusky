@@ -66,6 +66,78 @@ the code until the relay sends something, and the relay was overwriting it
 immediately on connect. The relay now stays silent until a console is actually
 paired.
 
+### The glasses stopped being able to open a WebSocket, and the panel said so badly
+
+Unresolved as of 2026-08-28, and recorded because the evidence took an hour to
+gather and nobody should gather it twice.
+
+The symptom a wearer reports is "it flickers between a code and an error". The
+code sits still for a few seconds after launch and then alternates with
+**Cannot reach Dusky / The session relay is unreachable. Still trying.**
+
+What that alternation means is worth stating, because it was misread twice
+here before the relay settled it. The pairing frame renders the code whenever
+the link is `connecting`, `open` or `reconnecting`, and only swaps to the error
+once `attempts > RECONNECT_MS.length`. So the first few seconds are the
+reconnect ladder, not a healthy connection, and the flicker afterwards is not
+evidence that a socket ever opened.
+
+The relay is the only place that can answer this, and it answers immediately:
+a session actor is created on `hello`, so if a Display had ever completed a
+handshake, `/health` would count it. It never did, across ten minutes and two
+different phone network paths.
+
+Ruled out, each by execution rather than by reasoning:
+
+- The relay. A Node client held a `/display` socket open for 75 seconds,
+  answered every `ping` with a `pong`, and correctly pushed no frame with no
+  console paired.
+- The deployed bundle. It dials `wss://dusky-relay.onrender.com/display`, with
+  no `localhost` anywhere in it, and mints codes from the letters-only
+  alphabet. Both `toString(36)` hits in it are React internals.
+- A stale cached build. There is no service worker, and `/sw.js`,
+  `/manifest.json` and friends all 404.
+- CSP. The Display sends no `Content-Security-Policy` header at all.
+- IPv6. Neither Render nor Vercel publishes an AAAA record, so an IPv6-only
+  path could not have loaded the page either.
+- Cloudflare filtering by client identity. The relay is Cloudflare-fronted and
+  Vercel is not, which is a real asymmetry between the request that works and
+  the one that does not, but the upgrade succeeds with no User-Agent, a curl
+  one, a desktop Chrome one and a spoofed Meta wearable one.
+- The phone's network. Wi-Fi and cellular behave identically.
+- localStorage. The code is stable across relaunches, so `mintCode` is not
+  re-running and storage is persisting. That much of `AGENTS.md` is right.
+
+That leaves the glasses' own runtime, and one more web app settles which half
+of it. Loading `https://dusky-relay.onrender.com/health` as a second web app
+renders `{"ok":true,"sessions":14}` on the lens.
+
+**So the glasses reach the relay perfectly well over HTTPS, and fail only on
+the WebSocket upgrade.** Same host, same TLS, same DNS, same phone, minutes
+apart. Whatever is broken sits between an ordinary GET and an `Upgrade:
+websocket`, and it is on the device side, because every hop this end serves
+both from the same process.
+
+That is the useful shape of the finding. It rules out an entire class of
+explanation that looks identical from the wearer's chair: the glasses are not
+offline, the relay is not unreachable, the URL is not wrong, and nothing is
+being filtered by host. A Meta web app can talk to this server. It just cannot
+hold a socket to it.
+
+Two things are worth keeping regardless of the cause.
+
+The first is that this hardware demonstrably held WebSockets on 2026-08-26,
+including surviving a forty second relay redeploy. So a Meta web app's ability
+to hold a socket is not a property you verify once.
+
+The second is a wording bug this exposed. "Cannot reach Dusky" is only
+reachable BEFORE the first frame arrives, because the Display renders
+`relay.frame ?? pairingFrame(...)` and a delivered frame is never taken back.
+That is the correct design, and it also means the error frame is the one screen
+a wearer sees when they cannot yet do the single thing that would clear it.
+Nothing tells them the code is still valid and still worth typing. The panel
+had the code a moment ago and replaced it with a sentence about plumbing.
+
 ---
 
 ## Deploying it
@@ -181,6 +253,205 @@ format, which is now a test that runs in CI without a credential.
 
 ---
 
+## Running it with a planner on
+
+Everything here is only reachable in production. `DUSKY_PLANNER` is off
+locally, so the whole resolver path is unexecuted by `pnpm test` and
+`pnpm test:e2e`, and both suites pass without ever entering it.
+
+### A resolver asked to look something up, with nothing to look it up from
+
+Choosing "Book table" on Amber & Oak spends a model call and shows a
+`Looking up your options` frame, and then asks the wearer to type an opaque
+slot id anyway. The lookup cannot succeed, and the reason is structural rather
+than a mistake by the model.
+
+`book_table` needs `slot_id`, which is text, so `Session.advance` takes the
+branch that asks a planner for a read-only tool whose output would supply it.
+It calls `planResolver(missing, target, readOnly, this.intent)`. On the MENU
+path `this.intent` is still `""`, because only `submitIntent` ever assigns it.
+
+So the model is asked which arguments `find_times` should be called with, for a
+wearer whose request is the empty string. `find_times` declares `date` as an
+enum of `today`, `tomorrow`, `this weekend` and `party_size` as an integer enum
+of 1 to 4, and the card does tell the model both lists. With nothing to infer
+from it guesses anyway, the guesses are not enum members, and `valueForParam`
+drops them. The audit trail is exact about it:
+
+```
+plan  find_times  {"stage":"proposed","droppedArgs":["date","party_size"]}
+plan  find_times  {"path":"planResolver","accepted":true,"args":{}}
+```
+
+`find_times({})` is then a perfectly valid call that returns `{"slots":[]}`,
+verified by invoking it directly through `document.modelContext`. No candidates,
+so the wearer gets the composer they would have got instantly with no planner
+at all, one model call and one working frame later.
+
+The argument filter did its job and the gate did its job. What is missing is
+that nothing checks whether a proposal still satisfies the target's `required`
+list AFTER filtering. `required` is read in `cards.ts`, in `planner.ts` for the
+no-model shortcut, and twice in `frames`, and in none of those places is it
+used to reject a proposal that has been emptied out.
+
+The cheaper observation is that a resolver invoked with an empty intent has no
+information to resolve from, and asking a model to invent one is the one thing
+the planner is documented not to do: "It never fills an argument by lexical
+similarity, because a wrong argument is exactly what a model is there to
+avoid." An empty intent is a weaker basis than lexical similarity.
+
+Worth contrasting with what DOES work, because it is the anti-hardcoding
+argument and it works exactly as claimed. "Find a table" compiles straight from
+the schema with no model involved:
+
+```
+CHOOSE  Which day?        today / tomorrow / this weekend
+CHOOSE  How many people?  1 / 2 / 3 / 4
+```
+
+A string enum and an integer enum, both rendered as buttons, from a site whose
+vocabulary shares nothing with the market's.
+
+### Free text could be written and never sent
+
+The composer was the last thing on the unverified list, and it was broken. A
+wearer could open it, write `oat`, watch the text land in the field, and have
+no way at all to submit it.
+
+Three things were each individually reasonable and together left no way out.
+
+`Composer` commits on exactly two events, which is correct and deliberate:
+
+```tsx
+onBlur={(e) => commit(e.currentTarget.value)}
+onKeyDown={(e) => { if (e.key === "Enter") commit(...) }}
+```
+
+`Enter` never arrives. A tap on a focused text field is taken by the glasses OS
+to open its own writing surface, so it is consumed before the page sees a key
+at all. Tapping again just reopens that surface, which is what the wearer
+reports: the same dictate-or-handwrite chooser, over and over.
+
+And blur could not fire either, because `paramFrame` offered exactly one row:
+
+```ts
+choices: [{ id: "__compose", label: "Enter a value", meta: "tap" }]
+```
+
+`useDpad` moves focus with `(i +/- 1 + count) % count`. For `count === 1` that
+is always `0`, so every arrow press re-focuses the input the wearer is already
+on. There is no other focusable element on the frame and therefore nothing that
+could take focus away.
+
+None of the three parts is wrong on its own. The composer's two commit paths
+are the right two. Wrapping focus is right on a list. The OS taking a tap on a
+text field is right. What is wrong is that the only frame that needs a way OUT
+of a text field was also the only frame with nowhere else to go.
+
+The fix is a second row rather than a third commit path. "Done" gives focus
+somewhere to move, and moving off the input fires the blur that was always
+supposed to commit. Selecting it is a no-op the session ignores.
+
+That last part needed a guard, and finding it was worth the trip on its own.
+`handle` falls through to "selecting a value for the parameter currently on
+screen" for any id it does not recognise, so a wearer pressing "Done" on an
+empty field would have set `product_id` to the literal string `"__submit"` and
+carried it to the confirmation. `__compose` had exactly the same hole and had
+simply never been reachable on a frame with something pending. Reserved ids are
+now refused before that branch.
+
+Two smaller things from the same session, both undocumented by Meta:
+
+- **Swipe left moves the cursor, it does not delete.** There is no documented
+  way to erase a character. Escape backs out of the composer without
+  committing, which is the only reliable correction.
+- **Meta's full developer documentation, all 210KB of `llms.txt?full=true`,
+  contains nothing about handwriting, dictation, or any editing gesture.**
+  Searching it for `backspace`, `delete`, `erase`, `handwrit` and `dictat`
+  returns only instructions for deleting projects from their web dashboard.
+  That is now three gaps in the same place: the launcher, the exit, and the
+  entire text input surface. Meta documents how to ship a web app in detail and
+  documents nothing about what a wearer's hands actually do.
+
+The general lesson is the one this file keeps relearning. Every part of this
+was reachable in a browser, where a mouse click can blur an input and a
+keyboard has an Enter key. The desk has affordances the waveguide does not, and
+a test that passes at a desk is evidence about the desk.
+
+### A budget that bounded the cheap half
+
+Choosing "Search catalog" on the glasses sat on a `Looking up your options`
+frame for nearly five seconds and then showed the composer. The audit says
+exactly where the time went:
+
+```
+02:00:56.377  plan  {"stage":"shortlist","path":"planResolver","considered":1,"sent":1}
+02:00:57.515  plan  {"stage":"abstained","tier":"fast",    "ms":1138}
+02:01:00.073  plan  {"stage":"abstained","tier":"careful", "ms":3696}
+```
+
+Nothing there is wrong. The planner was asked whether any read-only tool could
+supply the `query` for `search_products`, and both tiers correctly said no,
+because a search query IS the input and no upstream tool can ever produce one.
+The escalation to a careful tier is by design: an abstention is exactly the
+"unsure" case a second tier exists for.
+
+The bug is that `packages/session` says this, on the constant:
+
+> A lookup that saves typing must not cost more than the typing would.
+
+and then applied it to the wrong half:
+
+```ts
+const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, RESOLVER_BUDGET_MS);
+const out = await this.invokeWithin(resolver.origin, resolver.name, args, budget);
+```
+
+That bounds the invocation. The two model calls happen above it and were bounded
+by nothing the session knew about, so the ceiling the comment names could be
+exceeded without either half going over it. The expensive part was the part
+with no deadline.
+
+Worth separating the two things this got wrong, because only one of them is
+about a number.
+
+The first is a scope error: a deadline on the second step of a two step
+operation is not a deadline on the operation. The wearer is waiting from the
+first step.
+
+The second is that the two halves are not worth the same. Time spent deciding
+buys nothing on its own; time spent invoking is what produces the choices. A
+budget split evenly can be spent in full and still leave an empty list. So the
+planning share is now `RESOLVER_PLAN_BUDGET_MS`, well under half of the total,
+and the invocation gets what is LEFT rather than a fresh allowance.
+
+Giving up on deciding is also recorded now, as `stage: "undecided"`. A wearer
+sent to the composer because a model was slow and one sent there because no
+tool could have helped see an identical screen, and those want different fixes.
+
+The general shape is worth keeping: an optional convenience with no deadline is
+not optional, because the wearer cannot skip it. Everything here that can hold
+a frame has a budget, and this was the one path where the budget was measured
+from the wrong moment.
+
+### The production suite went stale in the two ways a UI suite always does
+
+`e2e/production.spec.ts` failed four of nine, and none of the failures were
+production. One locator matched a sentence that had been reworded, and three
+asserted that `add_to_cart` was on the Display's first page.
+
+The second kind is the interesting one, because nothing about `add_to_cart`
+changed. `menuOrder` began sorting by what a press costs, so reads come first,
+and the composer took a permanent slot once a planner was configured. Two
+changes elsewhere moved a row onto page two, and the test that named that row
+was the only thing that noticed.
+
+A readiness assertion should not name a specific tool. It now waits for the
+idle frame's own heading, and the test that genuinely needs a gated tool pages
+to it the way a wearer would.
+
+---
+
 ## Found by reading rather than running
 
 Worth listing separately: these were all live in a passing test suite.
@@ -291,7 +562,16 @@ Honest gaps, not oversights.
   **Still untested: the suspend itself.** Nothing here has met a sleeping pair
   of glasses. The mechanism is now present and exercised; whether 15s and 30s
   are the right numbers against a real radio is a guess.
-- **The composer's focus-then-tap behaviour** on handwriting and dictation.
+- **Why a Meta web app can reach a host over HTTPS but not open a WebSocket to
+  it.** It could on 2026-08-26 and could not on 2026-08-28, from the same
+  glasses against the same relay, with `/health` rendering on the lens the
+  whole time. Everything on this end is ruled out by execution. Written up
+  under "Wearing it". The open question is now entirely about the device
+  runtime, which is the half we cannot instrument.
+- ~~**The composer's focus-then-tap behaviour** on handwriting and
+  dictation.~~ Answered 2026-08-28. Focus-then-tap DOES open Meta's composer
+  and it offers both dictation and handwriting. Sending what you wrote did not
+  work at all; see "Free text could be written and never sent".
 - **How a wearer launches or exits a web app on the glasses.** Meta's own
   documentation covers deployment and the companion-app flow in detail and does
   not describe the on-device launcher at all.
