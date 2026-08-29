@@ -88,7 +88,7 @@ function WhatIsThis({
           <dd>Every call between Dusky and those sites, as it happens.</dd>
         </div>
       </dl>
-      <p className={styles.whatDo}>Press a row on the glasses. Watch the cart change beside it.</p>
+      <p className={styles.whatDo}>Press a row on the glasses. Watch the matching site change.</p>
     </section>
   );
 }
@@ -251,7 +251,7 @@ export function Workspace() {
           you can do".
 
           That left one link alone on a row costing the page fifty pixels it no
-          longer has, because two site frames and seven actions need the height.
+          longer has, because three site frames and eleven actions need the height.
           It was never a control over the content anyway. It is the way to a
           different mode, which is what the header is for.
         */}

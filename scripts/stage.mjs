@@ -54,7 +54,7 @@ const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
 /*
  * Into the shop first.
  *
- * Dusky holds every site at once, and seven actions do not fit a four-row
+ * Dusky holds every site at once, and eleven actions do not fit a four-row
  * panel, so the menu a wearer lands on is a row per business. `Add to cart` is
  * behind the one that sells things. This step is the product, not a detour
  * around it: the frame it leads to is the same frame it always was.
@@ -95,7 +95,7 @@ const clip = await page.evaluate(() => {
   if (!lens || sites.length === 0) throw new Error("the columns are not all on screen");
   // The lens's own box is the 600x600 frame scaled into a smaller stage, so the
   // clip is taken from that stage rather than from the frame inside it.
-  // Every partner site is in the picture, because two businesses that have
+  // Every partner site is in the picture, because three businesses that have
   // never heard of each other, live in one tab, is what there is to see.
   const boxes = [
     (lens.closest("div") ?? lens).getBoundingClientRect(),

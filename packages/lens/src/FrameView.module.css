@@ -71,11 +71,53 @@
   color: var(--emit-bright);
 }
 
+/* Keep every approved scalar visible when a bounded transferred value joins
+   another destination argument. The words stay exact; only their scale moves. */
+.targetLong {
+  font-size: 30px;
+  line-height: 1.14;
+}
+
+.targetDense {
+  font-size: 23px;
+  line-height: 1.2;
+}
+
 .consequence {
   margin: 0;
   font-family: var(--dusky-mono);
   font-size: 24px;
   color: var(--emit-accent);
+}
+
+.transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.route {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 17px;
+  color: var(--emit-accent);
+}
+
+.argument {
+  margin: 0;
+  font-size: 17px;
+  color: var(--emit-dim);
+}
+
+.preview {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.35;
+  color: var(--emit-bright);
+  overflow-wrap: anywhere;
 }
 
 .detail {
@@ -293,6 +335,8 @@
 }
 
 .factValue {
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
   font-size: 20px;
   color: var(--emit-bright);

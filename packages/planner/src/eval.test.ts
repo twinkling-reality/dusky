@@ -1,5 +1,6 @@
+import { parameters, shareableProjectionsFromResult, valueForParam } from "@dusky/frames";
 import { describe, expect, it } from "vitest";
-import { ALL_TOOLS, COMPOUND_CORPUS, CORPUS } from "./eval.fixtures.js";
+import { ALL_TOOLS, COMPOUND_CORPUS, CORPUS, HANDOFF_CORPUS } from "./eval.fixtures.js";
 import { shortlist } from "./rank.js";
 
 /**
@@ -11,7 +12,7 @@ import { shortlist } from "./rank.js";
  * chosen by reasoning rather than by counting. Ranking is deterministic and
  * has no model in it, so this costs nothing and needs no credential.
  *
- * It is a floor, not a benchmark. Nineteen labelled requests over eleven tools
+ * It is a floor, not a benchmark. Twenty-one labelled requests over thirteen tools
  * from four domains will not tell anyone the true recall of this ranker; it
  * will tell them whether six is obviously too small, and it will fail loudly
  * if somebody makes the ranking worse.
@@ -41,11 +42,13 @@ describe("how much the shortlist has to hold", () => {
   /**
    * The measured value, as a regression guard rather than as a target.
    *
-   * 16/19 at the shipped size of six. It was 14 before both sides of lexical
+   * 18/21 at the shipped size of six. The communications source added two
+   * labelled requests and two tools while keeping all but three answers in the
+   * shortlist. Before that addition it was 16/19, up from 14 after both sides of lexical
    * matching reduced ordinary action synonyms to the same concept, so `find`
    * can admit a `search` tool and `tell` can admit a `send_message` tool without
    * adding a business noun to the ranker. The change also takes joint coverage
-   * over the compound corpus from 3/4 to 4/4 at the same size.
+   * over the then-current compound corpus from 3/4 to 4/4 at the same size.
    *
    * The 14 was itself 13 until leftover slots started being shared between
    * origins instead of handed out in rank order, which with every score at
@@ -64,7 +67,7 @@ describe("how much the shortlist has to hold", () => {
    */
   it("keeps the right tool reachable at the size actually shipped", () => {
     const { hit, missed } = recallAt(6);
-    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(16);
+    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(18);
   });
 
   it("never drops a tool it had room for", () => {
@@ -89,6 +92,33 @@ describe("how much the shortlist has to hold", () => {
       expect(hit, `recall fell going to ${k}`).toBeGreaterThanOrEqual(last);
       last = hit;
     }
+  });
+});
+
+describe("result-to-argument handoff coverage", () => {
+  it("keeps an exact compatible projection for every fixture", () => {
+    const missed: string[] = [];
+    for (const fixture of HANDOFF_CORPUS) {
+      const param = parameters(fixture.destination).find(
+        (candidate) => candidate.name === fixture.argument,
+      );
+      if (!param) {
+        missed.push(`${fixture.name} -> destination argument missing`);
+        continue;
+      }
+      const compatible = shareableProjectionsFromResult(fixture.result).filter(
+        (projection) => valueForParam(projection.value, param) !== undefined,
+      );
+      if (!compatible.some((projection) => projection.location === fixture.expectLocation)) {
+        missed.push(
+          `${fixture.name} -> wanted ${fixture.expectLocation}, got ${compatible.map((projection) => projection.location).join(", ")}`,
+        );
+      }
+    }
+    console.log(
+      `result handoff coverage: ${HANDOFF_CORPUS.length - missed.length}/${HANDOFF_CORPUS.length}`,
+    );
+    expect(missed, missed.join("\n")).toEqual([]);
   });
 });
 

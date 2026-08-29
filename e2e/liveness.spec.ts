@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { freshCode } from "./session-code.js";
 
 /**
  * The link has to be able to notice its own death.
@@ -64,7 +65,7 @@ test("the link badge is legible and out of the frame's way", async ({ page }) =>
   // Display in a degraded link for long enough to measure it. Locally the
   // relay answers in milliseconds, so the badge is otherwise never on screen.
   await page.routeWebSocket(/.*/, (ws) => ws.close());
-  await page.goto("http://localhost:7802/?session=QUYETA");
+  await page.goto(`http://localhost:7802/?session=${freshCode()}`);
 
   const badge = page.locator("div[class*='_link_']");
   await expect(badge, "no badge on a link that will not come up").toHaveCount(1);

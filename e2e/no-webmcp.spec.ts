@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { freshCode } from "./session-code.js";
 
 /**
  * What a wearer is told when the BROWSER is the problem.
@@ -15,14 +16,15 @@ import { expect, test } from "@playwright/test";
  */
 test.use({ launchOptions: { args: [] } });
 
-const CODE = "WMCPXA";
-
 test("a browser that cannot speak WebMCP is not reported as an empty site", async ({ context }) => {
+  // A relay may be reused across local Playwright invocations. A fresh code
+  // keeps this test from reconnecting to task state left by an earlier run.
+  const code = freshCode();
   const display = await context.newPage();
-  await display.goto(`http://localhost:7802/?session=${CODE}`);
+  await display.goto(`http://localhost:7802/?session=${code}`);
 
   const console_ = await context.newPage();
-  await console_.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
+  await console_.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
 
   const panel = display.locator("div[data-kind]");
   await expect(panel).toBeVisible();
@@ -83,5 +85,5 @@ test("the embedded panel says the same thing, on the path a judge actually takes
   await expect(actions.getByText(/exposedTo/)).toHaveCount(0);
   // What it says instead, once per site: it could not read. True of a browser
   // that never reached any of them, and true whatever those sites published.
-  await expect(actions.getByText(/Could not read what/)).toHaveCount(2);
+  await expect(actions.getByText(/Could not read what/)).toHaveCount(3);
 });

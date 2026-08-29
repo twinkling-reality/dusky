@@ -6,8 +6,10 @@ Dusky reads what every site in your browser can do, over
 [WebMCP](https://github.com/webmachinelearning/webmcp), and puts all of it on a
 pair of glasses as one list. Starting with Meta Ray-Ban Display.
 
-One sentence can cross two businesses that have never heard of each other.
-Nothing that costs you anything happens without you saying yes.
+One sentence can cross businesses that have never heard of each other. When a
+result must cross with it, the exact information stops on the lens first.
+Sharing that information and authorizing the destination action are separate
+decisions.
 
 ## Why
 
@@ -29,18 +31,21 @@ Dusky reads that list and assembles a screen for it, one question at a time,
 sized for the lens. No app per site, no app store, no per-device port, and
 nothing for the site to build beyond declaring its tools.
 
-There is no code in this repository for any particular website.
+No shared package branches on a particular website, origin, tool, or result key.
+The three first-party sources exist to prove that boundary with unrelated
+vocabularies.
 
 ## The part that needs no integration
 
 Dusky holds every participating site at once, not one at a time. That is a
 smaller change than it sounds and a bigger claim than it looks.
 
-"Book a table for two tomorrow and add oat milk to my cart" is one errand across
-a restaurant and a shop. The two businesses have never heard of each other,
-there is no partnership, no connector and no code here that knows either exists.
-Doing that normally needs somebody to build the bridge. An app cannot do it at
-all, because an app belongs to one company.
+"Reserve a table for four, then send the reservation details to Dana" is one
+errand across a restaurant and a communications desk. The businesses have never
+heard of each other, there is no partnership or connector between them, and the
+shared machine knows neither vocabulary. Doing that normally needs somebody to
+build the bridge. An app cannot do it at all, because an app belongs to one
+company.
 
 The browser is what makes it possible, because the browser is the one place that
 already holds all of your sessions. So the glasses stop being a screen and
@@ -48,8 +53,8 @@ become the place a person says yes: an agent may propose anything, across
 anything, and `packages/session` still stops every consequential step and waits
 for the wearer.
 
-That sentence is one task, not a slogan over two separate demos. The planner
-returns the restaurant action and the shop action as an ordered plan. Dusky
+That sentence is one task, not a slogan over separate demos. The planner returns
+the reservation and message actions as an ordered plan. Dusky
 validates the whole plan before starting, caps it at four actions, and refuses
 all of it if any action was not actually offered. After the first result, the
 lens shows the next action and its position in the task. The wearer advances it,
@@ -62,6 +67,15 @@ tool from the SAME SITE as the action it is filling in. Otherwise what somebody
 said out loud about a restaurant could be handed to a shop that has nothing to
 do with it, quietly, on the one path with nobody watching.
 
+Cross-site result reuse takes a different path. Dusky reduces the returned
+result to bounded primitive fields and a generic summary, each with source
+provenance and a stable location. It does not retain the raw result or send it
+back to the model. Dana is resolved by the communications site's own read-only
+lookup. The wearer then chooses a result projection and sees a transfer frame
+that names Amber & Oak, Northstar Dispatch, the destination argument, and the
+exact value. Only after Share does that one value fill the message body. Send
+message still stops at its own action confirmation.
+
 ## How it works
 
 ```mermaid
@@ -70,11 +84,15 @@ flowchart TD
   B["Your browser hands that list to Dusky"]
   C["Dusky compiles a screen from the schema"]
   G["You pick, on the glasses<br/>six keys, no cursor"]
+  T{"Would a result cross<br/>into another site?"}
+  H["Stops. You approve the exact value<br/>and named destination on the lens."]
   P{"Does it spend money<br/>or delete something?"}
   K["Stops. You confirm on the lens."]
   R["The tool runs inside the site's own page,<br/>in your own logged-in session"]
 
-  S --> B --> C --> G --> P
+  S --> B --> C --> G --> T
+  T -- yes --> H --> P
+  T -- no --> P
   P -- no --> R
   P -- yes --> K --> R
   R -- "result becomes the next screen" --> C
@@ -93,6 +111,9 @@ Three things worth pointing at:
   the site that offered it, is checked against that site's live schema before it
   starts, and receives its own confirmation. A broken step rejects the plan
   instead of disappearing from the sentence.
+- **Cross-site data gets its own approval.** Only a bounded value shown on the
+  transfer frame can fill the named destination argument. The live destination
+  schema is checked again before use. That approval never approves the action.
 - **Nothing is proxied.** The tool runs in the site's own page, in your browser,
   in your session. Dusky never sees a login or a password.
 
@@ -106,7 +127,7 @@ pnpm install && pnpm dev
 ```
 
 Open <http://localhost:7803> and press **Open Dusky**. You get everything in one
-tab: the glasses view on the left, both partner sites on the right, and every
+tab: the glasses view on the left, all three partner sites on the right, and every
 WebMCP call underneath as it happens.
 
 Press a row on the glasses panel and watch that site change next to it.
@@ -119,11 +140,17 @@ Move with <kbd>↑</kbd><kbd>↓</kbd>, choose with <kbd>Enter</kbd>, back with
 <kbd>Esc</kbd>. Those six keys are the entire input surface of the real device,
 which is why the same build runs here and on the glasses unchanged.
 
-Both sites are live at the same time, and their actions are on one list. Amber &
-Oak is a restaurant, it shares no vocabulary with the shop, and Dusky builds a
-screen for each from the schema alone. Seven actions do not fit a four-row
-panel, so the menu you land on is a row per business and a site's own actions
-are one press behind it.
+All three sites are live at the same time, and their eleven actions are on one
+list. Verdant Market is a shop, Amber & Oak is a restaurant, and Northstar
+Dispatch is a communications desk. Dusky builds every screen from the schemas.
+Eleven actions do not fit a four-row panel, so the menu you land on is a row per
+business and a site's own actions are one press behind it.
+
+The one-sentence reservation-to-message path needs the optional planner, which
+is off by default. The menu remains fully usable without one. The local browser
+proof in `e2e/transfer.spec.ts` uses a deterministic planner stub and real
+WebMCP tools, so it needs no model credential and still exercises the actual
+reservation and outbox documents.
 
 Add `?source=market` to the URL to hold a single site instead. Nothing on the
 page offers that, because a control for using less of the product is not one
@@ -136,7 +163,7 @@ anybody wants; it is there for tests and for a slow connection.
 | `apps/display` | The 600x600 Web App. What the wearer sees. |
 | `apps/console` | The website and the demo. The only surface that touches WebMCP. |
 | `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |
-| `apps/market`, `apps/reservations` | Two unrelated first-party test services. Nothing is sold or reserved. |
+| `apps/market`, `apps/reservations`, `apps/dispatch` | Three unrelated first-party test services. Nothing is sold, reserved, or delivered. |
 | `packages/frames` | The schema-to-frame compiler. Knows no site. |
 | `packages/policy` | Deterministic trust rules. No model, no network, no DOM. |
 | `packages/session` | The task machine. Intent in, frames out. |
@@ -145,13 +172,28 @@ anybody wants; it is there for tests and for a slow connection.
 | `packages/lens`, `packages/tokens`, `packages/contracts` | The panel, the palettes, the shared types. |
 | `e2e` | The round trip, in real Chrome with the real flag. |
 
+## Measured locally
+
+- 324 unit and deterministic tests cover the current tree before the final
+  verification pass.
+- Shortlist recall is 18/21 over thirteen tools at the shipped six slots. Eight
+  slots remains 18/21; the full registry is 21/21.
+- All expected end actions survive for 6/6 compound requests at six slots.
+- Exact compatible result projections survive for 3/3 handoff fixtures.
+- The browser suite holds eleven actions from three origins and drives the full
+  reservation-to-message path through real WebMCP.
+
+These are local measurements, not live deployment evidence. The production
+suite should only be run after the dispatch source and updated console have
+actually been deployed.
+
 ## Limits
 
 - **It does not work with any website.** A site has to name Dusky in
   `exposedTo` before the browser will hand over its tools. That rule is the
   browser's, and it is the right one: otherwise any page could read the tools of
   every site you had open. "Everything you are signed into" means everything
-  that has granted Dusky access, which today is two first-party test services.
+  that has granted Dusky access, which today is three first-party test services.
 - **A model can be wrong.** Nothing consequential runs without you confirming
   it, and Dusky only reports success if the tool actually returned it.
 - **No microphone or camera on the glasses**, and no raw gestures. The OS moves

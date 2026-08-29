@@ -22,6 +22,31 @@ import { type Consequence, classify } from "@dusky/policy";
  */
 export const MAX_CHOICES = 4;
 
+/**
+ * Hard bounds for untrusted tool output that may survive beyond one frame.
+ *
+ * JSON is parsed only inside the character ceiling, traversal is iterative and
+ * capped, and a string is shareable only when the entire sanitized value fits
+ * on the transfer frame. A clipped field would ask the wearer to approve text
+ * they could not fully inspect, so long fields are excluded rather than hidden.
+ */
+export const MAX_RESULT_CHARS = 32_768;
+export const MAX_RESULT_DEPTH = 6;
+export const MAX_RESULT_NODES = 128;
+export const MAX_PROJECTION_CHARS = 120;
+export const MAX_PROJECTIONS = 12;
+
+export type ShareableValue = string | number | boolean;
+
+export interface ShareableProjection {
+  /** Stable JSON Pointer, or #summary for a summary derived by generic code. */
+  location: string;
+  label: string;
+  value: ShareableValue;
+  valueType: "string" | "number" | "boolean";
+  kind: "summary" | "field" | "text";
+}
+
 /* ------------------------------------------------------- schema inspection */
 
 export type ParamKind = "enum" | "boolean" | "text" | "number" | "unsupported";
@@ -193,7 +218,7 @@ export function label(tool: ToolDescriptor): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function humanizeParam(name: string): string {
+export function humanizeParam(name: string): string {
   const words = name.replace(/[_-]+/g, " ").trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -544,6 +569,68 @@ export function paramFrame(
   };
 }
 
+/** Choice ids for retained projections are opaque and never contain a value. */
+export const PROJECTION_PREFIX = "__projection:";
+
+export interface ProjectionChoice {
+  id: string;
+  label: string;
+  preview: string;
+}
+
+/** Choose one exact retained projection before any cross-origin consent step. */
+export function projectionFrame(
+  source: string,
+  from: string,
+  to: string,
+  param: ParamSpec,
+  projections: ProjectionChoice[],
+  page = 0,
+): DisplayFrame {
+  const all = projections.map((p) => ({
+    id: `${PROJECTION_PREFIX}${p.id}`,
+    label: p.label,
+    meta: p.preview,
+  }));
+  const { choices } = paginate(all, page);
+  return {
+    kind: "choose",
+    source,
+    title: `Fill ${humanizeParam(param.name)}?`,
+    note: `${from} to ${to}`,
+    choices,
+  };
+}
+
+/**
+ * The consent boundary for moving one bounded value between origins.
+ *
+ * This is deliberately not a tool confirmation. Sharing information and
+ * authorizing the destination action are separate decisions in the machine.
+ */
+export function transferFrame(
+  source: string,
+  from: string,
+  to: string,
+  argument: string,
+  preview: string,
+): DisplayFrame {
+  return {
+    kind: "transfer",
+    source,
+    title: "Share this information?",
+    from,
+    to,
+    argument: humanizeParam(argument),
+    preview,
+    note: "This shares data only. The action is checked next.",
+    choices: [
+      { id: "__share", label: "Share", meta: "enter" },
+      { id: "__cancel", label: "Cancel", meta: "esc", tone: "danger" },
+    ],
+  };
+}
+
 /**
  * The gate. Built from the tool result and the classified consequence, never
  * from model prose, so the wearer reads the same target the code will send.
@@ -660,6 +747,31 @@ export function errorFrame(
 
 /* ------------------------------------------------------- reading a result */
 
+function cleanResultText(raw: string): string {
+  return (
+    raw
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+/** Inert, single-line display text with a deterministic ceiling. */
+export function safeResultText(raw: string, max = MAX_PROJECTION_CHARS): string {
+  const clean = cleanResultText(raw);
+  if (clean.length <= max) return clean;
+  if (max <= 3) return clean.slice(0, max);
+  return `${clean.slice(0, max - 3)}...`;
+}
+
+/** A complete field value that fits on a transfer frame, never a clipped one. */
+function completeResultText(raw: string): string | null {
+  const clean = cleanResultText(raw);
+  if (clean === "" || clean.length > MAX_PROJECTION_CHARS) return null;
+  return clean;
+}
+
 /**
  * What a tool's returned JSON says about whether it worked.
  *
@@ -676,20 +788,23 @@ export function errorFrame(
  * the same basis on which `candidatesFromResult` reads `id` and `name`.
  */
 export function outcomeFromResult(raw: string): { ok: boolean; message?: string } {
+  if (raw.length > MAX_RESULT_CHARS) return { ok: true };
   const rec = asRecord(safeParse(raw));
   if (!rec) return { ok: true };
 
   const said = (): string | undefined => {
     const m = rec["message"];
-    return typeof m === "string" && m.trim() !== "" ? m.trim() : undefined;
+    return typeof m === "string" && cleanResultText(m) !== "" ? safeResultText(m) : undefined;
   };
 
   const err = rec["error"];
-  if (typeof err === "string" && err.trim() !== "") return { ok: false, message: err.trim() };
+  if (typeof err === "string" && cleanResultText(err) !== "") {
+    return { ok: false, message: safeResultText(err) };
+  }
   const errRec = asRecord(err);
   if (errRec) {
     if (typeof errRec["message"] === "string") {
-      return { ok: false, message: String(errRec["message"]) };
+      return { ok: false, message: safeResultText(String(errRec["message"])) };
     }
     // An error object with something in it is a report of a failure even when
     // it does not carry prose. An empty one reports nothing.
@@ -742,7 +857,7 @@ function factValue(key: string, value: unknown): string | null {
     return MONEY_KEY.test(key.toLowerCase()) ? `$${value.toFixed(2)}` : String(value);
   }
   if (typeof value === "string") {
-    const v = value.trim();
+    const v = cleanResultText(value);
     if (v === "") return null;
     // A value with no spaces in it is an identifier, and an identifier is the
     // one string a wearer may have to read off the lens and type somewhere
@@ -794,18 +909,19 @@ function factValue(key: string, value: unknown): string | null {
  * raw JSON instead, so a wearer got braces and quotes on a waveguide.
  */
 export function textFromResult(raw: string): string | null {
+  if (raw.length > MAX_RESULT_CHARS) return null;
   const parsed = safeParse(raw);
   const rec = asRecord(parsed);
 
   if (!rec) {
     // A JSON string is still a sentence.
-    if (typeof parsed === "string") return parsed.trim() === "" ? null : parsed.trim();
+    if (typeof parsed === "string") return completeResultText(parsed);
     // `safeParse` answers `null` both for "not JSON" and for a literal null,
     // and neither of those is a fact, so only unparseable text falls through
     // to being read as prose.
     if (parsed !== null) return null;
-    const flat = raw.replace(/\s+/g, " ").trim();
-    return flat === "" || flat === "null" ? null : flat;
+    const flat = completeResultText(raw);
+    return flat === null || flat === "null" ? null : flat;
   }
 
   const said = contentText(rec);
@@ -813,7 +929,10 @@ export function textFromResult(raw: string): string | null {
 
   for (const key of ["message", "text", "summary"]) {
     const v = rec[key];
-    if (typeof v === "string" && v.trim() !== "") return v.trim();
+    if (typeof v === "string") {
+      const clean = completeResultText(v);
+      if (clean !== null) return clean;
+    }
   }
   return null;
 }
@@ -826,12 +945,16 @@ function contentText(rec: Record<string, unknown>): string[] {
   for (const item of content) {
     if (typeof item !== "object" || item === null) continue;
     const text = (item as Record<string, unknown>)["text"];
-    if (typeof text === "string" && text.trim() !== "") out.push(text.trim());
+    if (typeof text === "string") {
+      const clean = completeResultText(text);
+      if (clean !== null) out.push(clean);
+    }
   }
   return out;
 }
 
 export function factsFromResult(raw: string, limit = 4): Fact[] {
+  if (raw.length > MAX_RESULT_CHARS) return [];
   const rec = asRecord(safeParse(raw));
   if (!rec) return [];
 
@@ -858,11 +981,113 @@ export function factsFromResult(raw: string, limit = 4): Fact[] {
 }
 
 function safeParse(raw: string): unknown {
+  if (raw.length > MAX_RESULT_CHARS) return null;
   try {
     return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+function projectionValue(value: unknown): ShareableValue | null {
+  if (typeof value === "string") return completeResultText(value);
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return typeof value === "boolean" ? value : null;
+}
+
+function pointerPart(raw: string): string | null {
+  if (raw.length > 64 || cleanResultText(raw) !== raw) return null;
+  return raw.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+/**
+ * Extract the only result material a later task step is allowed to retain.
+ *
+ * No raw result survives this function. It returns a bounded generic summary
+ * and bounded primitive leaves with stable locations. Traversal is iterative,
+ * depth-limited and node-limited, so hostile nesting cannot grow the task
+ * state or the call stack. Site names, tool names and domain keys are never
+ * consulted.
+ */
+export function shareableProjectionsFromResult(
+  raw: string,
+  limit = MAX_PROJECTIONS,
+): ShareableProjection[] {
+  if (limit <= 0 || raw.length > MAX_RESULT_CHARS) return [];
+  const parsed = safeParse(raw);
+  if (parsed === null) return [];
+
+  const out: ShareableProjection[] = [];
+  const facts = factsFromResult(raw, 4);
+  const factSummary = facts.map((f) => `${f.label}: ${f.value}`).join("; ");
+  const readable = factSummary || textFromResult(raw) || "";
+  if (readable) {
+    out.push({
+      location: "#summary",
+      label: "Summary",
+      value: safeResultText(readable),
+      valueType: "string",
+      kind: "summary",
+    });
+  }
+
+  interface Node {
+    value: unknown;
+    location: string;
+    label: string;
+    depth: number;
+    key?: string;
+  }
+
+  const queue: Node[] = [{ value: parsed, location: "", label: "Result", depth: 0 }];
+  let visited = 0;
+  while (queue.length > 0 && out.length < limit && visited < MAX_RESULT_NODES) {
+    const node = queue.shift() as Node;
+    visited += 1;
+
+    const primitive = projectionValue(node.value);
+    if (primitive !== null) {
+      if (node.key && VERDICT_KEYS.has(node.key.toLowerCase())) continue;
+      if (!out.some((p) => p.valueType === typeof primitive && p.value === primitive)) {
+        out.push({
+          location: node.location || "#value",
+          label: node.label,
+          value: primitive,
+          valueType: typeof primitive as "string" | "number" | "boolean",
+          kind: node.location ? "field" : "text",
+        });
+      }
+      continue;
+    }
+
+    if (node.depth >= MAX_RESULT_DEPTH) continue;
+    if (Array.isArray(node.value)) {
+      for (const [index, value] of node.value.slice(0, 12).entries()) {
+        queue.push({
+          value,
+          location: `${node.location}/${index}`,
+          label: `Item ${index + 1}`,
+          depth: node.depth + 1,
+        });
+      }
+      continue;
+    }
+
+    const rec = asRecord(node.value);
+    if (!rec) continue;
+    for (const [key, value] of Object.entries(rec).slice(0, 24)) {
+      const part = pointerPart(key);
+      if (part === null) continue;
+      queue.push({
+        value,
+        location: `${node.location}/${part}`,
+        label: humanizeKey(key),
+        depth: node.depth + 1,
+        key,
+      });
+    }
+  }
+  return out.slice(0, limit);
 }
 
 /** Exact keys that conventionally hold an identifier, in preference order. */
@@ -895,6 +1120,7 @@ function idKeyOf(o: Record<string, unknown>): string | undefined {
  * inventing structure that is not there.
  */
 export function candidatesFromResult(raw: string, limit = 8): Choice[] {
+  if (raw.length > MAX_RESULT_CHARS) return [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -921,14 +1147,22 @@ export function candidatesFromResult(raw: string, limit = 8): Choice[] {
     if (!idKey || !labelKey) continue;
     const metaKey = META_KEYS.find((k) => o[k] !== undefined && o[k] !== null);
     const metaVal = metaKey ? o[metaKey] : undefined;
+    const id = String(o[idKey]);
+    const safeId = completeResultText(id);
+    const safeLabel = completeResultText(String(o[labelKey]));
+    // An identifier is sent onward exactly as selected. If making it safe to
+    // display would change it, it cannot be offered honestly.
+    if (safeId === null || safeId !== id || safeId.startsWith("__") || safeLabel === null) {
+      continue;
+    }
     out.push({
-      id: String(o[idKey]),
-      label: String(o[labelKey]),
+      id: safeId,
+      label: safeLabel,
       meta:
         typeof metaVal === "number" && metaKey && /price|amount|cost|total/.test(metaKey)
           ? `$${metaVal.toFixed(2)}`
           : metaVal !== undefined
-            ? String(metaVal)
+            ? safeResultText(String(metaVal), 32)
             : undefined,
     });
   }

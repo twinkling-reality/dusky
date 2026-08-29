@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { expectReachable, focusChoice } from "./drive.js";
+import { freshCode } from "./session-code.js";
 
 /**
  * Dusky as a WebMCP PROVIDER, against real Chrome.
@@ -14,9 +15,7 @@ import { expectReachable, focusChoice } from "./drive.js";
  * exactly the path the browser's built-in agent takes. Nothing is mocked.
  */
 
-// No I, L or O: those are the letters SESSION_CODE_ALPHABET drops because
-// they are the ones misread off a waveguide. "PROV01" had digits and an O.
-const CODE = "PRVDER";
+const CODE = freshCode();
 
 /** Arguments go as a JSON string: Chrome 151 rejects an object. */
 async function callDuskyTool(page: Page, name: string, args: Record<string, unknown> = {}) {
@@ -52,7 +51,7 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   // BEFORE the relay has finished discovering the partner's. Pairing used to
   // take a form fill and two clicks, which hid that gap; a code in the URL
   // does not. Wait for discovery, or the agent asks an empty session.
-  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(7);
+  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(11);
 
   // Registering our own tools must not pollute what the WEARER sees. Chrome
   // returns this document's own tools from getTools({fromOrigins}) even when
@@ -69,16 +68,24 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
     "add_to_cart",
     "book_table",
     "change_reservation",
+    "draft_message",
     "empty_cart",
+    "find_contacts",
     "find_times",
     "review_cart",
+    "review_messages",
     "search_products",
+    "send_message",
   ]);
 
-  // And it is told which site each one belongs to, because two businesses can
+  // And it is told which site each one belongs to, because several businesses can
   // publish the same name and a bare name is not an identity.
   const origins = new Set((actions["actions"] as { origin: string }[]).map((a) => a.origin));
-  expect([...origins].sort()).toEqual(["http://localhost:7801", "http://localhost:7804"]);
+  expect([...origins].sort()).toEqual([
+    "http://localhost:7801",
+    "http://localhost:7804",
+    "http://localhost:7805",
+  ]);
 
   // An agent is told the ceremony Dusky will enforce, so it can be honest with
   // the person instead of promising something it cannot complete alone.

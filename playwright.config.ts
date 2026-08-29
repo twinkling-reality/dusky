@@ -40,6 +40,12 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
+      command: "pnpm --filter @dusky/app-dispatch dev",
+      url: "http://localhost:7805",
+      reuseExistingServer: true,
+      timeout: 30_000,
+    },
+    {
       command: "pnpm --filter @dusky/app-display dev",
       url: "http://localhost:7802",
       reuseExistingServer: true,

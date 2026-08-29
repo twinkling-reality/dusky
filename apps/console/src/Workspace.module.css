@@ -14,11 +14,11 @@
    * One number rather than two that happened to agree. The lens is a 600x600
    * panel scaled to fit it, and each site frame is whatever is left of it under
    * its caption, so the two boxes end on the same line by construction instead
-   * of by coincidence. It shrank from 450 when a second site arrived, because
-   * the page still has to land inside one 1440x900 screen and seven actions are
-   * taller than four.
+   * of by coincidence. It shrank as more sites arrived, because the page still
+   * has to land inside one 1440x900 screen and eleven actions need a second
+   * column below it.
    */
-  --dusky-live: 432px;
+  --dusky-live: 368px;
 }
 
 .page {
@@ -200,6 +200,14 @@
   flex-direction: column;
 }
 
+@media (min-width: 1000px) {
+  .tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--dusky-s5);
+  }
+}
+
 /* The origin the tools were actually read from. Not uppercased: it is a URL. */
 .origin {
   font-size: 0.66rem;
@@ -213,7 +221,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--dusky-s3);
-  /* Tighter than it was, because there are seven of these now rather than
+  /* Tighter than it was, because there are eleven of these now rather than
      four, and the page still has to fit one screen. */
   padding: 0.3rem 0;
   border-bottom: 1px solid var(--dusky-hair-soft);
@@ -286,8 +294,8 @@
  * is width for exactly one of them.
  */
 .sites {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--dusky-s3);
   align-items: stretch;
   height: var(--dusky-live);
@@ -296,12 +304,22 @@
 .site {
   margin: 0;
   min-width: 0;
-  flex: 1 1 260px;
   /* Grid, not flex: the frame takes what is left after the caption, and `1fr`
      means that in a grid row where `flex: 1` would collapse it to nothing. */
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.4rem;
+}
+
+@media (max-width: 999px) {
+  .sites {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .site {
+    min-height: var(--dusky-live);
+  }
 }
 
 /*
@@ -414,7 +432,7 @@
  * end of a row of its own, under a page whose content is four large boxes. It
  * read as a third source. Those buttons are gone with the restriction they
  * controlled, and the row they shared was costing the page fifty pixels that
- * two site frames and seven actions now need, so this sits in the header with
+ * three site frames and eleven actions now need, so this sits in the header with
  * the other ways out. It carries the product's own accent, which is the one
  * thing on this page that does.
  */

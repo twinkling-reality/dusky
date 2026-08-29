@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { expectReachable, focusChoice } from "./drive.js";
+import { freshCode } from "./session-code.js";
 
 /**
  * The load-bearing test for the entire product.
@@ -10,12 +11,7 @@ import { expectReachable, focusChoice } from "./drive.js";
  * fails, nothing else in the repository matters.
  */
 
-/**
- * A code the system could actually mint: letters only, drawn from
- * SESSION_CODE_ALPHABET. `E2E001` was never a shape a lens would show, and the
- * console is now entitled to refuse one.
- */
-const CODE = "ZEBRAS";
+const CODE = freshCode();
 
 /**
  * A code in the URL pairs the console with no typing, which is what the
@@ -133,7 +129,7 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  const code = "ZEBRAT";
+  const code = freshCode();
 
   await consolePage.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
   await expect(discovered(consolePage).getByText("Add to cart")).toBeVisible();

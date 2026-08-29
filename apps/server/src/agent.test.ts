@@ -89,19 +89,23 @@ function actor(
     planner?: boolean;
     tools?: ToolDescriptor[];
     taskSteps?: { name: string; args: Record<string, unknown> }[];
+    planResolver?: (
+      missing: string,
+    ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
+    results?: Record<string, string>;
   } = {},
 ) {
   const invoked: string[] = [];
   const registry = opts.tools ?? TOOLS;
   const make =
-    opts.planner || opts.taskSteps
+    opts.planner || opts.taskSteps || opts.planResolver
       ? () => ({
           pickTool: async (_intent: string, tools: ToolDescriptor[]) => {
             const t = tools.find((x) => x.name === "add_to_cart");
             return t ? { name: t.name, args: { product_id: "oat-1" } } : null;
           },
           ...(opts.taskSteps ? { pickTools: async () => opts.taskSteps ?? null } : {}),
-          planResolver: async () => null,
+          planResolver: opts.planResolver ?? (async () => null),
         })
       : undefined;
 
@@ -120,7 +124,9 @@ function actor(
           t: "invoked",
           requestId: msg.requestId,
           ok: true,
-          value: JSON.stringify({ ok: true, added: "Organic oat milk" }),
+          value:
+            opts.results?.[msg.toolName ?? ""] ??
+            JSON.stringify({ ok: true, added: "Organic oat milk" }),
         });
       }
     });
@@ -134,12 +140,18 @@ async function paired(
     withDisplay?: boolean;
     tools?: ToolDescriptor[];
     taskSteps?: { name: string; args: Record<string, unknown> }[];
+    planResolver?: (
+      missing: string,
+    ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
+    results?: Record<string, string>;
+    sites?: { origin: string; name?: string }[];
   } = {},
 ) {
   const built = actor(opts);
-  await built.a.attachConsole(built.consoleSock as unknown as Sock, [
-    { origin: "https://shop.test" },
-  ]);
+  await built.a.attachConsole(
+    built.consoleSock as unknown as Sock,
+    opts.sites ?? [{ origin: "https://shop.test" }],
+  );
   if (opts.withDisplay !== false) built.a.attachDisplay(new FakeSocket() as unknown as Sock);
   return built;
 }
@@ -269,6 +281,85 @@ describe("sending a task", () => {
 
     const next = await ask(a, { op: "task", text: "replace that with something else" });
     expect(next.ok).toBe(false);
+  });
+
+  it("refuses to interrupt a pending cross-origin transfer approval", async () => {
+    const tables = "https://tables.test";
+    const dispatch = "https://dispatch.test";
+    const book: ToolDescriptor = {
+      name: "book_table",
+      description: "Hold a table.",
+      origin: tables,
+      inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+    };
+    const find: ToolDescriptor = {
+      name: "find_contacts",
+      description: "Look up contacts by name.",
+      origin: dispatch,
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+      annotations: { readOnlyHint: true, untrustedContentHint: false },
+    };
+    const send: ToolDescriptor = {
+      name: "send_message",
+      description: "Send a message to one contact.",
+      origin: dispatch,
+      inputSchema: {
+        type: "object",
+        properties: {
+          contact_id: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["contact_id", "body"],
+      },
+      annotations: { readOnlyHint: false, untrustedContentHint: false },
+    };
+    const { a, invoked } = await paired({
+      tools: [book, find, send],
+      taskSteps: [
+        { name: "book_table", args: {} },
+        { name: "send_message", args: {} },
+      ],
+      planResolver: async (missing) =>
+        missing === "contact_id" ? { name: "find_contacts", args: { query: "Dana" } } : null,
+      results: {
+        book_table: JSON.stringify({ ok: true, reference_id: "R-42", party_size: 4 }),
+        find_contacts: JSON.stringify({
+          contacts: [{ id: "dana", name: "Dana" }],
+        }),
+      },
+      sites: [
+        { origin: tables, name: "Tables" },
+        { origin: dispatch, name: "Dispatch" },
+      ],
+    });
+
+    expect((await ask(a, { op: "task", text: "Book for four, then tell Dana" })).ok).toBe(true);
+    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "__confirm" });
+    await a.onDisplayMessage({ t: "choose", frameId: "2", choiceId: "__next" });
+    await a.onDisplayMessage({ t: "choose", frameId: "3", choiceId: "dana" });
+    const choices = a.current();
+    if (choices.kind !== "choose") throw new Error("expected projection choices");
+    const summary = choices.choices.find((choice) => choice.label === "Summary");
+    if (!summary) throw new Error("expected summary");
+    await a.onDisplayMessage({ t: "choose", frameId: "4", choiceId: summary.id });
+
+    expect(a.current().kind).toBe("transfer");
+    const status = await ask(a, { op: "status" });
+    if (!status.ok) throw new Error("unreachable");
+    expect(status.value["state"]).toBe("transfer_required");
+    expect(status.value["accepting_tasks"]).toBe(false);
+
+    const replacement = await ask(a, { op: "task", text: "Do something else" });
+    expect(replacement.ok).toBe(false);
+    if (replacement.ok) throw new Error("unreachable");
+    expect(replacement.error).toContain("share information");
+    expect(a.current().kind).toBe("transfer");
+    expect(invoked).toEqual(["book_table", "find_contacts"]);
   });
 
   it("declines an empty task rather than putting a blank frame on someone's face", async () => {

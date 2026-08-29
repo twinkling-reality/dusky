@@ -456,6 +456,40 @@ to it the way a wearer would.
 
 Worth listing separately: these were all live in a passing test suite.
 
+- **A transfer frame with two choices still accepted every old input path.**
+  The first cross-site result implementation drew only Share and Cancel, but
+  `Session.handle` still accepted any choice id while a parameter was pending,
+  and `submitText` still accepted text. A stale frame or somebody writing to the
+  display socket could therefore replace the proposed value and move directly
+  to the destination action gate without recording a transfer decision.
+
+  The retained value itself was not silently sent, but the state-machine rule
+  was still false: a transfer frame was not actually a transfer boundary. While
+  a pending transfer exists, the machine now accepts only `__share` and
+  `__cancel`; text and every other id leave the frame unchanged. This has a unit
+  test because the panel cannot be the guard. Display messages are untrusted
+  input even when the screen that produced them had only two controls.
+- **The final provenance line contained the whole value and rendered only its
+  prefix.** Exact 600 by 600 captures showed `Book table:` at the right edge
+  while the returned reference `AO-4417` was outside the panel. The DOM still
+  contained it, which is worse than a missing fact because an accessibility
+  inspection and a screenshot disagreed about what the wearer could approve or
+  transcribe. A flex child keeps its content width unless `min-width: 0` lets it
+  shrink. The result value now owns the remaining row width and wraps within it.
+  The capture utility in `scripts/frame-review.mjs` renders transfer,
+  confirmation, working, progress, and final frames through the real lens
+  component at the device viewport.
+- **A tool result became a new security boundary the moment a later step could
+  use it.** Keeping raw JSON in task state would make size, privacy, and prompt
+  injection somebody else's problem. `shareableProjectionsFromResult` instead
+  parses only within 32,768 characters, visits at most 128 nodes through depth
+  6, keeps no more than twelve projections, and excludes any complete string
+  longer than 120 characters. A projection has a stable location and type, but
+  no executable interpretation. The audit records that location and the two
+  origins without copying the value. Three deterministic handoff fixtures are
+  3/3, and hostile, oversized, deeply nested, stale-schema, cancellation, and
+  audit-leak cases are tests rather than prose.
+
 - **`workingFrame` was computed but never transmitted.** The session set it and
   the transport only read the frame a call settled on, so the wearer stared at
   an unchanged screen for the whole of a tool invocation. On a cursorless

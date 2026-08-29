@@ -124,15 +124,40 @@ export function FrameView({
           <>
             {/* A tool with no arguments has nothing to name here, and the
                 title above already carries its label. */}
-            {frame.target && <p className={styles.target}>{frame.target}</p>}
+            {frame.target && (
+              <p
+                className={`${styles.target} ${
+                  frame.target.length > 180
+                    ? styles.targetDense
+                    : frame.target.length > 88
+                      ? styles.targetLong
+                      : ""
+                }`}
+              >
+                {frame.target}
+              </p>
+            )}
             {frame.consequence && <p className={styles.consequence}>{frame.consequence}</p>}
           </>
         )}
 
+        {frame.kind === "transfer" && (
+          <div className={styles.transfer}>
+            <p className={styles.route}>
+              <span>{frame.from}</span>
+              <span aria-hidden="true">to</span>
+              <span>{frame.to}</span>
+            </p>
+            <p className={styles.argument}>{frame.argument}</p>
+            <p className={styles.preview}>{frame.preview}</p>
+          </div>
+        )}
+
         {frame.kind === "result" && frame.facts && frame.facts.length > 0 && (
           <dl className={styles.facts}>
-            {frame.facts.map((f) => (
-              <div key={f.label} className={styles.fact}>
+            {frame.facts.map((f, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: frame facts are static and can repeat exactly across task steps
+              <div key={`${index}:${f.label}`} className={styles.fact}>
                 <dt className={styles.factLabel}>{f.label}</dt>
                 <dd className={styles.factValue}>{f.value}</dd>
               </div>
@@ -272,6 +297,8 @@ function statusWord(frame: DisplayFrame): string {
       return "choose";
     case "confirm":
       return "confirm";
+    case "transfer":
+      return "share";
     case "result":
       return frame.ok ? "done" : "failed";
     case "error":

@@ -1,12 +1,17 @@
 # Deploying Dusky, and getting it onto the glasses
 
-## Live as of 2026-08-29
+## Deployment target as of 2026-08-29
 
-The console holds every partner site at once, so all four static surfaces have
+The console holds every partner site at once, so all five static surfaces have
 to be up for the demo to be what it claims. `e2e/production.spec.ts` checks
-each of them, which is why it exists: `dusky-reservations` answered
-DEPLOYMENT_NOT_FOUND for a while with the whole suite green, because a claim
-nothing asserts is a claim nothing can catch.
+each of them, which is why it exists: `dusky-reservations` once answered
+DEPLOYMENT_NOT_FOUND with the rest of the suite green, because a claim nothing
+asserts is a claim nothing can catch.
+
+The dispatch source and updated console in this tree have not been deployed.
+Do not treat the existing live demo as evidence for the three-source transfer
+milestone, and do not run the updated production suite until all new builds and
+environment values are live.
 
 | Surface | URL |
 | --- | --- |
@@ -14,6 +19,7 @@ nothing asserts is a claim nothing can catch.
 | Website and demo | https://dusky-console.vercel.app |
 | Verdant Market | https://dusky-market.vercel.app |
 | Amber & Oak | https://dusky-reservations.vercel.app |
+| Northstar Dispatch | https://dusky-dispatch.vercel.app |
 | Relay | https://dusky-relay.onrender.com |
 
 Two things are deliberately still manual, because they are credentials:
@@ -26,7 +32,7 @@ Two things are deliberately still manual, because they are credentials:
   The console says so plainly when the API is missing.
 
 
-Five surfaces. Four are static and belong on any CDN. One holds WebSockets and
+Six surfaces. Five are static and belong on any CDN. One holds WebSockets and
 does not.
 
 | Surface | What it is | Where it runs | Host |
@@ -35,6 +41,7 @@ does not.
 | `apps/console` | The website: front door at `/`, demo at `/demo` | A desktop browser | Vercel |
 | `apps/market` | Verdant Market, a test service | A desktop browser | Vercel |
 | `apps/reservations` | Amber & Oak, a second test service | A desktop browser | Vercel |
+| `apps/dispatch` | Northstar Dispatch, a communications test service | A desktop browser | Vercel |
 | `apps/server` | The session relay | A server | Render, Railway or Fly |
 
 **Only the Display runs on the glasses.** Tools execute inside the partner
@@ -44,7 +51,7 @@ AND the console open on a computer, in Chrome with the WebMCP flag or in the
 ChatGPT desktop browser. Glasses alone cannot do anything, and that separation
 is the architecture rather than a limitation.
 
-## Choose all five names before deploying anything
+## Choose all six names before deploying anything
 
 The console needs each partner site's URL, and each partner site needs the
 console's origin. That looks circular and is not, because a Vercel project's URL
@@ -56,6 +63,7 @@ dusky-display.vercel.app
 dusky-console.vercel.app
 dusky-market.vercel.app
 dusky-reservations.vercel.app
+dusky-dispatch.vercel.app
 dusky-relay.onrender.com
 ```
 
@@ -86,12 +94,12 @@ down when idle and cold-start on the next request, which a judge or a wearer
 experiences as Dusky being broken. Use a paid instance for anything anyone else
 will touch.
 
-## 2. The three static surfaces
+## 2. The five static surfaces
 
 Each is a separate Vercel project from the same repository.
 
 - **Root Directory**: `apps/display`, `apps/console`, `apps/market`,
-  `apps/reservations`
+  `apps/reservations`, or `apps/dispatch`
 - **Enable "Include source files outside of the Root Directory"**. The workspace
   packages live in `packages/`, so the build fails without it.
 - Build command `pnpm build`, output `dist`. Vite is detected automatically.
@@ -111,10 +119,10 @@ repo root, the rewrite has to move to a `vercel.json` there instead.
 Either way `pnpm test:prod` checks that both `/` and `/demo` return the app,
 so a misplaced rewrite fails loudly rather than waiting for a judge to find it.
 
-**Turn deployment protection off for the Display.** Vercel's authentication
-sits in front of the page, and the glasses cannot log in. Meta's own
-documentation calls this out. The console and market can stay protected if you
-would rather they were.
+**Turn deployment protection off for every public demo surface.** Vercel's
+authentication sits in front of the page, and the glasses cannot log in. A
+protected partner iframe also cannot expose tools to the console, so protecting
+only one source produces a plausible but incomplete action list.
 
 ## 3. Environment
 
@@ -127,9 +135,11 @@ would rather they were.
 | console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
 | console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |
 | console | `VITE_RESERVATIONS_URL` | `https://dusky-reservations.vercel.app` |
+| console | `VITE_DISPATCH_URL` | `https://dusky-dispatch.vercel.app` |
 | console | `VITE_DISPLAY_URL` | `https://dusky-display.vercel.app` |
 | market | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
 | reservations | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
+| dispatch | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
 
 The `VITE_*` values are read at BUILD time by Vite, so changing one means
 redeploying that surface, not restarting it.

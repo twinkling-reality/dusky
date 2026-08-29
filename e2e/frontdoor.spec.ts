@@ -162,12 +162,16 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
     "empty",
   );
   // The second business, in the same tab, at the same time. This is the claim
-  // the whole product makes and it is one assertion: two sites that have never
-  // heard of each other, both live, both reachable from one menu.
+  // the whole product makes and it is one assertion: unrelated sites that have
+  // never heard of each other, live and reachable from one menu.
   await expect(page.frameLocator('iframe[title="Amber & Oak"]').getByTestId("book")).toHaveText(
     "none",
   );
+  await expect(
+    page.frameLocator('iframe[title="Northstar Dispatch"]').getByTestId("outbox"),
+  ).toHaveText("none sent");
   await expectReachableIn(lens, /Book table/);
+  await expectReachableIn(lens, /Send message/);
   await expect(page.getByText("getTools({fromOrigins})")).toBeVisible();
 
   // The thing a judge must not have to discover by closing the tab. A footnote
@@ -199,10 +203,10 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
 
 test("the demo says what you are looking at, when asked", async ({ page }) => {
   await page.goto(`${SITE}/demo?start=1`);
-  // Seven, because both sites are held. Named rather than counted would be
+  // Eleven, because all three sites are held. Named rather than counted would be
   // better here, except that the count IS the claim on this page: the list is
   // one list, not one list per business.
-  await expect(page.getByTestId("actions").locator("li")).toHaveCount(7);
+  await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
 
   // Shut by default. This page carried a paragraph about the security model
   // above the fold and a caption under every heading, all of it cut because a
@@ -237,7 +241,7 @@ test("somebody who owns glasses can reach the pairing form from a running sessio
    * actually owns a pair had no route to it at all.
    */
   await page.goto(`${SITE}/demo?start=1`);
-  await expect(page.getByTestId("actions").locator("li")).toHaveCount(7);
+  await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
 
   await page.getByRole("button", { name: "Pair glasses" }).click();
 
@@ -370,7 +374,7 @@ test("a tool with no arguments is not named twice on the confirm frame", async (
  * have never heard of each other reachable from it at the same time. Pointing
  * at one site at a time was the thing being demonstrated; holding both is.
  */
-test("one tab holds two unrelated businesses, on one menu", async ({ page }) => {
+test("one tab holds three unrelated businesses, on one menu", async ({ page }) => {
   await page.goto(`${SITE}/demo?start=1`);
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
@@ -397,7 +401,8 @@ test("one tab holds two unrelated businesses, on one menu", async ({ page }) => 
   const actions = page.getByTestId("actions");
   await expect(actions.getByText("Add to cart")).toBeVisible();
   await expect(actions.getByText("book_table")).toBeVisible();
-  await expect(actions.locator("li")).toHaveCount(7);
+  await expect(actions.getByText("Send message")).toBeVisible();
+  await expect(actions.locator("li")).toHaveCount(11);
 
   // And the rows say whose they are, which is the only new thing a wearer
   // needs when a menu stops belonging to one place. Counted rather than looked
@@ -406,8 +411,10 @@ test("one tab holds two unrelated businesses, on one menu", async ({ page }) => 
   // list accounted for.
   await expect(actions.getByText("Verdant Market")).toHaveCount(4);
   await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
+  await expect(actions.getByText("Northstar Dispatch")).toHaveCount(4);
 
   // Same session, same panel, same code: both reachable from the one menu.
   await expectReachableIn(lens, /Add to cart/);
   await expectReachableIn(lens, /Book table/);
+  await expectReachableIn(lens, /Send message/);
 });

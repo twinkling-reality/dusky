@@ -60,13 +60,14 @@ at all.
    `factsFromResult` replaced it and knows no site. Do not reintroduce a key
    because it made the demo read nicely.
 
-   Two first-party sources exist to keep this honest, and both are held at the
-   same time. `apps/market` sells things and `apps/reservations` holds tables,
-   and they share no vocabulary:
-   one returns `cart_total`, the other `reservation_id` and `party_size`. The
-   second one also declares a string enum, an integer enum and a boolean, none
-   of which the market has, so three branches of `paramKind` are reachable at
-   all. `e2e/reservations.spec.ts` drives it end to end.
+   Three first-party sources exist to keep this honest, and all are held at the
+   same time. `apps/market` sells things, `apps/reservations` holds tables, and
+   `apps/dispatch` finds contacts and sends messages. Their result and tool
+   vocabularies do not overlap. The reservations source also declares a string
+   enum, an integer enum and a boolean, none of which the market has, so three
+   branches of `paramKind` are reachable at all. `e2e/reservations.spec.ts`
+   drives the schema variety and `e2e/transfer.spec.ts` drives a reservation
+   result into the communications source through real WebMCP.
 
    Adding it needed no per-site branch, and it is worth stating what it DID
    need, because the weaker claim is the one that survives someone reading the
@@ -171,6 +172,9 @@ at all.
    `book/reserve/hold`. No business nouns belong in that list. Measured after
    the change, single-action recall is 16/19 at six and joint coverage over four
    compound requests is 4/4, both with the same shortlist and token ceiling.
+   With the communications source and its new labelled requests included, the
+   current measurements are 18/21 single-action recall and 6/6 compound joint
+   coverage at six slots.
 
 8. **`packages/policy` must stay dependency-free.** If it ever imports the agent
    or a transport, the deterministic guarantee is gone. This was prose with
@@ -199,6 +203,30 @@ at all.
    live registry at that moment, its arguments are checked again against its
    current schema, and its own policy gate runs independently. One approval can
    never cover two calls.
+
+10. **Cross-origin result transfer is a separate, exact consent boundary.** A
+    successful intermediate step may retain only the output of
+    `shareableProjectionsFromResult`: at most 32,768 input characters, 128
+    visited nodes, depth 6, twelve projections, and 120 characters per complete
+    string. The raw result is not task state. Projections carry source origin,
+    source tool, step, type, and a stable JSON pointer or `#summary`; they never
+    carry markup or executable controls.
+
+    A compatible later parameter first shows projection choices. Same-origin
+    reuse follows the existing explicit parameter path. Cross-origin reuse
+    shows a distinct transfer frame naming the producing site, receiving site,
+    destination argument, and exact bounded value. Only `Share` or `Cancel` is
+    accepted while that frame is live, so stale choices and forged text cannot
+    fall through to the parameter collector. Approval is checked against the
+    live `(origin, name)` tool and its current schema immediately before the one
+    displayed scalar is applied. Any registry or schema change refuses it.
+
+    Sharing then returns to the destination tool's ordinary policy gate. It
+    never authorizes that action. Audit events record provenance, field, type,
+    destination, and decision without recording the value. Cancel, completion,
+    replacement, invalidation, or actor expiry drops the retained material.
+    `SessionActor` also treats a transfer frame as busy, so a new outside-agent
+    task cannot replace what the wearer is deciding about.
 
 ## The planner, and why it cannot widen anything
 
@@ -304,25 +332,23 @@ because tests here run without credentials. Model choice, tier defaults and the
 `effort` setting are still reasoned rather than measured, and their latency and
 accuracy should be read that way.
 
-One of the four numbers is no longer a guess. `eval.fixtures.ts` and
-`eval.test.ts` measure shortlist recall over nineteen spoken requests against
-eleven tools from four domains, with no model and no credential, because
-ranking is deterministic. At the shipped size of six the right tool is on the
-list 16 times out of 19; at eight it is 16; with every slot free it is 19.
+Three deterministic measurements now need no model or credential.
+`eval.fixtures.ts` and `eval.test.ts` measure shortlist recall over twenty-one
+spoken requests against thirteen tools from four domains. At the shipped size
+of six the right tool is on the list 18 times out of 21; at eight it is still
+18; with every slot free it is 21. Six compound requests have 6/6 joint
+coverage at six slots, where a request counts only when every named end action
+reaches the model. Three result-to-argument fixtures have 3/3 handoff coverage,
+meaning an exact schema-compatible projection survives generic extraction for
+each one.
 
-The same eval has four compound requests. At six slots every expected action
-survives for 4/4 of them. This is joint coverage: a request only counts when
-every named end action reaches the model.
-
-Both of the numbers below 19 have moved once, and each time the eval was what
-found the reason rather than confirming a hunch. 19 used to be 17: `shortlist`
-returned ONLY the tools with a nonzero score, so three matches meant three
-cards even when six slots were free, and the right tool could be excluded at
-every size. 14 used to be 13, until the leftover slots started being shared
-between origins instead of handed out in rank order, which with every score at
-zero is alphabetical order. That change was made for the reason in rule 7, and
-buys at six exactly what doubling the shortlist to eight used to buy, for no
-tokens at all.
+The history matters because each move came from the eval rather than a hunch.
+The original full-registry result used to be 17/19 because `shortlist` returned
+only tools with a nonzero score, even when more cards fit. Recall at six moved
+from 13/19 to 14/19 when leftover slots started being shared between origins,
+then to 16/19 when ordinary action synonyms were canonicalized. Adding the
+communications source expanded the corpus rather than replacing it and yields
+the current 18/21 measurement.
 
 The next move was 14 to 16. Ordinary action synonyms are canonicalized on both
 sides, so "find me some oat milk" admits both `find_times` and
@@ -400,12 +426,11 @@ These are in `packages/webmcp`, the only file allowed to know them:
   above it rather than here.
 
   A menu spanning several sites that will not fit four rows shows a row per
-  site instead, and that site's actions one press behind it. Measured: seven
-  tools flat is four pages of two with a planner configured, and reaching
-  `add_to_cart` costs eight presses against six grouped. Grouping is navigation
-  over a combined registry, never a partition of one: the planner still ranks
-  every site's tools together and one spoken request still crosses two
-  businesses.
+  site instead, and that site's actions one press behind it. The local Chrome
+  suite verifies eleven actions from three origins remain reachable in one tab.
+  Grouping is navigation over a combined registry, never a partition of one:
+  the planner still ranks every site's tools together and one spoken request
+  can cross several businesses.
 - **`getTools({fromOrigins})` also returns THIS document's own registered tools**,
   even when `fromOrigins` names only other origins. Verified 2026-08-26 against
   151.0.7922.174, the day Dusky started registering tools of its own and
@@ -453,7 +478,7 @@ Each of these cost real debugging time. Do not undo the fixes.
 ## Commands
 
 ```bash
-pnpm dev         # all five surfaces
+pnpm dev         # all six surfaces
 pnpm test        # unit
 pnpm test:e2e    # round trip in real Chrome with the flag
 pnpm typecheck

@@ -9,12 +9,11 @@
  * console wrapped a single source in an array and that was the whole
  * restriction.
  *
- * This list is the ONLY thing Dusky is told about a site, and it is two
- * strings: a name to print and a URL to load. Nothing downstream reads it. The
- * menu, the parameters, the ceremony and the result summary are all derived
- * from the tool schemas that come back over WebMCP, which is why a second entry
- * here required no change to @dusky/frames, @dusky/policy or @dusky/session,
- * and why a third would not either.
+ * This list is the ONLY thing Dusky is told about a site: display metadata and
+ * a URL to load. Nothing downstream reads it. The menu, the parameters, the
+ * ceremony and the result summary are all derived from the tool schemas that
+ * come back over WebMCP. Adding the third entry here required no site-specific
+ * change to @dusky/frames, @dusky/policy or @dusky/session.
  *
  * A registry is not a per-site branch. The moment anything in this repository
  * behaves differently BECAUSE a site is one of these rather than another, that
@@ -23,6 +22,7 @@
 
 const MARKET_URL = import.meta.env["VITE_MARKET_URL"] ?? "http://localhost:7801";
 const RESERVATIONS_URL = import.meta.env["VITE_RESERVATIONS_URL"] ?? "http://localhost:7804";
+const DISPATCH_URL = import.meta.env["VITE_DISPATCH_URL"] ?? "http://localhost:7805";
 
 export interface Source {
   /** Stable key, used in the `?source=` query parameter. */
@@ -46,6 +46,12 @@ export const SOURCES: readonly Source[] = [
     name: "Amber & Oak",
     url: RESERVATIONS_URL,
     blurb: "A restaurant. Three tools, enums and a boolean, results about bookings.",
+  },
+  {
+    id: "dispatch",
+    name: "Northstar Dispatch",
+    url: DISPATCH_URL,
+    blurb: "A communications desk. Four tools, contact lookups, drafts, and sent messages.",
   },
 ];
 

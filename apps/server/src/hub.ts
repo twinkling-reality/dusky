@@ -298,8 +298,15 @@ export class SessionActor {
       }),
     );
 
-    if (changed) this.session = this.makeSession();
-    await this.session.start();
+    if (changed) {
+      this.session = this.makeSession();
+      await this.session.start();
+    } else {
+      // A console reconnect changes the transport, not the task. Re-discover
+      // underneath the current frame so a pending parameter, transfer or gate
+      // stays visible and is revalidated against the live registry when used.
+      await this.session.refresh();
+    }
   }
 
   detachConsole(sock: WebSocket): void {
@@ -378,6 +385,8 @@ export class SessionActor {
       return "a multi-step task needs the wearer's attention";
     }
     switch (this.session.current().kind) {
+      case "transfer":
+        return "the wearer is deciding whether to share information between sites";
       case "confirm":
         return "the wearer is being asked to approve an action";
       case "choose":
@@ -476,7 +485,7 @@ export class SessionActor {
               "This Dusky relay has no planner enabled, so it cannot turn a request into an action. The wearer can still choose from the menu on their glasses.",
           };
         }
-        this.record({ kind: "plan", detail: { path: "agentTask", text } });
+        this.record({ kind: "plan", detail: { path: "agentTask", textLength: text.length } });
         await this.session.submitIntent(text);
         return {
           ok: true,
@@ -572,6 +581,8 @@ function stateFor(kind: string) {
   switch (kind) {
     case "working":
       return "working" as const;
+    case "transfer":
+      return "transfer_required" as const;
     case "confirm":
       return "confirm_required" as const;
     case "result":

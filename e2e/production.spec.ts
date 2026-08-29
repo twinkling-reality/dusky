@@ -22,6 +22,7 @@ const DISPLAY = "https://dusky-display.vercel.app";
 const CONSOLE = "https://dusky-console.vercel.app";
 const MARKET = "https://dusky-market.vercel.app";
 const RESERVATIONS = "https://dusky-reservations.vercel.app";
+const DISPATCH = "https://dusky-dispatch.vercel.app";
 const RELAY = "https://dusky-relay.onrender.com";
 
 /**
@@ -53,7 +54,7 @@ test("every surface is public, with no login wall in front of the glasses", asyn
   // this loop catches both. It is the cheapest place either failure can be
   // found, and every surface belongs in it or the surface left out is the one
   // that breaks.
-  for (const url of [DISPLAY, CONSOLE, MARKET, RESERVATIONS]) {
+  for (const url of [DISPLAY, CONSOLE, MARKET, RESERVATIONS, DISPATCH]) {
     const res = await request.get(url);
     expect(res.status(), `${url} should be reachable`).toBe(200);
     expect(await res.text(), `${url} should not be a Vercel login page`).not.toContain(
@@ -86,7 +87,8 @@ test("the deployed console discovers the deployed market cross-origin", async ({
 
   // The shop's four, and ONLY because dusky-market named dusky-console in
   // exposedTo. A trailing slash or an http:// would produce zero here. The
-  // restaurant's three arrive alongside them and are asserted below.
+  // restaurant's three and dispatch desk's four arrive alongside them and are
+  // asserted below.
   await expect(page.getByText("Search catalog")).toBeVisible();
   await expect(page.getByText("Add to cart")).toBeVisible();
   await expect(page.getByText("Empty cart")).toBeVisible();
@@ -101,10 +103,10 @@ test("the deployed console discovers the deployed market cross-origin", async ({
 /**
  * The console holds every partner site in an iframe, and which URLs it holds
  * are baked in at BUILD time by Vite. `sources.ts` falls back to
- * `http://localhost:7801` and `http://localhost:7804` when `VITE_MARKET_URL`
- * and `VITE_RESERVATIONS_URL` are absent, which is correct for a developer and
- * catastrophic on an HTTPS page: the browser blocks it as mixed content and
- * the wearer gets an empty menu with no indication why.
+ * local development URLs when `VITE_MARKET_URL`, `VITE_RESERVATIONS_URL`, or
+ * `VITE_DISPATCH_URL` are absent, which is correct for a developer and
+ * catastrophic on an HTTPS page: the browser blocks them as mixed content and
+ * the wearer gets an incomplete menu with no indication why.
  *
  * Nothing else in this suite can see that, because a fallback is a perfectly
  * valid string and the build succeeds.
@@ -120,6 +122,7 @@ test("every site the console holds points at a deployment, not at a laptop", asy
   for (const [title, expected] of [
     ["Verdant Market", MARKET],
     ["Amber & Oak", RESERVATIONS],
+    ["Northstar Dispatch", DISPATCH],
   ] as const) {
     const frame = page.locator(`iframe[title="${title}"]`);
     // Fail on the missing surface itself. Calling getAttribute directly waits
@@ -137,7 +140,7 @@ test("every site the console holds points at a deployment, not at a laptop", asy
 });
 
 /**
- * Two businesses, one session, checked against the deployment.
+ * Three businesses, one session, checked against the deployment.
  *
  * Each site's `exposedTo` says nothing about the other: they are separate
  * projects, separately built, each naming `dusky-console` by hand. A trailing
@@ -153,7 +156,7 @@ test("every site the console holds points at a deployment, not at a laptop", asy
  * cross-origin lookup, which `packages/planner` and `packages/session` each
  * enforce and each test.
  */
-test("the deployed console holds both deployed sites at once", async ({ page }) => {
+test("the deployed console holds all three deployed sites at once", async ({ page }) => {
   await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
 
@@ -169,11 +172,17 @@ test("the deployed console holds both deployed sites at once", async ({ page }) 
   // And the shop's four, on the same list rather than instead of them.
   await expect(actions.getByText("Search catalog")).toBeVisible();
   await expect(actions.getByText("Add to cart")).toBeVisible();
-  await expect(actions.locator("li")).toHaveCount(7);
+
+  // The communications source is independent of both, and all four of its
+  // tools stay in the same registry.
+  await expect(actions.getByText("Find a contact")).toBeVisible();
+  await expect(actions.getByText("Send message")).toBeVisible();
+  await expect(actions.locator("li")).toHaveCount(11);
 
   // Every row says whose it is, which is the one thing a mixed list needs.
   await expect(actions.getByText("Verdant Market")).toHaveCount(4);
   await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
+  await expect(actions.getByText("Northstar Dispatch")).toHaveCount(4);
 });
 
 /**
@@ -284,7 +293,9 @@ interface ModelContextLike {
  * does not validate a key at construction time, so a wrong key looks identical
  * until the first request. This is that first request.
  */
-test("one spoken request becomes two cross-business steps", async ({ browser }) => {
+test("one spoken request becomes a two-step cross-site result-sharing task", async ({
+  browser,
+}) => {
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
@@ -304,7 +315,7 @@ test("one spoken request becomes two cross-business steps", async ({ browser }) 
       await mc.executeTool(
         t,
         JSON.stringify({
-          text: "Book a table for two tomorrow and add the organic oat milk to my cart",
+          text: "Reserve a table for four, then send the reservation details to Dana",
         }),
       ),
     ) as Record<string, unknown>;

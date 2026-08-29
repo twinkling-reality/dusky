@@ -31,9 +31,8 @@ const REPO = "https://github.com/twinkling-reality/dusky";
 const STAGE_ALT =
   "Dusky running: on the left the glasses view, headed Verdant Market, confirm, reading Add to " +
   "cart, oat-1, this spends money, and offering Confirm on enter or Cancel on escape. On the " +
-  "right two unrelated businesses live in the same browser tab, a shop with its cart still " +
-  "empty beside the catalogue the product was chosen from, and a restaurant listing the tables " +
-  "it has free.";
+  "right three unrelated businesses live in the same browser tab: a shop, a restaurant, and a " +
+  "communications desk.";
 
 export function Landing() {
   const probe = useRequirements();
@@ -69,9 +68,9 @@ export function Landing() {
           <h1 className={styles.claim}>A remote control for everything you are signed into.</h1>
           <p className={styles.lede}>
             Dusky reads what every site in your browser can do, over WebMCP, and puts all of it on a
-            pair of glasses as one list. One sentence can cross two businesses that have never heard
-            of each other, one visible step at a time. Nothing that costs you anything happens
-            without you saying yes to that step.
+            pair of glasses as one list. One sentence can use a result from one business at another,
+            but the exact information pauses on the lens before it crosses. Sharing the information
+            and authorizing the destination action are separate decisions.
           </p>
 
           {/*

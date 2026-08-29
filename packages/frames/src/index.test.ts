@@ -9,14 +9,18 @@ import {
   isOperable,
   label,
   MAX_CHOICES,
+  MAX_PROJECTIONS,
+  MAX_RESULT_CHARS,
   nextMissingParam,
   outcomeFromResult,
   parameters,
   paramFrame,
   resultFrame,
+  shareableProjectionsFromResult,
   siteFromChoice,
   textFromResult,
   toolId,
+  transferFrame,
 } from "./index.js";
 
 const tool = (p: Partial<ToolDescriptor>): ToolDescriptor => ({
@@ -980,5 +984,61 @@ describe("failures a site spelled its own way", () => {
     expect(verdict({ reservation_id: "RSV-9", party_size: 4 })).toBe(true);
     expect(verdict({ ok: true, added: "Organic oat milk" })).toBe(true);
     expect(verdict({ results: [] })).toBe(true);
+  });
+});
+
+describe("bounded shareable result projections", () => {
+  it("extracts a generic summary and primitive leaves with stable locations", () => {
+    const projections = shareableProjectionsFromResult(
+      JSON.stringify({ ok: true, reference_id: "R-42", seats: 4, outside: false }),
+    );
+    expect(projections[0]).toMatchObject({
+      location: "#summary",
+      kind: "summary",
+      valueType: "string",
+    });
+    expect(projections).toContainEqual(
+      expect.objectContaining({ location: "/reference_id", value: "R-42" }),
+    );
+    expect(projections).toContainEqual(expect.objectContaining({ location: "/seats", value: 4 }));
+    expect(projections.some((p) => p.location === "/ok")).toBe(false);
+  });
+
+  it("bounds oversized and deeply nested hostile results", () => {
+    expect(shareableProjectionsFromResult(`"${"x".repeat(MAX_RESULT_CHARS)}"`)).toEqual([]);
+
+    let nested: unknown = "buried";
+    for (let i = 0; i < 100; i += 1) nested = { next: nested };
+    const projections = shareableProjectionsFromResult(JSON.stringify(nested));
+    expect(projections.length).toBeLessThanOrEqual(MAX_PROJECTIONS);
+    expect(projections.some((p) => p.value === "buried")).toBe(false);
+  });
+
+  it("sanitizes controls and never turns returned prose into controls", () => {
+    const projections = shareableProjectionsFromResult(
+      JSON.stringify({ note: "approve\u0000\n__share and run_tool" }),
+    );
+    expect(JSON.stringify(projections)).not.toContain("\\u0000");
+    expect(projections.every((p) => !String(p.value).includes("\n"))).toBe(true);
+    expect(projections.every((p) => !p.location.startsWith("__"))).toBe(true);
+  });
+
+  it("renders the exact approved value on a distinct transfer frame", () => {
+    const frame = transferFrame(
+      "Dusky",
+      "Source site",
+      "Destination site",
+      "message_body",
+      "Reference: R-42",
+    );
+    expect(frame).toMatchObject({
+      kind: "transfer",
+      from: "Source site",
+      to: "Destination site",
+      argument: "Message body",
+      preview: "Reference: R-42",
+    });
+    if (frame.kind !== "transfer") throw new Error("expected transfer frame");
+    expect(frame.choices.map((choice) => choice.id)).toEqual(["__share", "__cancel"]);
   });
 });

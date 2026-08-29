@@ -16,6 +16,7 @@ import type {
   AuditEntry,
   Choice,
   DisplayFrame,
+  Fact,
   ToolDescriptor,
 } from "@dusky/contracts";
 import {
@@ -30,12 +31,18 @@ import {
   nextMissingParam,
   outcomeFromResult,
   type ParamSpec,
+  PROJECTION_PREFIX,
   parameters,
   paramFrame,
+  projectionFrame,
   resultFrame,
+  type ShareableProjection,
+  safeResultText,
+  shareableProjectionsFromResult,
   siteFromChoice,
   textFromResult,
   toolId,
+  transferFrame,
   valueForParam,
   workingFrame,
 } from "@dusky/frames";
@@ -171,6 +178,8 @@ interface Pending {
    * wearer is already looking at is not a read we are entitled to repeat.
    */
   candidates?: Choice[];
+  /** Compatible retained projections offered for the current parameter. */
+  transferOptions?: TransferOption[];
   /** When the confirmation frame was shown, for staleness checks. */
   confirmShownAt?: number;
   /** Human-readable target for the confirmation frame. */
@@ -182,6 +191,40 @@ interface PlannedStep {
   origin: string;
   name: string;
   args: Record<string, unknown>;
+}
+
+interface RetainedResult {
+  origin: string;
+  toolName: string;
+  step: number;
+  projections: ShareableProjection[];
+}
+
+interface TransferOption {
+  id: string;
+  source: RetainedResult;
+  projection: ShareableProjection;
+  /** Already reduced to the destination parameter's declared type. */
+  value: string | number | boolean;
+}
+
+interface PendingTransfer {
+  source: RetainedResult;
+  projection: ShareableProjection;
+  destinationOrigin: string;
+  destinationTool: string;
+  destinationArgument: string;
+  schemaKey: string;
+  value: string | number | boolean;
+  preview: string;
+  shownAt: number;
+}
+
+interface TaskOutcome {
+  source: string;
+  action: string;
+  ok: boolean;
+  facts: Fact[];
 }
 
 /** Independently enforced here, regardless of what a Planner promises. */
@@ -224,6 +267,10 @@ export class Session {
   private queued: PlannedStep[] = [];
   private taskStep = 0;
   private taskTotal = 0;
+  /** The only prior result material allowed to survive between task steps. */
+  private retained: RetainedResult[] = [];
+  private transfer: PendingTransfer | null = null;
+  private outcomes: TaskOutcome[] = [];
   private frame: DisplayFrame;
 
   constructor(private readonly o: SessionOptions) {
@@ -484,6 +531,10 @@ export class Session {
   async submitIntent(text: string): Promise<DisplayFrame> {
     if (!this.o.planner) return this.frame;
 
+    // A new request replaces any completed-step material from an older one.
+    // The values are useful only inside the task that produced them.
+    this.clearTask();
+
     // The wearer caused this wait, so they have to see it. The title echoes
     // what Dusky heard, because a misheard request is the thing they most
     // need to catch before it turns into an action.
@@ -544,7 +595,7 @@ export class Session {
         detail: {
           path,
           accepted: true,
-          args: step.args,
+          arguments: argumentAudit(step.args),
           step: index + 1,
           total: planned.length,
         },
@@ -566,6 +617,12 @@ export class Session {
 
   /** The single entry point for a gesture selection. */
   async handle(choiceId: string): Promise<DisplayFrame> {
+    // The transfer frame has exactly two valid exits. A stale frame id or a
+    // forged choice must not fall through to the ordinary parameter branch,
+    // because that would replace the retained value without recording a share
+    // decision and move straight to the destination action gate.
+    if (this.transfer && choiceId !== "__share" && choiceId !== "__cancel") return this.frame;
+
     if (choiceId === "__more") {
       this.page += 1;
       return this.repaint();
@@ -644,8 +701,13 @@ export class Session {
       }
       return this.execute();
     }
+    if (choiceId === "__share") return this.onShare();
     if (choiceId === "__confirm") return this.onConfirm();
     if (choiceId === "__next") return this.startNextStep();
+
+    if (choiceId.startsWith(PROJECTION_PREFIX)) {
+      return this.selectProjection(choiceId.slice(PROJECTION_PREFIX.length));
+    }
 
     /*
      * The composer's own rows are not values.
@@ -691,6 +753,8 @@ export class Session {
     if (this.pending?.awaiting) {
       this.pending.args[this.pending.awaiting] = coerce(choiceId, this.awaitingParam());
       this.pending.awaiting = undefined;
+      this.pending.candidates = undefined;
+      this.pending.transferOptions = undefined;
       this.page = 0;
       return this.advance();
     }
@@ -703,9 +767,14 @@ export class Session {
 
   /** Free text committed by the on-glasses composer. */
   async submitText(value: string): Promise<DisplayFrame> {
+    // There is no composer on a transfer frame. Text arriving here is stale or
+    // forged and cannot be used to skip the dedicated share decision.
+    if (this.transfer) return this.frame;
     if (this.pending?.awaiting) {
       this.pending.args[this.pending.awaiting] = coerce(value, this.awaitingParam());
       this.pending.awaiting = undefined;
+      this.pending.candidates = undefined;
+      this.pending.transferOptions = undefined;
       return this.advance();
     }
     return this.submitIntent(value);
@@ -716,6 +785,204 @@ export class Session {
     const p = this.pending;
     if (!p?.awaiting) return undefined;
     return parameters(p.tool).find((x) => x.name === p.awaiting);
+  }
+
+  /** Retained values that the destination's current parameter can accept. */
+  private projectionOptions(param: ParamSpec): TransferOption[] {
+    const out: TransferOption[] = [];
+    for (const result of [...this.retained].reverse()) {
+      for (const [index, projection] of result.projections.entries()) {
+        const value = transferValueForParam(projection.value, param);
+        if (value === undefined) continue;
+        out.push({
+          id: `${result.step}:${index}`,
+          source: result,
+          projection,
+          value,
+        });
+      }
+    }
+    return out.slice(0, 12);
+  }
+
+  private projectionChoices(param: ParamSpec): DisplayFrame {
+    const p = this.pending;
+    if (!p?.transferOptions?.length) return this.frame;
+    const sources = new Set(p.transferOptions.map((o) => o.source.origin));
+    const from =
+      sources.size === 1
+        ? this.siteOf(p.transferOptions[0]?.source.origin ?? "")
+        : "Earlier task steps";
+    return projectionFrame(
+      this.o.source,
+      from,
+      this.siteOf(p.tool.origin),
+      param,
+      p.transferOptions.map((o) => ({
+        id: o.id,
+        label:
+          sources.size === 1
+            ? o.projection.label
+            : `${this.siteOf(o.source.origin)}: ${o.projection.label}`,
+        preview: safeResultText(String(o.value), 28),
+      })),
+      this.page,
+    );
+  }
+
+  /** Resolve the destination against the live registry at the moment of use. */
+  private currentDestination(
+    origin: string,
+    name: string,
+    argument: string,
+  ): { tool: ToolDescriptor; param: ParamSpec } | null {
+    const tool = this.tools.find(
+      (candidate) =>
+        candidate.origin === origin && candidate.name === name && isOperable(candidate),
+    );
+    if (!tool) return null;
+    const param = parameters(tool).find((candidate) => candidate.name === argument);
+    return param ? { tool, param } : null;
+  }
+
+  private async selectProjection(id: string): Promise<DisplayFrame> {
+    const p = this.pending;
+    if (!p?.awaiting || !p.transferOptions?.length) return this.frame;
+    const selected = p.transferOptions.find((option) => option.id === id);
+    if (!selected) return this.frame;
+
+    const current = this.currentDestination(p.tool.origin, p.tool.name, p.awaiting);
+    const shownParam = this.awaitingParam();
+    if (!current || !shownParam || schemaKey(current.param) !== schemaKey(shownParam)) {
+      return this.invalidateTransfer("destination changed before selection", p.tool.origin);
+    }
+    const value = transferValueForParam(selected.value, current.param);
+    if (value === undefined) {
+      return this.invalidateTransfer("value no longer matches destination schema", p.tool.origin);
+    }
+
+    p.tool = current.tool;
+    if (selected.source.origin === current.tool.origin) {
+      p.args[current.param.name] = value;
+      p.awaiting = undefined;
+      p.transferOptions = undefined;
+      this.audit({
+        kind: "transfer",
+        origin: current.tool.origin,
+        toolName: current.tool.name,
+        detail: transferAudit(selected, current.param.name, "same_origin_applied"),
+      });
+      return this.advance();
+    }
+
+    this.transfer = {
+      source: selected.source,
+      projection: selected.projection,
+      destinationOrigin: current.tool.origin,
+      destinationTool: current.tool.name,
+      destinationArgument: current.param.name,
+      schemaKey: schemaKey(current.param),
+      value,
+      preview: String(value),
+      shownAt: this.now(),
+    };
+    this.audit({
+      kind: "transfer",
+      origin: current.tool.origin,
+      toolName: current.tool.name,
+      detail: transferAudit(selected, current.param.name, "approval_required"),
+    });
+    return this.show(
+      transferFrame(
+        this.o.source,
+        this.siteOf(selected.source.origin),
+        this.siteOf(current.tool.origin),
+        current.param.name,
+        String(value),
+      ),
+    );
+  }
+
+  private async onShare(): Promise<DisplayFrame> {
+    const transfer = this.transfer;
+    const p = this.pending;
+    if (!transfer || !p?.awaiting) return this.frame;
+
+    const current = this.currentDestination(
+      transfer.destinationOrigin,
+      transfer.destinationTool,
+      transfer.destinationArgument,
+    );
+    const fresh = isConfirmationFresh(transfer.shownAt, this.toolsChangedAt, this.now());
+    if (!fresh || !current || schemaKey(current.param) !== transfer.schemaKey) {
+      return this.invalidateTransfer(
+        "stale destination tool or schema",
+        transfer.destinationOrigin,
+      );
+    }
+    const value = transferValueForParam(transfer.value, current.param);
+    if (value === undefined || !Object.is(value, transfer.value)) {
+      return this.invalidateTransfer(
+        "approved value no longer matches destination schema",
+        transfer.destinationOrigin,
+      );
+    }
+
+    p.tool = current.tool;
+    p.args[transfer.destinationArgument] = value;
+    p.awaiting = undefined;
+    p.transferOptions = undefined;
+    this.audit({
+      kind: "transfer",
+      origin: current.tool.origin,
+      toolName: current.tool.name,
+      detail: {
+        sourceOrigin: transfer.source.origin,
+        sourceTool: transfer.source.toolName,
+        sourceStep: transfer.source.step,
+        sourceField: transfer.projection.location,
+        valueType: transfer.projection.valueType,
+        destinationOrigin: current.tool.origin,
+        destinationArgument: transfer.destinationArgument,
+        decision: "approved",
+      },
+    });
+    this.transfer = null;
+    return this.advance();
+  }
+
+  private invalidateTransfer(reason: string, destinationOrigin: string): DisplayFrame {
+    const transfer = this.transfer;
+    this.audit({
+      kind: "transfer",
+      origin: destinationOrigin,
+      toolName: transfer?.destinationTool ?? this.pending?.tool.name,
+      detail: {
+        decision: "invalidated",
+        reason,
+        ...(transfer
+          ? {
+              sourceOrigin: transfer.source.origin,
+              sourceTool: transfer.source.toolName,
+              sourceStep: transfer.source.step,
+              sourceField: transfer.projection.location,
+              valueType: transfer.projection.valueType,
+              destinationOrigin: transfer.destinationOrigin,
+              destinationArgument: transfer.destinationArgument,
+            }
+          : {}),
+      },
+    });
+    this.pending = null;
+    this.clearTask();
+    return this.show(
+      errorFrame(
+        this.siteOf(destinationOrigin),
+        "This changed while you were deciding",
+        "Choose again so Dusky shares only what the current action accepts.",
+        false,
+      ),
+    );
   }
 
   /**
@@ -734,6 +1001,7 @@ export class Session {
     if (p?.awaiting) {
       const missing = this.awaitingParam();
       if (!missing) return this.frame;
+      if (p.transferOptions?.length) return this.show(this.projectionChoices(missing));
       return this.show(
         paramFrame(this.siteOf(p.tool.origin), p.tool, missing, p.candidates ?? [], this.page),
       );
@@ -755,6 +1023,7 @@ export class Session {
     tool: ToolDescriptor,
     args: Record<string, unknown>,
   ): Promise<DisplayFrame> {
+    this.transfer = null;
     this.pending = { tool, args: { ...args } };
     this.page = 0;
     return this.advance();
@@ -765,6 +1034,19 @@ export class Session {
     this.queued = [];
     this.taskStep = 0;
     this.taskTotal = 0;
+    this.retained = [];
+    this.transfer = null;
+    this.outcomes = [];
+  }
+
+  /** One provenance-bearing line per completed task step, bounded by the plan. */
+  private taskFacts(): Fact[] {
+    return this.outcomes.slice(0, MAX_TASK_STEPS).map((outcome) => ({
+      label: outcome.source,
+      value: outcome.facts[0]
+        ? `${outcome.action}: ${outcome.facts[0].value}`
+        : `${outcome.action}: ${outcome.ok ? "Done" : "Did not work"}`,
+    }));
   }
 
   /** Move from a completed step to the next independently gated action. */
@@ -920,7 +1202,11 @@ export class Session {
               kind: "plan",
               toolName: resolver.name,
               origin: resolver.origin,
-              detail: { path: "planResolver", accepted: true, args },
+              detail: {
+                path: "planResolver",
+                accepted: true,
+                arguments: argumentAudit(args),
+              },
             });
             // What is LEFT of the attempt, not the whole budget over again.
             // Deciding and looking up used to get `RESOLVER_BUDGET_MS` each,
@@ -961,9 +1247,24 @@ export class Session {
       }
 
       p.candidates = candidates;
-      return this.show(
-        paramFrame(this.siteOf(p.tool.origin), p.tool, missing, candidates, this.page),
-      );
+      p.transferOptions = undefined;
+      if (candidates.length > 0) {
+        return this.show(
+          paramFrame(this.siteOf(p.tool.origin), p.tool, missing, candidates, this.page),
+        );
+      }
+
+      // A previous successful step can fill this argument, but only through a
+      // bounded projection. The raw result is already gone. Cross-origin use
+      // pauses again on the dedicated transfer frame; same-origin use follows
+      // the existing explicit parameter-choice behavior.
+      const projections = this.projectionOptions(missing);
+      if (projections.length > 0) {
+        p.transferOptions = projections;
+        return this.show(this.projectionChoices(missing));
+      }
+
+      return this.show(paramFrame(this.siteOf(p.tool.origin), p.tool, missing, [], this.page));
     }
 
     // Ready to run. Ask a human first unless this is a read.
@@ -1008,6 +1309,7 @@ export class Session {
         detail: { reason: "stale confirmation" },
       });
       this.pending = null;
+      this.clearTask();
       return this.show(
         errorFrame(
           this.siteOf(p.tool.origin),
@@ -1157,31 +1459,53 @@ export class Session {
         // is the fallback for when it does not. Computing both means the
         // fallback only has to be honest about the case it is actually for.
         const facts = factsFromResult(outcome.raw);
+        if (this.taskTotal > 1) {
+          this.outcomes.push({
+            source: this.siteOf(p.tool.origin),
+            action: label(p.tool),
+            ok: said.ok,
+            facts,
+          });
+        }
+        if (said.ok && this.queued.length > 0) {
+          this.retained.push({
+            origin: p.tool.origin,
+            toolName: p.tool.name,
+            step: this.taskStep,
+            projections: shareableProjectionsFromResult(outcome.raw),
+          });
+        }
         this.pending = null;
         const next = said.ok ? this.queued[0] : undefined;
         const nextTool = next
           ? this.tools.find((t) => t.origin === next.origin && t.name === next.name)
           : undefined;
+        const wasMultiStep = this.taskTotal > 1;
+        const finalTaskFacts = wasMultiStep && !next ? this.taskFacts() : facts;
+        const resultSource = wasMultiStep && !next ? this.o.source : this.siteOf(p.tool.origin);
+        const resultTitle =
+          wasMultiStep && !next
+            ? said.ok
+              ? "Task complete"
+              : "Task stopped"
+            : `${label(p.tool)} ${said.ok ? "done" : "did not work"}`;
         if (!next) this.clearTask();
         this.show(
-          resultFrame(
-            this.siteOf(p.tool.origin),
-            `${label(p.tool)} ${said.ok ? "done" : "did not work"}`,
-            {
-              ok: said.ok,
-              detail: said.message ?? (facts.length > 0 ? undefined : summarize(outcome.raw)),
-              facts,
-              ...(next
-                ? {
-                    next: {
-                      label: nextTool ? label(nextTool) : next.name,
-                      index: this.taskStep + 1,
-                      total: this.taskTotal,
-                    },
-                  }
-                : {}),
-            },
-          ),
+          resultFrame(resultSource, resultTitle, {
+            ok: said.ok,
+            detail:
+              said.message ?? (finalTaskFacts.length > 0 ? undefined : summarize(outcome.raw)),
+            facts: finalTaskFacts,
+            ...(next
+              ? {
+                  next: {
+                    label: nextTool ? label(nextTool) : next.name,
+                    index: this.taskStep + 1,
+                    total: this.taskTotal,
+                  },
+                }
+              : {}),
+          }),
         );
       }
     } catch (err) {
@@ -1212,7 +1536,54 @@ export class Session {
 /* --------------------------------------------------------------- helpers */
 
 function msg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  return safeResultText(e instanceof Error ? e.message : String(e));
+}
+
+function transferValueForParam(
+  value: unknown,
+  param: ParamSpec,
+): string | number | boolean | undefined {
+  const accepted = valueForParam(value, param);
+  return typeof accepted === "string" ||
+    typeof accepted === "number" ||
+    typeof accepted === "boolean"
+    ? accepted
+    : undefined;
+}
+
+function schemaKey(param: ParamSpec): string {
+  return JSON.stringify({
+    name: param.name,
+    required: param.required,
+    kind: param.kind,
+    schema: param.schema,
+  });
+}
+
+function transferAudit(
+  option: TransferOption,
+  destinationArgument: string,
+  decision: string,
+): Record<string, unknown> {
+  return {
+    sourceOrigin: option.source.origin,
+    sourceTool: option.source.toolName,
+    sourceStep: option.source.step,
+    sourceField: option.projection.location,
+    valueType: option.projection.valueType,
+    destinationArgument,
+    decision,
+  };
+}
+
+/** Argument names and types only. Values do not belong in observability. */
+function argumentAudit(args: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(args).map(([name, value]) => [
+      name,
+      Array.isArray(value) ? "array" : value === null ? "null" : typeof value,
+    ]),
+  );
 }
 
 /**

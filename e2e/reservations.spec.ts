@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { focusChoice } from "./drive.js";
+import { freshCode } from "./session-code.js";
 
 /**
  * The same Dusky, pointed at a site it has never seen.
@@ -28,7 +29,7 @@ async function pair(page: Page, code: string) {
 }
 
 test("the console discovers a second, unrelated site cross-origin", async ({ page }) => {
-  await pair(page, "RESVAA");
+  await pair(page, freshCode());
 
   // Three tools, and only because Amber & Oak named this origin in exposedTo.
   const actions = page.getByTestId("actions");
@@ -46,7 +47,7 @@ test("the console discovers a second, unrelated site cross-origin", async ({ pag
 });
 
 test("policy classifies a site it has never seen, from the schema alone", async ({ page }) => {
-  await pair(page, "RESVAB");
+  await pair(page, freshCode());
 
   // readOnlyHint honored: looking up tables changes nothing.
   const find = page.getByTestId("actions").locator("li", { hasText: "Find a table" }).first();
@@ -70,10 +71,11 @@ test("an enum in the schema becomes buttons, with no code in between", async ({ 
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RESVAC");
+  const code = freshCode();
+  await pair(consolePage, code);
   await expect(consolePage.getByText("Find a table")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RESVAC");
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
 
   // The menu is three tools deep, and the words come from two different
   // places: the site supplied a title for one, and `label()` derived the
@@ -115,10 +117,11 @@ test("a booking runs, stops for a human, and reports the site's own words", asyn
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RESVAD");
+  const code = freshCode();
+  await pair(consolePage, code);
   await expect(consolePage.getByText("book_table")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RESVAD");
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
   await expect(displayPage.getByRole("button", { name: /Book table/ })).toBeVisible();
 
   await focusChoice(displayPage, /Book table/);
@@ -177,10 +180,11 @@ test("a returned error is reported as a failure, not as a success", async ({ bro
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
-  await pair(consolePage, "RESVAE");
+  const code = freshCode();
+  await pair(consolePage, code);
   await expect(consolePage.getByText("change_reservation")).toBeVisible();
 
-  await displayPage.goto("http://localhost:7802/?session=RESVAE");
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
   await focusChoice(displayPage, /Change reservation/);
   await displayPage.keyboard.press("Enter");
 

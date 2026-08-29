@@ -1,7 +1,7 @@
 # The Dusky session relay.
 #
 # Render is used because the relay holds WebSockets, which serverless hosts
-# cannot. Vercel is correct for the three static surfaces and wrong for this
+# cannot. Vercel is correct for the five static surfaces and wrong for this
 # one. Railway and Fly run the same commands if you prefer either.
 #
 # Nothing here holds a partner site's credentials and nothing here can invoke a

@@ -87,6 +87,21 @@ export type DisplayFrame =
       choices: Choice[];
     }
   | {
+      /** A distinct consent boundary for information crossing origins. */
+      kind: "transfer";
+      source: string;
+      title: string;
+      /** Readable names only. Trusted provenance remains the browser-supplied origins. */
+      from: string;
+      to: string;
+      /** The destination field that will receive the approved value. */
+      argument: string;
+      /** The exact bounded value that will be applied, rendered as inert text. */
+      preview: string;
+      note?: string;
+      choices: Choice[];
+    }
+  | {
       kind: "result";
       source: string;
       /** Read from the returned result. A returned error is NOT a success. */
@@ -113,6 +128,7 @@ export type TaskState =
   | "idle"
   | "selected"
   | "working"
+  | "transfer_required"
   | "confirm_required"
   | "completed"
   | "failed"
@@ -249,10 +265,10 @@ export interface AuditEntry {
   at: string;
   sessionId: string;
   /** `plan` records what a model proposed, including proposals code refused. */
-  kind: "discover" | "plan" | "gate" | "invoke" | "result" | "cancel" | "error";
+  kind: "discover" | "plan" | "transfer" | "gate" | "invoke" | "result" | "cancel" | "error";
   origin?: string;
   toolName?: string;
-  /** Never contains credentials. Arguments are recorded, secrets are not. */
+  /** Never contains credentials, raw transfer values, or message bodies. */
   detail?: Record<string, unknown>;
 }
 

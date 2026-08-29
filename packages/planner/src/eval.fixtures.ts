@@ -8,7 +8,7 @@ import type { ToolDescriptor } from "@dusky/contracts";
  * evals rather than by taste. The first of those three needs no model and no
  * credential at all, which is what this file is for.
  *
- * The tools are the ones the two first-party sites actually register, copied
+ * The tools are the ones the three first-party sites actually register, copied
  * rather than imported because `packages/planner` must not depend on an app,
  * plus a few from other domains so a corpus of seven does not quietly become
  * a corpus about shopping.
@@ -109,6 +109,63 @@ export const RESERVATIONS: ToolDescriptor[] = [
   }),
 ];
 
+/* -------------------------------- Northstar Dispatch, apps/dispatch */
+
+export const DISPATCH: ToolDescriptor[] = [
+  t({
+    name: "find_contacts",
+    title: "Find a contact",
+    origin: "https://dispatch.test",
+    description: "Look up people by name. Returns contact ids, names, and channels.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Who are you looking for?" } },
+      required: ["query"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  }),
+  t({
+    name: "review_messages",
+    title: "Review messages",
+    origin: "https://dispatch.test",
+    description: "Read recent drafts and sent messages for one contact. Changes nothing.",
+    inputSchema: {
+      type: "object",
+      properties: { contact_id: { type: "string", description: "Whose messages?" } },
+      required: ["contact_id"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  }),
+  t({
+    name: "draft_message",
+    title: "Draft message",
+    origin: "https://dispatch.test",
+    description: "Save message text for a contact without sending it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "string", description: "Who is this for?" },
+        body: { type: "string", description: "What exact text should be saved?" },
+      },
+      required: ["contact_id", "body"],
+    },
+  }),
+  t({
+    name: "send_message",
+    title: "Send message",
+    origin: "https://dispatch.test",
+    description: "Send exact message text to one contact by contact id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "string", description: "Who should receive it?" },
+        body: { type: "string", description: "What exact text should be sent?" },
+      },
+      required: ["contact_id", "body"],
+    },
+  }),
+];
+
 /* ------------- Domains nobody here built a site for, to keep it honest */
 
 export const OTHERS: ToolDescriptor[] = [
@@ -133,26 +190,10 @@ export const OTHERS: ToolDescriptor[] = [
     },
     annotations: { readOnlyHint: true, untrustedContentHint: false },
   }),
-  t({
-    name: "list_messages",
-    origin: "https://mail.test",
-    description: "List recent messages in the inbox.",
-    annotations: { readOnlyHint: true, untrustedContentHint: false },
-  }),
-  t({
-    name: "send_message",
-    origin: "https://mail.test",
-    description: "Send a message to somebody.",
-    inputSchema: {
-      type: "object",
-      properties: { to: { type: "string" }, body: { type: "string" } },
-      required: ["to", "body"],
-    },
-  }),
 ];
 
 /** Everything at once, which is the case a shortlist actually exists for. */
-export const ALL_TOOLS: ToolDescriptor[] = [...MARKET, ...RESERVATIONS, ...OTHERS];
+export const ALL_TOOLS: ToolDescriptor[] = [...MARKET, ...RESERVATIONS, ...DISPATCH, ...OTHERS];
 
 /**
  * What a wearer might say, and which tool should be reachable afterwards.
@@ -184,7 +225,9 @@ export const CORPUS: Labelled[] = [
   { intent: "can I change my reservation", expect: "change_reservation" },
   { intent: "check me in for my flight", expect: "check_in" },
   { intent: "is my flight on time", expect: "flight_status" },
-  { intent: "any new mail", expect: "list_messages" },
+  { intent: "find dana in my contacts", expect: "find_contacts" },
+  { intent: "show my recent messages with dana", expect: "review_messages" },
+  { intent: "write a draft to dana", expect: "draft_message" },
   { intent: "tell dana I am running late", expect: "send_message" },
 ];
 
@@ -207,7 +250,52 @@ export const COMPOUND_CORPUS: { intent: string; expect: string[] }[] = [
     expect: ["review_cart", "empty_cart"],
   },
   {
-    intent: "find a table this weekend and show me any new mail",
-    expect: ["find_times", "list_messages"],
+    intent: "find a table this weekend and show my recent messages with dana",
+    expect: ["find_times", "review_messages"],
+  },
+  {
+    intent: "reserve a table for four and send the reservation details to dana",
+    expect: ["book_table", "send_message"],
+  },
+  {
+    intent: "reserve a table, add oat milk to my cart, then tell dana the reservation details",
+    expect: ["book_table", "add_to_cart", "send_message"],
+  },
+];
+
+/** Deterministic result shapes and the later arguments they must be able to fill. */
+export const HANDOFF_CORPUS: {
+  name: string;
+  result: string;
+  destination: ToolDescriptor;
+  argument: string;
+  expectLocation: string;
+}[] = [
+  {
+    name: "structured result to message body",
+    result: JSON.stringify({
+      ok: true,
+      reference_id: "R-42",
+      party_size: 4,
+      date: "tomorrow",
+      time: "7:30 PM",
+    }),
+    destination: DISPATCH.find((tool) => tool.name === "send_message") as ToolDescriptor,
+    argument: "body",
+    expectLocation: "#summary",
+  },
+  {
+    name: "returned identifier to a later identifier field",
+    result: JSON.stringify({ ok: true, reservation_id: "R-42" }),
+    destination: RESERVATIONS.find((tool) => tool.name === "change_reservation") as ToolDescriptor,
+    argument: "reservation_id",
+    expectLocation: "/reservation_id",
+  },
+  {
+    name: "protocol text to message body",
+    result: JSON.stringify({ content: [{ type: "text", text: "Your flight is on time." }] }),
+    destination: DISPATCH.find((tool) => tool.name === "draft_message") as ToolDescriptor,
+    argument: "body",
+    expectLocation: "#summary",
   },
 ];
