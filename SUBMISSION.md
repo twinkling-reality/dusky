@@ -51,8 +51,8 @@ exact compatible projection for 3 of 3 result-handoff fixtures. The repository
 has 324 unit and deterministic tests plus 32 Playwright tests in real Chrome
 with WebMCP enabled.
 
-Existing live demo, still on the prior two-source build until deployment is
-authorized: https://dusky-console.vercel.app
+Live three-source demo, verified by the 10-test production suite on 2026-08-29:
+https://dusky-console.vercel.app
 
 Source: https://github.com/twinkling-reality/dusky
 

@@ -8,10 +8,10 @@ each of them, which is why it exists: `dusky-reservations` once answered
 DEPLOYMENT_NOT_FOUND with the rest of the suite green, because a claim nothing
 asserts is a claim nothing can catch.
 
-The dispatch source and updated console in this tree have not been deployed.
-Do not treat the existing live demo as evidence for the three-source transfer
-milestone, and do not run the updated production suite until all new builds and
-environment values are live.
+All six surfaces were deployed from `f7d9656` on 2026-08-29. The production
+suite passed 10/10 against the stable URLs below, including three-origin WebMCP
+discovery, a deployed tool invocation, browser-agent control, and a live
+two-step planner result.
 
 | Surface | URL |
 | --- | --- |
@@ -22,11 +22,13 @@ environment values are live.
 | Northstar Dispatch | https://dusky-dispatch.vercel.app |
 | Relay | https://dusky-relay.onrender.com |
 
-Two things are deliberately still manual, because they are credentials:
+Two deployment facts remain deliberately manual:
 
-- `ANTHROPIC_API_KEY` is unset on the relay. Add it under Environment in the
-  Render dashboard. Until then the planner tries, fails, and the wearer gets
-  the menu, which is the degradation the relay was built for.
+- `DUSKY_PLANNER=on` and `ANTHROPIC_API_KEY` are configured on the relay. The
+  first cold live request exhausted the seven-second planning budget and fell
+  back to the menu. Two immediate repeats produced the intended two-step task.
+  This is measured live behavior, not a guarantee that every model call will
+  answer inside the budget.
 - Viewing the console needs WebMCP in the browser: the ChatGPT desktop app's
   built-in browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`.
   The console says so plainly when the API is missing.

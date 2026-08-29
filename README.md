@@ -172,7 +172,7 @@ anybody wants; it is there for tests and for a slow connection.
 | `packages/lens`, `packages/tokens`, `packages/contracts` | The panel, the palettes, the shared types. |
 | `e2e` | The round trip, in real Chrome with the real flag. |
 
-## Measured locally
+## Measured
 
 - 324 unit and deterministic tests cover the current tree before the final
   verification pass.
@@ -183,9 +183,12 @@ anybody wants; it is there for tests and for a slow connection.
 - The browser suite holds eleven actions from three origins and drives the full
   reservation-to-message path through real WebMCP.
 
-These are local measurements, not live deployment evidence. The production
-suite should only be run after the dispatch source and updated console have
-actually been deployed.
+The production suite passes 10/10 against all six live surfaces. It verifies
+the three deployed origins, eleven tools, WebSocket relay, deployed tool
+invocation, browser-agent control, and a live two-step planner result. The first
+cold planner request exhausted its seven-second budget and safely returned to
+the menu; two immediate repeats produced the intended task. Real-glasses input,
+sleep recovery, composer behavior, and load time remain unverified.
 
 ## Limits
 

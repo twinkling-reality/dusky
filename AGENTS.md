@@ -327,10 +327,16 @@ when content does not satisfy the schema rather than returning a null
 treated as the model declining; a typed `APIError` is rethrown so the planner
 records a real failure and escalates.
 
-Not verified: no request in this repository has ever reached the live API,
-because tests here run without credentials. Model choice, tier defaults and the
-`effort` setting are still reasoned rather than measured, and their latency and
-accuracy should be read that way.
+Live API behavior was first measured on 2026-08-29 through the deployed relay.
+The first cold planning request exhausted the shared seven-second budget: the
+fast tier timed out at 2.5 seconds, the careful tier used the remainder, and the
+session safely returned to the menu. Two immediate repeats produced the correct
+two-action task. On those runs the fast tier answered in 1.5 to 2.0 seconds but
+included a lookup as a third step; the careful tier corrected the plan to the
+two requested end actions at 4.8 to 5.9 seconds total. Same-origin resolver
+planning completed in 3.8 to 5.6 seconds. These are two successful samples and
+one cold failure, not a planner-accuracy measurement. The timeout behavior and
+tier correction are now measured rather than reasoned.
 
 Three deterministic measurements now need no model or credential.
 `eval.fixtures.ts` and `eval.test.ts` measure shortlist recall over twenty-one
@@ -356,9 +362,9 @@ sides, so "find me some oat milk" admits both `find_times` and
 only domain-neutral verbs. Adding `milk -> product` would be a per-site branch
 in different clothes.
 
-Read the 16 carefully. It is not planner accuracy, because a model is what
+Read the 18 carefully. It is not planner accuracy, because a model is what
 happens next. It says only that the right tool is available to be chosen in
-sixteen cases, and that raising the shortlist to eight currently buys nothing
+eighteen cases, and that raising the shortlist to eight currently buys nothing
 on this small corpus.
 
 ## Dusky as a provider

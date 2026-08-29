@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { focusChoice } from "./drive.js";
+import { freshCode } from "./session-code.js";
 
 /**
  * The load-bearing round trip, against the live deployment.
@@ -24,22 +25,6 @@ const MARKET = "https://dusky-market.vercel.app";
 const RESERVATIONS = "https://dusky-reservations.vercel.app";
 const DISPATCH = "https://dusky-dispatch.vercel.app";
 const RELAY = "https://dusky-relay.onrender.com";
-
-/**
- * A code nobody else is using, so a rerun cannot collide with a live session.
- *
- * Letters only, from SESSION_CODE_ALPHABET. Base36 was fine while the relay
- * took any string, and stopped being fine when the console started refusing
- * anything a lens could not legibly show.
- */
-const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
-const stamp = Date.now();
-const suffix = [0, 1, 2]
-  .map((i) => ALPHABET[Math.floor(stamp / ALPHABET.length ** i) % ALPHABET.length])
-  .join("");
-const CODE = `PRD${suffix}`;
-/** A second one, for the session that is deliberately narrowed to one site. */
-const CODE_B = `RES${suffix}`;
 
 test("the relay is reachable and healthy", async ({ request }) => {
   const res = await request.get(`${RELAY}/health`);
@@ -77,10 +62,11 @@ test("the front door and the demo route are both served", async ({ request }) =>
 });
 
 test("the deployed console discovers the deployed market cross-origin", async ({ page }) => {
+  const code = freshCode();
   // A code in the URL pairs with no typing. `mode=glasses` suppresses the
   // embedded panel, because this test opens its own Display page and a
   // session takes exactly one Display.
-  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await page.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
 
   // If this fails the browser has no WebMCP, and nothing below can pass.
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
@@ -117,7 +103,7 @@ test("the deployed console discovers the deployed market cross-origin", async ({
  * third site arrives.
  */
 test("every site the console holds points at a deployment, not at a laptop", async ({ page }) => {
-  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await page.goto(`${CONSOLE}/demo?session=${freshCode()}&mode=glasses`);
 
   for (const [title, expected] of [
     ["Verdant Market", MARKET],
@@ -157,7 +143,7 @@ test("every site the console holds points at a deployment, not at a laptop", asy
  * enforce and each test.
  */
 test("the deployed console holds all three deployed sites at once", async ({ page }) => {
-  await page.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await page.goto(`${CONSOLE}/demo?session=${freshCode()}&mode=glasses`);
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
 
   const actions = page.getByTestId("actions");
@@ -194,7 +180,7 @@ test("the deployed console holds all three deployed sites at once", async ({ pag
  * several iframes has a way to.
  */
 test("a session can still be narrowed to one deployed site", async ({ page }) => {
-  await page.goto(`${CONSOLE}/demo?session=${CODE_B}&source=reservations&mode=glasses`);
+  await page.goto(`${CONSOLE}/demo?session=${freshCode()}&source=reservations&mode=glasses`);
   await expect(page.getByText("WebMCP is not enabled")).toHaveCount(0);
 
   const actions = page.getByTestId("actions");
@@ -207,12 +193,13 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
+  const code = freshCode();
 
-  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
   await expect(consolePage.getByText("Add to cart")).toBeVisible();
 
   // The Display connects over wss:// to a relay on a different host entirely.
-  await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
+  await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
   await focusChoice(displayPage, /Add to cart/);
@@ -257,11 +244,12 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
+  const code = freshCode();
 
-  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
   await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
-  await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
+  await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
   const status = await consolePage.evaluate(async () => {
@@ -272,7 +260,7 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
     return JSON.parse(await mc.executeTool(t, JSON.stringify({}))) as Record<string, unknown>;
   });
 
-  expect(status).toMatchObject({ ok: true, session: CODE, display_connected: true });
+  expect(status).toMatchObject({ ok: true, session: code, display_connected: true });
   // The relay reports whether it can interpret a spoken request at all, which
   // is how an agent knows the deployment has a working model credential.
   expect(status["can_interpret_requests"]).toBe(true);
@@ -299,11 +287,12 @@ test("one spoken request becomes a two-step cross-site result-sharing task", asy
   const ctx = await browser.newContext();
   const consolePage = await ctx.newPage();
   const displayPage = await ctx.newPage();
+  const code = freshCode();
 
-  await consolePage.goto(`${CONSOLE}/demo?session=${CODE}&mode=glasses`);
+  await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
   await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
-  await displayPage.goto(`${DISPLAY}/?session=${CODE}`);
+  await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
   const sent = await consolePage.evaluate(async () => {
