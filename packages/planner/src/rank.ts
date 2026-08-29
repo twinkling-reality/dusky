@@ -187,14 +187,69 @@ export function scoreTool(tool: ToolDescriptor, tokens: string[]): RankedTool {
 /**
  * Rank tools against an intent, best first.
  *
- * Ties are broken by name so the order is stable across calls. `getTools`
- * ordering is the browser's business and must never leak into a decision.
+ * Ties are broken by name and then by ORIGIN, so the order is stable across
+ * calls. `getTools` ordering is the browser's business and must never leak
+ * into a decision, and a name on its own stopped being a tiebreak the moment a
+ * session could hold two sites: any origin may register any name, so two tools
+ * called the same thing at the same score fell back to whatever order the
+ * browser happened to hand over. Origin is unique per name by construction.
  */
 export function rank(intent: string, tools: ToolDescriptor[]): RankedTool[] {
   const tokens = intentTokens(intent);
   return tools
     .map((t) => scoreTool(t, tokens))
-    .sort((a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name));
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.tool.name.localeCompare(b.tool.name) ||
+        a.tool.origin.localeCompare(b.tool.origin),
+    );
+}
+
+/**
+ * Fill the leftover slots without letting one site take all of them.
+ *
+ * Round robin over origins, in the order each origin's best unmatched tool
+ * appears, so N sites with nothing matching get roughly `limit / N` slots each
+ * rather than the alphabetically luckiest site getting every one.
+ *
+ * The problem this solves is not fairness for its own sake, and it is not
+ * theoretical. Measured, by running this function: against the market's four
+ * tools plus six named `aaa_assist` through `aaf_now` at one other origin, the
+ * request "tell dana I am running late" matched nothing, every score was zero,
+ * and the shortlist was ALL SIX squatters. The shop's tools never reached the
+ * model at all. Holding one site, that was a site starving itself and nobody
+ * else's problem. Holding every site at once, it is one origin denying every
+ * other origin access to the model for the price of renaming its tools, on a
+ * list the wearer never sees and cannot audit.
+ *
+ * Only the unmatched remainder is shared out. A real lexical match is evidence
+ * and keeps its slot outright, so this cannot cost a site a place it earned.
+ */
+function fairFill(rest: RankedTool[], slots: number): RankedTool[] {
+  if (slots <= 0) return [];
+  const byOrigin = new Map<string, RankedTool[]>();
+  for (const r of rest) {
+    const queue = byOrigin.get(r.tool.origin);
+    if (queue) queue.push(r);
+    else byOrigin.set(r.tool.origin, [r]);
+  }
+  const queues = [...byOrigin.values()];
+  const out: RankedTool[] = [];
+  // Insertion order of the map is rank order of each origin's best tool, so a
+  // round is itself ranked and the first round alone is a sensible answer.
+  for (let round = 0; out.length < slots; round += 1) {
+    let placed = false;
+    for (const q of queues) {
+      const next = q[round];
+      if (!next) continue;
+      out.push(next);
+      placed = true;
+      if (out.length === slots) return out;
+    }
+    if (!placed) break;
+  }
+  return out;
 }
 
 /**
@@ -210,7 +265,7 @@ export function shortlist(intent: string, tools: ToolDescriptor[], limit: number
   const ranked = rank(intent, tools);
   const matched = ranked.filter((r) => r.score > 0);
 
-  // Matches first, then fill the remaining slots in rank order.
+  // Matches first, then fill the remaining slots.
   //
   // This used to return ONLY the matches whenever there was at least one, so
   // three matching tools meant a shortlist of three even with six slots free.
@@ -221,6 +276,11 @@ export function shortlist(intent: string, tools: ToolDescriptor[], limit: number
   // The cap is the point of this function, not the filter. A model seeing two
   // extra low-scoring cards costs a few dozen tokens; a model never being
   // shown the right tool costs the request.
+  //
+  // The fill is shared across origins rather than taken in rank order, because
+  // with every score at zero "rank order" is alphabetical order and one site
+  // can name its way to all of it. See `fairFill`.
   const rest = ranked.filter((r) => r.score <= 0);
-  return [...matched, ...rest].slice(0, limit);
+  const head = matched.slice(0, limit);
+  return [...head, ...fairFill(rest, limit - head.length)];
 }

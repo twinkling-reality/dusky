@@ -37,6 +37,85 @@ describe("ranking evidence", () => {
     expect(rank("nothing matches", [b, a]).map((r) => r.tool.name)).toEqual(["alpha", "beta"]);
     expect(rank("nothing matches", [a, b]).map((r) => r.tool.name)).toEqual(["alpha", "beta"]);
   });
+
+  it("breaks a tie on origin when two sites publish the same name", () => {
+    // A name is not an identity: any origin may register any name, so a
+    // name-only tiebreak left two identically named tools in whatever order
+    // the browser returned them. That is the ordering AGENTS.md says never to
+    // depend on, reached through the one place nobody looks.
+    const shop = tool({ name: "checkout", origin: "https://a.test" });
+    const other = tool({ name: "checkout", origin: "https://b.test" });
+    const forwards = rank("nothing matches", [shop, other]).map((r) => r.tool.origin);
+    const backwards = rank("nothing matches", [other, shop]).map((r) => r.tool.origin);
+    expect(forwards).toEqual(["https://a.test", "https://b.test"]);
+    expect(backwards).toEqual(forwards);
+  });
+});
+
+/**
+ * One site must not be able to take every slot from the others.
+ *
+ * The shortlist is the only thing between a site's own text and the model, and
+ * with nothing matching an intent every score is zero, so "rank order" is
+ * alphabetical order. A site that wants to be the only thing a model ever sees
+ * therefore only has to name its tools well.
+ *
+ * That was a site starving itself while Dusky held one site at a time. Holding
+ * every site at once, it is one origin denying every other origin access to
+ * the model, on a list the wearer never sees.
+ */
+describe("sharing the shortlist between sites", () => {
+  const SHOP = "https://shop.test";
+  const SQUAT = "https://squat.test";
+
+  const shopTools = ["search_products", "add_to_cart", "review_cart", "empty_cart"].map((name) =>
+    tool({ name, origin: SHOP }),
+  );
+  const squatTools = ["aaa_assist", "aab_helper", "aac_do", "aad_go", "aae_now", "aaf_run"].map(
+    (name) => tool({ name, origin: SQUAT }),
+  );
+
+  it("does not let alphabetically early names crowd out another site", () => {
+    // An intent matching nothing on either side, so every score is zero and
+    // the whole list is fill. Before this, all six slots went to the squatter
+    // and the shop never reached the model.
+    const picked = shortlist("xylophone concerto", [...shopTools, ...squatTools], 6);
+    const origins = picked.map((r) => r.tool.origin);
+    expect(
+      picked.every((r) => r.score === 0),
+      "the intent was supposed to match nothing",
+    ).toBe(true);
+    expect(origins.filter((o) => o === SHOP)).toHaveLength(3);
+    expect(origins.filter((o) => o === SQUAT)).toHaveLength(3);
+  });
+
+  it("shares what is left over after real matches have taken their slots", () => {
+    // "running" is a genuine name match for `aaf_run`, so that one is not fill
+    // and keeps its place outright. The five slots behind it are shared, which
+    // at two sites is three and two rather than five and zero.
+    const picked = shortlist("tell dana I am running late", [...shopTools, ...squatTools], 6);
+    expect(picked[0]?.tool.name).toBe("aaf_run");
+    expect(picked[0]?.score).toBeGreaterThan(0);
+    const fill = picked.slice(1).map((r) => r.tool.origin);
+    expect(fill.filter((o) => o === SQUAT)).toHaveLength(3);
+    expect(fill.filter((o) => o === SHOP)).toHaveLength(2);
+  });
+
+  it("still gives a real match its slot outright", () => {
+    // Sharing applies to the unmatched remainder only. Lexical evidence is
+    // evidence, and a site cannot lose a place it earned because another site
+    // is also present.
+    const picked = shortlist("add oat milk to my cart", [...shopTools, ...squatTools], 6);
+    expect(picked[0]?.tool.name).toBe("add_to_cart");
+    expect(picked[0]?.score).toBeGreaterThan(0);
+  });
+
+  it("uses every slot when only one site is held", () => {
+    // The single-site case must be unchanged: there is nobody to share with.
+    const picked = shortlist("nothing matches here", shopTools, 6);
+    expect(picked).toHaveLength(4);
+    expect(new Set(picked.map((r) => r.tool.origin)).size).toBe(1);
+  });
 });
 
 describe("a hostile description", () => {

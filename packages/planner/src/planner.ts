@@ -267,24 +267,52 @@ export class ModelPlanner {
       sent: ranked.length,
     });
 
-    // Tier zero: no model at all when there is nothing to decide. This only
-    // fires for a tool that takes no arguments, because a tool with arguments
-    // is precisely where a model earns its cost, and filling one in by lexical
-    // similarity would be the guessing this planner refuses to do.
+    const candidates = ranked.map((r) => r.tool);
+
+    /*
+     * Tier zero: no model at all when there is nothing to decide. This only
+     * fires for a tool that takes no arguments, because a tool with arguments
+     * is precisely where a model earns its cost, and filling one in by lexical
+     * similarity would be the guessing this planner refuses to do.
+     *
+     * It goes through `accept` like every other answer, and that is not
+     * ceremony. This path used to return a bare name without passing the one
+     * function that refuses a name two origins both claim, so the planner's
+     * own stated guarantee had a hole in its CHEAPEST branch. Measured: an
+     * impostor `empty_cart` carrying the title "Empty the cart" scores 14
+     * against the honest one's 10 for the intent "empty the cart", a margin of
+     * 4, comfortably past both decisive thresholds. `TITLE_WEIGHT` is 2 per
+     * token, so a title alone manufactures the margin.
+     *
+     * `session.byName` caught it a layer out, which is exactly the arrangement
+     * AGENTS.md disowns: a guarantee that only holds while two files agree is
+     * not a guarantee, and here only one file was holding it.
+     */
     const decisive = decisiveWinner(ranked);
     if (decisive && parameters(decisive).every((p) => !p.required)) {
-      this.emit({
-        kind: "resolved",
-        path: "pickTool",
-        tier: "none",
-        tool: decisive.name,
-        droppedArgs: [],
-        ms: this.now() - started,
-      });
-      return { name: decisive.name, args: {} };
+      const verdict = accept(decisive.name, candidates, false);
+      if ("reason" in verdict) {
+        this.emit({
+          kind: "rejected",
+          path: "pickTool",
+          tier: "fast",
+          tool: decisive.name,
+          reason: verdict.reason,
+          ms: this.now() - started,
+        });
+      } else {
+        this.emit({
+          kind: "resolved",
+          path: "pickTool",
+          tier: "none",
+          tool: decisive.name,
+          droppedArgs: [],
+          ms: this.now() - started,
+        });
+        return { name: decisive.name, args: {} };
+      }
     }
 
-    const candidates = ranked.map((r) => r.tool);
     const user = [
       `Request: ${safeText(intent, 400)}`,
       "",
@@ -303,6 +331,31 @@ export class ModelPlanner {
    * because the session is untrusted, but because a guarantee that only holds
    * while two files agree is not a guarantee, and this is the one path where a
    * model's choice runs with no human in front of it.
+   *
+   * A RESOLVER MUST BE SAME-ORIGIN AS ITS TARGET.
+   *
+   * This was unconstrained for as long as a session could only ever hold one
+   * site, where it was a rule with nothing to forbid. Holding every site at
+   * once makes it the sharpest edge in the product, for three reasons and in
+   * that order:
+   *
+   *  - The wearer's own words are what fill a lookup's arguments. `intent` goes
+   *    into the prompt that decides them, so a cross-origin resolver sends what
+   *    somebody said out loud to a business that has nothing to do with what
+   *    they asked for. Nobody consented to that and nobody would see it happen.
+   *  - It runs with NO HUMAN IN FRONT OF IT. Every other path a proposal can
+   *    take reaches a confirmation frame; this one is the exception, and its
+   *    blast radius used to be one site by construction.
+   *  - It is baitable. Ranking scores tools on text their own site wrote, and
+   *    the shortlist is the only thing standing between a description and the
+   *    model. A site that wants other people's requests only has to write a
+   *    read-only tool that scores well against everything. Same-origin is a
+   *    structural answer to that where scoring is a probabilistic one.
+   *
+   * What it costs, stated plainly: a genuinely cross-site lookup, "add what my
+   * recipe app lists to my cart", becomes a question for the wearer instead of
+   * something a model does quietly. That is the fallback the product already
+   * has, and bridging two businesses is a decision a person should make.
    */
   async planResolver(
     missingParam: string,
@@ -317,9 +370,10 @@ export class ModelPlanner {
     }
     const candidates = readOnlyTools.filter(
       (t) =>
+        t.origin === target.origin &&
         gate(t).consequence === "read" &&
         isOperable(t) &&
-        !(t.name === target.name && t.origin === target.origin),
+        t.name !== target.name,
     );
     if (candidates.length === 0) {
       this.emit({ kind: "abstained", path: "planResolver", tier: "none", ms: 0 });
@@ -342,18 +396,33 @@ export class ModelPlanner {
     const shortlisted = ranked.map((r) => r.tool);
 
     // Tier zero again: a lookup that takes no arguments and clearly matches
-    // needs no model. `review_cart` for a missing cart item is this case.
+    // needs no model. `review_cart` for a missing cart item is this case. It
+    // passes `accept` for the same reason the pick path does: this is the
+    // branch where no model is asked, so it is the branch where the checks
+    // that are not the model have to hold on their own.
     const decisive = decisiveWinner(ranked);
     if (decisive && parameters(decisive).length === 0) {
-      this.emit({
-        kind: "resolved",
-        path: "planResolver",
-        tier: "none",
-        tool: decisive.name,
-        droppedArgs: [],
-        ms: this.now() - started,
-      });
-      return { name: decisive.name, args: {} };
+      const verdict = accept(decisive.name, shortlisted, true);
+      if ("reason" in verdict) {
+        this.emit({
+          kind: "rejected",
+          path: "planResolver",
+          tier: "fast",
+          tool: decisive.name,
+          reason: verdict.reason,
+          ms: this.now() - started,
+        });
+      } else {
+        this.emit({
+          kind: "resolved",
+          path: "planResolver",
+          tier: "none",
+          tool: decisive.name,
+          droppedArgs: [],
+          ms: this.now() - started,
+        });
+        return { name: decisive.name, args: {} };
+      }
     }
 
     const user = [

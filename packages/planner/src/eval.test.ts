@@ -41,11 +41,19 @@ describe("how much the shortlist has to hold", () => {
   /**
    * The measured value, as a regression guard rather than as a target.
    *
-   * 13/19 at the shipped size of six. Raising the size to eight buys one more
-   * and going to the whole registry buys them all, which says the binding
-   * constraint is not the SIZE: it is that lexical ranking puts `find_times`
-   * above `search_products` for "find me some oat milk", because the word
-   * "find" is in one name and nothing in the other matches at all.
+   * 14/19 at the shipped size of six. It was 13 until the leftover slots
+   * started being shared between origins instead of handed out in rank order,
+   * which with every score at zero is alphabetical order. That change was made
+   * for a security reason, because one site could otherwise name its way to
+   * every slot and starve the others, and the recall it bought was measured
+   * afterwards rather than aimed at: 12 to 13 at four slots, 13 to 14 at six,
+   * 14 to 15 at eight. Sharing buys at six exactly what DOUBLING the shortlist
+   * to eight used to buy, and costs no tokens at all.
+   *
+   * Going to the whole registry still buys them all, so the binding constraint
+   * is still not the SIZE: it is that lexical ranking puts `find_times` above
+   * `search_products` for "find me some oat milk", because the word "find" is
+   * in one name and nothing in the other matches at all.
    *
    * That is the case the model tier exists for, and it is also why this number
    * should not be read as planner accuracy. What it does say is that six slots
@@ -53,7 +61,7 @@ describe("how much the shortlist has to hold", () => {
    */
   it("keeps the right tool reachable at the size actually shipped", () => {
     const { hit, missed } = recallAt(6);
-    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(13);
+    expect(hit, `missed:\n${missed.join("\n")}`).toBeGreaterThanOrEqual(14);
   });
 
   it("never drops a tool it had room for", () => {
