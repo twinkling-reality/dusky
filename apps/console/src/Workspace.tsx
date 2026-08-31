@@ -1,11 +1,20 @@
 import { gate } from "@dusky/policy";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useSearchParams } from "react-router";
+import { PairingConnections } from "./PairingConnections.js";
 import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 import { codeProblem, isCode, mintCode, type PairMode } from "./session.js";
 import { originOf, type Source, sitesFromQuery } from "./sources.js";
+import { TopologyConnections } from "./TopologyConnections.js";
 import { useConsoleLink } from "./useConsoleLink.js";
 import styles from "./Workspace.module.css";
 
@@ -36,10 +45,14 @@ const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:780
  * one that matters: it says what to press.
  */
 function WhatIsThis({
+  displayLabel,
+  displayCopy,
   heading,
   sites,
   onClose,
 }: {
+  displayLabel: string;
+  displayCopy: string;
   heading: string;
   sites: readonly Source[];
   onClose: () => void;
@@ -68,27 +81,238 @@ function WhatIsThis({
     <section id="what" ref={box} className={styles.what} data-squircle="" aria-label="What is this">
       <dl className={styles.whatList}>
         <div>
-          <dt>Glasses</dt>
-          <dd>The screen a wearer sees, running in this tab. A real pair loads the same page.</dd>
+          <dt>{displayLabel}</dt>
+          <dd>{displayCopy}</dd>
         </div>
         <div>
           <dt>{heading}</dt>
           <dd>
             {sites.length > 1
-              ? "Provider pages. Dusky read each page's authorized actions and built one screen from the combined registry. The bundled pages are test fixtures."
-              : "A provider page. Dusky read its authorized actions and built that screen from them. Bundled pages are test fixtures."}
+              ? "Provider pages exposing WebMCP tools authorized for this console. Dusky builds the Display flow from their combined registry. A moving path means an origin has exposed tools; it is not a per-call trace. The bundled pages are test fixtures."
+              : "A provider page exposing WebMCP tools authorized for this console. Dusky builds the Display flow from its live registry. A moving path means the origin has exposed tools; it is not a per-call trace. Bundled pages are test fixtures."}
           </dd>
         </div>
         <div>
-          <dt>Declared actions</dt>
-          <dd>What each site published, and whether each action stops for you first.</dd>
+          <dt>Available actions</dt>
+          <dd>
+            Things each provider page authorized Dusky to offer now. “Wearer confirms” marks an
+            action that needs approval before it runs.
+          </dd>
         </div>
         <div>
-          <dt>Activity</dt>
-          <dd>Every call between Dusky and those sites, as it happens.</dd>
+          <dt>Runtime activity</dt>
+          <dd>
+            Session-wide discovery, relay, agent, and invocation evidence from the browser runtime.
+            Rows are not assigned to a provider unless the runtime supplied that identity.
+          </dd>
         </div>
       </dl>
-      <p className={styles.whatDo}>Press a row on the glasses. Watch the matching site change.</p>
+      <p className={styles.whatDo}>
+        Choose an action on the Display. Its provider tool runs here, in the browser.
+      </p>
+    </section>
+  );
+}
+
+type ActivityKind = "discovery" | "invocation" | "result" | "agent" | "registry" | "error";
+
+interface ActivityEvent {
+  id?: string;
+  kind: ActivityKind;
+  label: string;
+  subject: string;
+  detail: string;
+}
+
+function activityEvent(line: string): ActivityEvent {
+  const discovery = line.match(/^getTools\(\{fromOrigins\}\) -> (\d+) tools from (\d+) of (\d+)$/);
+  if (discovery) {
+    return {
+      kind: "discovery",
+      label: "Discovery",
+      subject: `${discovery[1]} tools available`,
+      detail: `${discovery[2]} of ${discovery[3]} provider origins answered`,
+    };
+  }
+
+  const invocation = line.match(/^executeTool\(([^,]+),\s*(.*)\)$/);
+  if (invocation) {
+    return {
+      kind: "invocation",
+      label: "Tool call",
+      subject: invocation[1] ?? "Unknown tool",
+      detail: invocation[2] === "{}" ? "No arguments" : (invocation[2] ?? ""),
+    };
+  }
+
+  if (line.startsWith("  -> failed:")) {
+    return {
+      kind: "error",
+      label: "Failure",
+      subject: "Provider invocation",
+      detail: line.slice("  -> failed:".length).trim(),
+    };
+  }
+
+  if (line.startsWith("  ->")) {
+    return {
+      kind: "result",
+      label: "Result",
+      subject: "Provider returned",
+      detail: line.slice("  ->".length).trim(),
+    };
+  }
+
+  const agentRequest = line.match(/^agent -> ([^(]+)\((.*)\)$/);
+  if (agentRequest) {
+    return {
+      kind: "agent",
+      label: "Agent",
+      subject: agentRequest[1] ?? "Request",
+      detail: agentRequest[2] || "No arguments",
+    };
+  }
+
+  if (line.startsWith("  <-")) {
+    const detail = line.slice("  <-".length).trim();
+    return {
+      kind: detail.startsWith("refused") ? "error" : "result",
+      label: detail.startsWith("refused") ? "Refused" : "Agent result",
+      subject: "Browser agent",
+      detail,
+    };
+  }
+
+  if (line === "ontoolchange settled, re-discovering") {
+    return {
+      kind: "registry",
+      label: "Registry",
+      subject: "Tools changed",
+      detail: "Re-reading authorized provider actions",
+    };
+  }
+
+  if (line.startsWith("registered Dusky's own")) {
+    return {
+      kind: "registry",
+      label: "Registry",
+      subject: "Agent tools ready",
+      detail: line,
+    };
+  }
+
+  if (/failed|could not|not enabled|error/i.test(line)) {
+    return { kind: "error", label: "Error", subject: "Browser runtime", detail: line };
+  }
+
+  return { kind: "registry", label: "Runtime", subject: "Session event", detail: line };
+}
+
+function TechnicalLog({
+  activity,
+  open,
+  onToggle,
+  onClose,
+}: {
+  activity: readonly string[];
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  const box = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const onDown = (event: PointerEvent) => {
+      const element = box.current;
+      const target = event.target as Node | null;
+      if (!element || !target) return;
+      if (
+        element.contains(target) ||
+        (target instanceof Element && target.closest("[aria-controls=technical-log-panel]"))
+      ) {
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown);
+    };
+  }, [open, onClose]);
+
+  const occurrences = new Map<string, number>();
+  const events = activity
+    .map((line) => {
+      const occurrence = (occurrences.get(line) ?? 0) + 1;
+      occurrences.set(line, occurrence);
+      return { ...activityEvent(line), id: `${line}:${occurrence}` };
+    })
+    .reverse();
+
+  return (
+    <section
+      id="technical-log"
+      ref={box}
+      className={styles.technicalLog}
+      data-open={open ? "" : undefined}
+      data-topology-node=""
+      data-topology-focus="activity"
+      aria-label="Runtime activity"
+    >
+      <span className={styles.activityPort} data-log-end="activity" aria-hidden="true" />
+      <button
+        type="button"
+        className={styles.activitySummary}
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls="technical-log-panel"
+        aria-label={`Technical log, ${activity.length} ${activity.length === 1 ? "event" : "events"}`}
+      >
+        <span>Runtime activity</span>
+        <strong>{activity.length}</strong>
+      </button>
+
+      {open && (
+        <section
+          id="technical-log-panel"
+          className={styles.technicalLogPanel}
+          aria-label="Technical log"
+        >
+          <header className={styles.technicalLogHead}>
+            <div>
+              <h2>Technical log</h2>
+              <p>Newest first · session-wide browser evidence</p>
+            </div>
+            <div>
+              <span>{activity.length} events</span>
+              <button type="button" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </header>
+
+          <div className={styles.technicalLogColumns} aria-hidden="true">
+            <span>Event</span>
+            <span>Entity</span>
+            <span>Detail</span>
+          </div>
+          <ol className={styles.technicalLogEvents}>
+            {events.map((event) => (
+              <li key={event.id} data-kind={event.kind}>
+                <span className={styles.eventLabel}>{event.label}</span>
+                <strong>{event.subject}</strong>
+                <span className={styles.eventDetail}>{event.detail}</span>
+              </li>
+            ))}
+            {events.length === 0 && <li className={styles.noEvents}>No runtime events yet.</li>}
+          </ol>
+        </section>
+      )}
     </section>
   );
 }
@@ -97,6 +321,27 @@ export function Workspace() {
   const probe = useRequirements();
   const [reqOpen, setReqOpen] = useState(false);
   const [whatOpen, setWhatOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [canvasLayout, setCanvasLayout] = useState<"horizontal" | "vertical">("horizontal");
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [canvasPanning, setCanvasPanning] = useState(false);
+  const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const canvasDrag = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  const nodeDrag = useRef<{
+    id: string;
+    pointerId: number;
+    x: number;
+    y: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
   const [params, setParams] = useSearchParams();
   /*
    * Every site at once, which is the whole product.
@@ -146,6 +391,11 @@ export function Workspace() {
     params.get("mode") === "glasses" ? "glasses" : "embedded",
   );
   const [typed, setTyped] = useState("");
+  const pairProblem = codeProblem(typed);
+  const pairReady = isCode(typed);
+  const pairInvalid = pairProblem?.startsWith("Codes are letters only") ?? false;
+  const pairLeftProgress = Math.min(typed.length / 3, 1);
+  const pairRightProgress = Math.max(Math.min((typed.length - 3) / 3, 1), 0);
 
   const link = useConsoleLink(RELAY_URL, session ?? "", held, session !== null);
 
@@ -157,9 +407,27 @@ export function Workspace() {
    * Several of them get a plain label, because no business name is true above a
    * box containing another business.
    */
-  const heading = sites.length === 1 ? (sites[0] as Source).name : "Sites";
-  const nameOf = (origin: string) =>
-    held.find((h) => h.origin === origin)?.name ?? new URL(origin).host;
+  const heading = sites.length === 1 ? (sites[0] as Source).name : "Provider pages";
+  const displayLabel = mode === "embedded" ? "Display preview" : "Ray-Ban Display";
+  const displayCopy =
+    mode === "embedded"
+      ? "The same 600 × 600 Display app, embedded here for the browser demo."
+      : "The current screen on the paired glasses. Wearer input returns through the relay; tools still run in this browser.";
+  const topologyOrigins = useMemo(() => sites.map(originOf), [sites]);
+  const connectedOrigins = useMemo(
+    () => new Set(link.tools.map((tool) => tool.origin)),
+    [link.tools],
+  );
+  const linkLabel =
+    link.link === "open"
+      ? "Relay connected"
+      : link.link === "superseded"
+        ? "Session moved"
+        : link.link === "reconnecting"
+          ? "Reconnecting"
+          : link.link === "offline"
+            ? "Relay offline"
+            : "Connecting";
 
   // Arrow keys reach the panel only when the frame has focus, and a judge who
   // has to discover that is a judge who thinks the demo is broken.
@@ -183,26 +451,32 @@ export function Workspace() {
   }, [mode, session]);
 
   /*
-   * One place that writes the session into the URL, whatever started it: the
-   * button, a pasted code, or `?start=1`. Three call sites each building their
-   * own query string is how `start=1` would have survived into the shareable
-   * link and re-minted a second session for whoever opened it.
+   * One place that writes the session and its Display surface into the URL,
+   * whatever started it: the browser demo, a pasted code, or `?start=1`.
+   *
+   * Glasses mode has to survive a reload. Without `mode=glasses`, this console
+   * would come back as embedded and mount a second Display on the same code,
+   * which would disconnect the physical one. Embedded is the default and does
+   * not need a query value.
    */
   useEffect(() => {
     if (!session) return;
-    if (params.get("session") === session && !params.has("start")) return;
+    const modeMatches = mode === "glasses" ? params.get("mode") === "glasses" : !params.has("mode");
+    if (params.get("session") === session && !params.has("start") && modeMatches) return;
     const next = new URLSearchParams(params);
     next.set("session", session);
     next.delete("start");
+    if (mode === "glasses") next.set("mode", "glasses");
+    else next.delete("mode");
     setParams(next, { replace: true });
-  }, [session, params, setParams]);
+  }, [session, mode, params, setParams]);
 
   /*
-   * Back to the start card, which is the only place pairing is explained.
+   * Back to the pairing page, which is the only place hardware setup is explained.
    *
    * Somebody who owns glasses arrives here through the front door's one button,
    * which mints a session and embeds the panel, and there was then no route to
-   * the pairing form at all: it lives on the card that `?start=1` skips. The
+   * the pairing form at all: it lives on the page that `?start=1` skips. The
    * code itself is deliberately NOT printed here, because the code a wearer
    * types is the one on their own lens, not the one this page minted.
    */
@@ -212,6 +486,7 @@ export function Workspace() {
     const next = new URLSearchParams(params);
     next.delete("session");
     next.delete("start");
+    next.delete("mode");
     setParams(next, { replace: true });
   };
 
@@ -225,6 +500,102 @@ export function Workspace() {
     // session, so a second one would close the wearer's.
     setMode("glasses");
     setSession(code.toUpperCase());
+  };
+
+  const panCanvasStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if (!window.matchMedia("(min-width: 841px)").matches) return;
+    const target = event.target as Element;
+    if (target.closest("[data-topology-node], button, a, input, iframe")) return;
+    canvasDrag.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      panX: canvasPan.x,
+      panY: canvasPan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setCanvasPanning(true);
+  };
+
+  const panCanvasMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = canvasDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setCanvasPan({
+      x: drag.panX + event.clientX - drag.x,
+      y: drag.panY + event.clientY - drag.y,
+    });
+  };
+
+  const panCanvasEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (canvasDrag.current?.pointerId !== event.pointerId) return;
+    canvasDrag.current = null;
+    setCanvasPanning(false);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const moveNodeStart = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    if (!window.matchMedia("(min-width: 841px)").matches) return;
+    const target = event.target as Element;
+    if (target.closest("iframe, button, a, input, textarea, select")) return;
+    const offset = nodeOffsets[id] ?? { x: 0, y: 0 };
+    nodeDrag.current = {
+      id,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: offset.x,
+      offsetY: offset.y,
+    };
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggingNode(id);
+  };
+
+  const moveNode = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    const drag = nodeDrag.current;
+    if (!drag || drag.id !== id || drag.pointerId !== event.pointerId) return;
+    setNodeOffsets((current) => ({
+      ...current,
+      [id]: {
+        x: drag.offsetX + event.clientX - drag.x,
+        y: drag.offsetY + event.clientY - drag.y,
+      },
+    }));
+  };
+
+  const moveNodeEnd = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    const drag = nodeDrag.current;
+    if (!drag || drag.id !== id || drag.pointerId !== event.pointerId) return;
+    nodeDrag.current = null;
+    setDraggingNode(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const nodeStyle = (id: string) => {
+    const offset = nodeOffsets[id] ?? { x: 0, y: 0 };
+    return {
+      "--node-drag-x": `${offset.x}px`,
+      "--node-drag-y": `${offset.y}px`,
+    } as CSSProperties;
+  };
+
+  const hasMovedNodes = Object.values(nodeOffsets).some(
+    (offset) => offset.x !== 0 || offset.y !== 0,
+  );
+
+  const centerTopology = () => {
+    setCanvasPan({ x: 0, y: 0 });
+    setNodeOffsets({});
+  };
+
+  const changeCanvasLayout = () => {
+    setCanvasLayout((current) => (current === "horizontal" ? "vertical" : "horizontal"));
+    centerTopology();
   };
 
   return (
@@ -257,7 +628,12 @@ export function Workspace() {
         */}
         {session && mode === "embedded" && (
           <button type="button" className={styles.pairLink} onClick={unpair}>
-            Pair glasses
+            Use Ray-Ban Display
+          </button>
+        )}
+        {!session && (
+          <button type="button" className={styles.pairLink} onClick={start}>
+            Open browser demo
           </button>
         )}
         {session && (
@@ -265,14 +641,23 @@ export function Workspace() {
             <button
               type="button"
               className={styles.reqBtn}
-              onClick={() => setWhatOpen((v) => !v)}
+              onClick={() => {
+                setWhatOpen((value) => !value);
+                setLogOpen(false);
+              }}
               aria-expanded={whatOpen}
               aria-controls="what"
             >
               What is this?
             </button>
             {whatOpen && (
-              <WhatIsThis heading={heading} sites={sites} onClose={() => setWhatOpen(false)} />
+              <WhatIsThis
+                displayLabel={displayLabel}
+                displayCopy={displayCopy}
+                heading={heading}
+                sites={sites}
+                onClose={() => setWhatOpen(false)}
+              />
             )}
           </div>
         )}
@@ -285,228 +670,436 @@ export function Workspace() {
           />
           {reqOpen && <RequirementsPanel probe={probe} onClose={() => setReqOpen(false)} />}
         </div>
-        <Link className={header.link} to="/">
+        <Link className={header.link} to="/" viewTransition>
           Home
         </Link>
       </SiteHeader>
 
-      <div className={styles.page}>
+      <div
+        className={`${styles.page} ${!session ? styles.startPage : styles.activePage}`}
+        data-active={session ? "" : undefined}
+        data-motion-route="workspace"
+      >
         {!session ? (
-          <section className={styles.startCard}>
-            <h1 className={styles.h1}>Where do you want the screen?</h1>
-            <button type="button" className={styles.primary} onClick={start}>
-              Run it in this browser
-            </button>
-            <p className={styles.hint}>
-              Opens the glasses build below on the same relay, driving the same authorized tools
-              across the same provider pages. Arrow keys and Enter, or just click.
-            </p>
-            <form
-              className={styles.pair}
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (isCode(typed)) pairGlasses(typed);
-              }}
+          <section
+            className={styles.startStage}
+            data-motion-item=""
+            data-motion-order="1"
+            data-pair-ready={pairReady ? "" : undefined}
+            aria-labelledby="pair-title"
+          >
+            <div className={styles.startCopy}>
+              <p className={styles.startEyebrow}>Pairing path</p>
+              <h1 id="pair-title" className={styles.h1}>
+                Connect your display.
+              </h1>
+              <p id="pair-instruction" className={styles.startLede}>
+                Enter the six-letter code shown on your lens.
+              </p>
+            </div>
+
+            <div
+              className={styles.pairGraph}
+              data-testid="pairing-graph"
+              data-ready={pairReady ? "" : undefined}
+              data-invalid={pairInvalid ? "" : undefined}
             >
-              <label className={styles.label} htmlFor="code">
-                Or send it to your Ray-Ban Display
-              </label>
-              <div className={styles.pairRow}>
+              <PairingConnections
+                className={styles.pairGraphConnections}
+                leftProgress={pairLeftProgress}
+                rightProgress={pairRightProgress}
+                ready={pairReady}
+                invalid={pairInvalid}
+              />
+
+              <div className={styles.pairEndpoint} data-side="browser" data-pair-node="">
+                <span className={styles.pairPort} data-pair-anchor="browser" aria-hidden="true" />
+                <span className={styles.pairEndpointKicker}>Browser</span>
+                <strong>This tab</strong>
+                <span className={styles.pairEndpointState}>Ready</span>
+              </div>
+
+              <form
+                className={styles.pair}
+                data-pair-node=""
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (pairReady) pairGlasses(typed);
+                }}
+              >
+                <span
+                  className={styles.pairCodePort}
+                  data-side="in"
+                  data-pair-anchor="code-in"
+                  aria-hidden="true"
+                />
+                <span
+                  className={styles.pairCodePort}
+                  data-side="out"
+                  data-pair-anchor="code-out"
+                  aria-hidden="true"
+                />
+                <label className={styles.label} htmlFor="code">
+                  Code from lens
+                </label>
                 <input
                   id="code"
                   className={styles.input}
                   value={typed}
                   onChange={(e) => setTyped(e.target.value.toUpperCase())}
                   placeholder="ABCDEF"
+                  maxLength={6}
                   autoComplete="off"
                   spellCheck={false}
+                  aria-label="Six-letter pairing code"
+                  aria-describedby="pair-instruction code-help"
+                  aria-invalid={pairInvalid || undefined}
                 />
-                <button className={styles.btn} type="submit" disabled={!isCode(typed)}>
-                  Pair
+                <p
+                  id="code-help"
+                  className={styles.pairHelp}
+                  data-error={pairInvalid ? "" : undefined}
+                  aria-live="polite"
+                >
+                  {pairProblem ?? (pairReady ? "Code ready." : "Six letters.")}
+                </p>
+                <button className={styles.pairButton} type="submit" disabled={!pairReady}>
+                  Connect display
+                  <span aria-hidden="true">&rarr;</span>
                 </button>
+              </form>
+
+              <div className={styles.pairEndpoint} data-side="display" data-pair-node="">
+                <span className={styles.pairPort} data-pair-anchor="display" aria-hidden="true" />
+                <span className={styles.pairEndpointKicker}>Ray-Ban</span>
+                <strong>Display</strong>
+                <span className={styles.pairEndpointState} aria-live="polite">
+                  {pairReady ? "Code ready" : "Waiting for code"}
+                </span>
               </div>
-              <p className={styles.hint}>{codeProblem(typed) ?? "The six letters on the lens."}</p>
-            </form>
+            </div>
           </section>
         ) : (
-          <>
-            {/*
-              Four cells on a two by two grid.
-
-              Top row is the two live things, bottom row is the two records of
-              what they did, and the two columns line up down the page. Before
-              this the log hung off the bottom of one column on its own and the
-              two columns ended at different heights, which is what made it read
-              as parts rather than as a page.
-            */}
-            <div className={styles.grid}>
-              <section className={styles.cell}>
-                <h2 className={styles.h2}>Glasses</h2>
-                {/*
-                  Which window is driving this session.
-
-                  `useConsoleLink` has computed `superseded` since two tabs on
-                  one code were first made to stop fighting, and nothing ever
-                  rendered it. So the window that LOST kept its heading, its
-                  tool list and its activity log, and looked exactly like the
-                  one that won. With two browsers open, which is the ordinary
-                  case the moment somebody needs a second one with the WebMCP
-                  flag, there was no way to tell them apart at all.
-
-                  Same shape as `workingFrame` being computed and never
-                  transmitted: a state the code knows and the person does not.
-                */}
-                {link.link === "superseded" && (
-                  <p className={styles.hint} role="status">
-                    <strong>Another window took over this session.</strong> Nothing here is live any
-                    more. Close this window, or pair it again to take the session back.
+          <div
+            className={styles.topologyCanvas}
+            data-testid="topology-canvas"
+            data-layout={canvasLayout}
+            data-panning={canvasPanning ? "" : undefined}
+            data-node-dragging={draggingNode ? "" : undefined}
+            data-motion-item=""
+            data-motion-order="1"
+            onPointerDown={panCanvasStart}
+            onPointerMove={panCanvasMove}
+            onPointerUp={panCanvasEnd}
+            onPointerCancel={panCanvasEnd}
+          >
+            <div className={styles.canvasMeta} data-motion-item="" data-motion-order="1">
+              <div>
+                <p className={styles.canvasEyebrow}>
+                  {mode === "embedded" ? "Browser demo" : "Glasses session"}
+                </p>
+                <h1 className={styles.canvasTitle}>Authorized WebMCP paths</h1>
+                {link.link !== "open" && (
+                  <p className={styles.canvasProblem} role="status">
+                    {linkLabel}
                   </p>
                 )}
-                {mode === "embedded" ? (
-                  <div className={styles.stage} data-squircle="">
-                    <iframe
-                      ref={lens}
-                      className={styles.lens}
-                      title="Dusky on the glasses"
-                      src={`${DISPLAY_URL}/?session=${session}`}
-                    />
-                  </div>
-                ) : (
-                  <p className={styles.hint}>
-                    Paired to glasses showing <strong>{session}</strong>. No panel is embedded here
-                    on purpose: a session takes one Display, and a second would disconnect yours.
-                  </p>
-                )}
-              </section>
-
-              <section className={styles.cell}>
-                <h2 className={styles.h2}>{heading}</h2>
-                {/*
-                  One frame per site, side by side rather than stacked.
-
-                  Side by side because the whole argument is on this row: two
-                  businesses that have never heard of each other, running in
-                  this browser, in this person's own session, driving one menu.
-                  Stacked they would not fit, and `frontdoor.spec.ts` holds the
-                  page to one 1440x900 screen because a page whose job is "look,
-                  it works" cannot ask anybody to scroll to find out whether it
-                  did.
-                */}
-                <div className={styles.sites} data-many={sites.length > 3 ? "" : undefined}>
-                  {sites.map((s) => (
-                    <figure key={s.id} className={styles.site}>
-                      {/*
-                        allow="tools" delegates the WebMCP permissions policy to
-                        this frame. Without it, and without the site naming our
-                        origin in exposedTo, getTools returns nothing. That is
-                        the intended security property, and it is granted once
-                        per site rather than once for the page.
-                      */}
-                      <iframe
-                        className={styles.frame}
-                        data-squircle=""
-                        title={s.name}
-                        src={s.url}
-                        allow="tools"
-                      />
-                      {/* The origin is the one value worth printing beside a
-                          name: it is how anybody can see the tools were read
-                          from somewhere other than this page, and with several
-                          sites it is how they can see they are different
-                          somewheres. */}
-                      <figcaption className={styles.siteName}>
-                        {s.name}
-                        <span className={styles.origin}>{originOf(s)}</span>
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
-              </section>
-
-              <section className={styles.cell}>
-                <h2 className={styles.h2}>Declared actions</h2>
-                {/* A stable hook. Tests used to find this list by filtering for
-                    an origin string that happened to be printed in every row,
-                    which broke the moment the rows stopped printing it. */}
-                <ul className={styles.tools} data-testid="actions">
-                  {link.tools.map((t) => {
-                    const g = gate(t);
-                    return (
-                      <li key={`${t.origin}/${t.name}`} className={styles.tool}>
-                        {/* The name and the ceremony policy assigned it. The
-                            descriptions were three more lines each saying what
-                            the lens beside them already says in the site's own
-                            words. */}
-                        <span className={styles.toolName}>{t.title ?? t.name}</span>
-                        {/* Whose action this is, on the row rather than in a
-                            heading above a group. One list is the claim being
-                            made: these arrived together, they order together,
-                            and one sentence can reach across them. Grouping
-                            them by site would draw the boundary the product
-                            exists to remove. Omitted entirely when there is
-                            only one site, because then every row would carry
-                            the same word. */}
-                        {sites.length > 1 && (
-                          <span className={styles.toolSite}>{nameOf(t.origin)}</span>
-                        )}
-                        <span
-                          className={styles.chip}
-                          data-consequence={g.consequence}
-                          title={g.reason}
-                        >
-                          {g.requiresConfirmation ? "gated" : "read"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                  {/*
-                    Said per site, because one site answering is not evidence
-                    about another.
-
-                    A shared flag would have reported every site still loading
-                    as having granted nothing, in the same breath as one that
-                    really had. Both sentences below are about what ARRIVED
-                    rather than about somebody else's page, which is the only
-                    kind that stays true: a site may have declared plenty and
-                    not named this origin, and none of that is visible here.
-                  */}
-                  {sites
-                    .filter((s) => !link.tools.some((t) => t.origin === originOf(s)))
-                    .map((s) => (
-                      <li key={s.id} className={styles.empty}>
-                        {link.problem ? (
-                          // Could not look, which is not the same as nothing
-                          // to see and must not be reported as it. The reason
-                          // itself is on the lens and in Activity; repeating
-                          // it once per site would be the same sentence
-                          // several times over.
-                          `Could not read what ${s.name} declared.`
-                        ) : link.settled(originOf(s)) ? (
-                          <>
-                            {s.name} offered nothing. A site has to name this exact origin in{" "}
-                            <code>exposedTo</code> before the browser will show Dusky anything.
-                          </>
-                        ) : (
-                          `Reading what ${s.name} declared.`
-                        )}
-                      </li>
-                    ))}
-                </ul>
-              </section>
-
-              <section className={styles.cell}>
-                <h2 className={styles.h2}>Activity</h2>
-                <pre className={styles.log} data-squircle="">
-                  {link.activity.length ? link.activity.join("\n") : "no calls yet"}
-                </pre>
-              </section>
+              </div>
             </div>
 
-            {/* Last line on the page, because it is a footnote and not a
-                briefing, and because somebody must not learn it by closing
-                the tab and losing the session. */}
-            <p className={styles.standing}>Closing this tab ends the session.</p>
-          </>
+            <div className={styles.canvasControls} data-motion-item="" data-motion-order="2">
+              <button
+                type="button"
+                aria-label={`Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`}
+                title={`Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`}
+                onClick={changeCanvasLayout}
+              >
+                <span className={styles.layoutGlyph} aria-hidden="true">
+                  {canvasLayout === "horizontal" ? "↔" : "↕"}
+                </span>
+                <span>{canvasLayout === "horizontal" ? "Left to right" : "Top to bottom"}</span>
+              </button>
+              {(canvasPan.x !== 0 || canvasPan.y !== 0 || hasMovedNodes) && (
+                <button
+                  type="button"
+                  aria-label="Center"
+                  title="Center topology"
+                  onClick={centerTopology}
+                >
+                  <span className={styles.layoutGlyph} aria-hidden="true">
+                    ⌾
+                  </span>
+                  <span>Center</span>
+                </button>
+              )}
+            </div>
+
+            <div
+              className={styles.graphPlane}
+              style={
+                {
+                  "--canvas-pan-x": `${canvasPan.x}px`,
+                  "--canvas-pan-y": `${canvasPan.y}px`,
+                } as CSSProperties
+              }
+            >
+              <TopologyConnections
+                origins={topologyOrigins}
+                connectedOrigins={connectedOrigins}
+                runtimeConnected={link.link === "open"}
+                activityCount={link.activity.length}
+                viewKey={canvasLayout}
+                className={styles.topologyEdges}
+              />
+
+              <div className={styles.graphNodes}>
+                <section
+                  className={styles.displayGraphNode}
+                  data-mode={mode}
+                  data-topology-node=""
+                  data-node-id="display"
+                  data-node-dragging={draggingNode === "display" ? "" : undefined}
+                  data-topology-focus="display"
+                  data-motion-item=""
+                  data-motion-order="2"
+                  style={nodeStyle("display")}
+                  onPointerDown={(event) => moveNodeStart("display", event)}
+                  onPointerMove={(event) => moveNode("display", event)}
+                  onPointerUp={(event) => moveNodeEnd("display", event)}
+                  onPointerCancel={(event) => moveNodeEnd("display", event)}
+                >
+                  <h2 className={styles.nodePill}>
+                    <span>{displayLabel}</span>
+                    <span
+                      className={styles.nodeState}
+                      data-live={link.link === "open" ? "" : undefined}
+                    >
+                      {link.link === "open" ? "live" : linkLabel}
+                    </span>
+                  </h2>
+
+                  <span
+                    className={styles.displayPort}
+                    data-runtime-end="display"
+                    aria-hidden="true"
+                  />
+
+                  {link.link === "superseded" && (
+                    <p className={styles.sessionNotice} role="status">
+                      <strong>Another window took over this session.</strong> Pair again to make
+                      this window live.
+                    </p>
+                  )}
+
+                  {mode === "embedded" ? (
+                    <div className={styles.stage}>
+                      <iframe
+                        ref={lens}
+                        className={styles.lens}
+                        title="Dusky on the glasses"
+                        src={`${DISPLAY_URL}/?session=${session}`}
+                      />
+                    </div>
+                  ) : (
+                    <div className={styles.glassesNodeCopy}>
+                      <p>Ray-Ban Display paired</p>
+                      <strong>{session}</strong>
+                      <span>
+                        The screen stays on the glasses. Provider tools continue to run in this
+                        browser.
+                      </span>
+                    </div>
+                  )}
+                </section>
+
+                <section
+                  className={styles.browserRuntimeColumn}
+                  data-topology-node=""
+                  data-node-id="runtime"
+                  data-node-dragging={draggingNode === "runtime" ? "" : undefined}
+                  data-topology-focus="runtime"
+                  data-motion-item=""
+                  data-motion-order="3"
+                  style={nodeStyle("runtime")}
+                  onPointerDown={(event) => moveNodeStart("runtime", event)}
+                  onPointerMove={(event) => moveNode("runtime", event)}
+                  onPointerUp={(event) => moveNodeEnd("runtime", event)}
+                  onPointerCancel={(event) => moveNodeEnd("runtime", event)}
+                >
+                  <div className={styles.browserRuntimeNode}>
+                    <p>Browser</p>
+                    <h2>Runtime</h2>
+                    <span>
+                      {link.tools.length} {link.tools.length === 1 ? "action" : "actions"}
+                    </span>
+                    <span
+                      className={styles.runtimePort}
+                      data-side="in"
+                      data-runtime-end="browser"
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={styles.runtimePort}
+                      data-side="out"
+                      data-provider-end="runtime"
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={styles.runtimeLogPort}
+                      data-log-end="runtime"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <TechnicalLog
+                    activity={link.activity}
+                    open={logOpen}
+                    onToggle={() => {
+                      setLogOpen((value) => !value);
+                      setWhatOpen(false);
+                    }}
+                    onClose={() => setLogOpen(false)}
+                  />
+                </section>
+
+                <section
+                  className={styles.providerActionField}
+                  data-testid="actions"
+                  aria-label="Proof provider pages and their available actions"
+                >
+                  <p className={styles.providerClusterLabel}>
+                    Proof providers · live browser pages
+                  </p>
+                  {sites.map((site, siteIndex) => {
+                    const origin = originOf(site);
+                    const available = link.tools.filter((tool) => tool.origin === origin);
+                    const settled = link.settled(origin);
+                    return (
+                      <div
+                        key={site.id}
+                        className={styles.providerActionPair}
+                        data-topology-focus={`provider:${origin}`}
+                        data-motion-item=""
+                        data-motion-order={String(siteIndex + 4)}
+                      >
+                        <figure
+                          className={styles.providerNode}
+                          data-topology-node=""
+                          data-node-id={`provider:${origin}`}
+                          data-node-dragging={
+                            draggingNode === `provider:${origin}` ? "" : undefined
+                          }
+                          style={nodeStyle(`provider:${origin}`)}
+                          onPointerDown={(event) => moveNodeStart(`provider:${origin}`, event)}
+                          onPointerMove={(event) => moveNode(`provider:${origin}`, event)}
+                          onPointerUp={(event) => moveNodeEnd(`provider:${origin}`, event)}
+                          onPointerCancel={(event) => moveNodeEnd(`provider:${origin}`, event)}
+                        >
+                          <figcaption className={styles.nodePill}>
+                            <span>{site.name}</span>
+                          </figcaption>
+                          <span
+                            className={styles.providerPort}
+                            data-provider-origin={origin}
+                            aria-hidden="true"
+                          />
+                          <span
+                            className={styles.providerActionPort}
+                            data-action-origin={origin}
+                            data-action-end="provider"
+                            aria-hidden="true"
+                          />
+                          <iframe
+                            className={styles.frame}
+                            title={site.name}
+                            src={site.previewUrl ?? site.url}
+                            allow="tools"
+                          />
+                          <div className={styles.nodeFooter}>
+                            <span>{origin}</span>
+                            <span>
+                              {available.length > 0
+                                ? `${available.length} available`
+                                : settled
+                                  ? "no actions"
+                                  : "discovering"}
+                            </span>
+                          </div>
+                        </figure>
+
+                        <article
+                          className={styles.actionNode}
+                          aria-label={`${site.name} actions`}
+                          data-topology-node=""
+                          data-node-id={`actions:${origin}`}
+                          data-node-dragging={draggingNode === `actions:${origin}` ? "" : undefined}
+                          style={nodeStyle(`actions:${origin}`)}
+                          onPointerDown={(event) => moveNodeStart(`actions:${origin}`, event)}
+                          onPointerMove={(event) => moveNode(`actions:${origin}`, event)}
+                          onPointerUp={(event) => moveNodeEnd(`actions:${origin}`, event)}
+                          onPointerCancel={(event) => moveNodeEnd(`actions:${origin}`, event)}
+                        >
+                          <span
+                            className={styles.actionPort}
+                            data-action-origin={origin}
+                            data-action-end="actions"
+                            aria-hidden="true"
+                          />
+                          <h2 className={styles.actionCountLabel}>
+                            {available.length} {available.length === 1 ? "action" : "actions"}
+                          </h2>
+                          <ul className={`${styles.actionList} ${styles.actionListWithCount}`}>
+                            {available.map((tool, toolIndex) => {
+                              const decision = gate(tool);
+                              return (
+                                <li
+                                  key={`${tool.origin}/${tool.name}`}
+                                  data-motion-item=""
+                                  data-motion-kind="action"
+                                  data-motion-order={String(Math.min(toolIndex + 1, 8))}
+                                >
+                                  <span className={styles.actionName}>
+                                    {tool.title ?? tool.name}
+                                  </span>
+                                  <span
+                                    className={styles.actionApproval}
+                                    data-confirm={decision.requiresConfirmation ? "" : undefined}
+                                    title={decision.reason}
+                                  >
+                                    {decision.requiresConfirmation
+                                      ? "wearer confirms"
+                                      : "runs directly"}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                            {available.length === 0 && (
+                              <li className={styles.actionEmpty}>
+                                {link.problem
+                                  ? "Could not read this page’s actions."
+                                  : settled
+                                    ? "No actions authorized for this console."
+                                    : "Reading this page’s actions…"}
+                              </li>
+                            )}
+                          </ul>
+                        </article>
+                      </div>
+                    );
+                  })}
+                </section>
+              </div>
+            </div>
+
+            <div className={styles.canvasFades} aria-hidden="true">
+              <span data-edge="top" />
+              <span data-edge="right" />
+              <span data-edge="bottom" />
+              <span data-edge="left" />
+            </div>
+
+            <p className={styles.canvasStanding}>Closing this tab ends the session.</p>
+          </div>
         )}
       </div>
     </>

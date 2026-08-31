@@ -24,13 +24,13 @@
 .page {
   max-width: var(--dusky-page);
   margin: 0 auto;
-  padding: var(--dusky-s4) var(--dusky-s5) var(--dusky-s3);
+  padding: var(--dusky-s3) var(--dusky-s5);
   display: flex;
   flex-direction: column;
   /* Sized so the whole thing lands inside one 1440x900 screen. A page whose
      job is "look, it works" cannot ask anybody to scroll to see whether it
      did. e2e/frontdoor.spec.ts holds this. */
-  gap: var(--dusky-s4);
+  gap: var(--dusky-s3);
 }
 
 /**
@@ -71,7 +71,7 @@
   align-items: center;
   gap: var(--dusky-s2);
   height: 2rem;
-  padding: 0 0.85rem;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid transparent;
   background: none;
@@ -92,9 +92,9 @@
   color: var(--dusky-ink);
 }
 
-.grid {
+.evidenceGrid {
   display: grid;
-  gap: var(--dusky-s4) var(--dusky-s5);
+  gap: var(--dusky-s3) var(--dusky-s5);
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -106,10 +106,150 @@
   min-width: 0;
 }
 @media (min-width: 1000px) {
-  .grid {
-    /* The lens column is sized by the panel it holds; the site and the log
-       take the rest. */
+  .evidenceGrid {
+    /* The evidence rails keep the same columns as the live topology above. */
     grid-template-columns: 480px minmax(0, 1fr);
+  }
+}
+
+/*
+ * The running product as one topology canvas.
+ *
+ * This is deliberately not a force-directed graph. Provider count is dynamic,
+ * but placement is stable: the Display stays at the left, the authorized page
+ * documents stay opposite it, and the paths are generated from their origins.
+ */
+.liveCanvas {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 480px minmax(0, 1fr);
+  gap: var(--dusky-s5);
+  min-width: 0;
+  margin-top: var(--dusky-s2);
+  padding: var(--dusky-s5) var(--dusky-s3) var(--dusky-s2);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-radius-lg);
+  background:
+    radial-gradient(
+      32% 58% at 34% 52%,
+      color-mix(in srgb, var(--dusky-accent-soft) 18%, transparent),
+      transparent 74%
+    ),
+    radial-gradient(
+      38% 62% at 76% 44%,
+      color-mix(in srgb, var(--dusky-ok) 9%, transparent),
+      transparent 76%
+    );
+}
+
+/* The reference's useful device: a label that physically interrupts the
+   canvas rule, so the frame says what it contains without adding a heading. */
+.canvasPill,
+.displayPill {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.canvasPill {
+  top: 0;
+  left: 50%;
+  min-height: 2.35rem;
+  padding: 0 var(--dusky-s5);
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--dusky-accent);
+  background: var(--dusky-accent);
+  color: var(--dusky-surface);
+  font-size: 0.92rem;
+  box-shadow: 0 0 0 var(--dusky-s2) var(--dusky-surface);
+}
+
+.displayNode,
+.sitesNode {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+
+.displayNode {
+  width: var(--dusky-live);
+  max-width: 100%;
+}
+
+.displayPill {
+  top: 0;
+  left: 50%;
+  margin: 0;
+  min-height: 2rem;
+  padding: 0 var(--dusky-s4);
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--dusky-hair);
+  background: var(--dusky-surface);
+  color: var(--dusky-ink-strong);
+  font-family: var(--dusky-mono);
+  font-size: 0.64rem;
+  font-weight: 400;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.displayNode[data-mode="glasses"] {
+  display: flex;
+  align-items: center;
+  min-height: var(--dusky-live);
+  padding: var(--dusky-s6);
+  border: 1px solid var(--dusky-hair);
+  border-radius: var(--dusky-box);
+  background: color-mix(in srgb, var(--dusky-surface) 76%, transparent);
+}
+
+.canvasSectionLabel {
+  position: absolute;
+  top: -1.25rem;
+  right: 0;
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.64rem;
+  font-weight: 400;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-dim);
+}
+
+.connectors {
+  position: absolute;
+  z-index: 1;
+  top: var(--dusky-s5);
+  right: var(--dusky-s3);
+  bottom: var(--dusky-s2);
+  left: var(--dusky-s3);
+  width: calc(100% - (2 * var(--dusky-s3)));
+  height: var(--dusky-live);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connector {
+  fill: none;
+  stroke: var(--dusky-hair);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.7;
+}
+.connector[data-connected] {
+  stroke: var(--dusky-accent);
+  stroke-dasharray: 0.035 0.055;
+  animation: connector-flow 2.8s linear infinite;
+}
+
+@keyframes connector-flow {
+  to {
+    stroke-dashoffset: -0.09;
   }
 }
 
@@ -140,50 +280,6 @@
   color: var(--dusky-ink-faint);
   padding-bottom: var(--dusky-s2);
   border-bottom: 1px solid var(--dusky-hair);
-}
-
-.pair {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s2);
-}
-.label {
-  font-size: 0.85rem;
-  color: var(--dusky-ink-dim);
-}
-.pairRow {
-  display: flex;
-  gap: var(--dusky-s2);
-}
-
-.input {
-  flex: 1;
-  font-family: var(--dusky-mono);
-  font-size: 1rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  padding: 0.5rem 0.7rem;
-  background: none;
-  color: var(--dusky-ink-strong);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-}
-
-.btn {
-  font-family: var(--dusky-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 0.5rem 0.9rem;
-  background: none;
-  color: var(--dusky-ink);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  cursor: pointer;
-}
-.btn:hover {
-  color: var(--dusky-accent);
-  border-color: var(--dusky-accent-soft);
 }
 
 .hint {
@@ -223,7 +319,7 @@
   gap: var(--dusky-s3);
   /* Tighter than it was, because there are eleven of these now rather than
      four, and the page still has to fit one screen. */
-  padding: 0.3rem 0;
+  padding: 0.18rem 0;
   border-bottom: 1px solid var(--dusky-hair-soft);
 }
 .tools > .tool:last-child {
@@ -322,6 +418,31 @@
 }
 
 @media (max-width: 999px) {
+  .liveCanvas {
+    grid-template-columns: 1fr;
+    gap: var(--dusky-s7);
+    padding: var(--dusky-s7) var(--dusky-s4) var(--dusky-s4);
+  }
+
+  .connectors {
+    display: none;
+  }
+
+  .displayNode {
+    width: 100%;
+    justify-self: center;
+  }
+
+  .sitesNode {
+    width: 100%;
+  }
+
+  .canvasSectionLabel {
+    position: static;
+    text-align: left;
+    margin-bottom: var(--dusky-s2);
+  }
+
   .sites {
     grid-template-columns: 1fr;
     height: auto;
@@ -384,37 +505,342 @@
 
 /* ------------------------------------------------- workspace additions */
 
-.startCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--dusky-s3);
-  align-items: flex-start;
-  padding: var(--dusky-s5);
-  border: 1px solid var(--dusky-hair);
-  border-radius: var(--dusky-radius);
-  max-width: 46rem;
+.startPage {
+  max-width: none;
+  width: calc(100% + 2 * var(--dusky-s4));
+  min-height: calc(100svh - 4.25rem);
+  margin: 0 calc(-1 * var(--dusky-s4));
+  padding: 0;
+  gap: 0;
+}
+
+/*
+ * Pairing is one real edge in the Dusky topology: this browser, the code from
+ * the lens, and the Display. The page therefore uses the same grid and nodes
+ * as the running control plane instead of inventing a separate hero card.
+ */
+.startStage {
+  --pair-grid: color-mix(in srgb, var(--dusky-hair-soft) 48%, transparent);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(21rem, 1fr);
+  gap: clamp(1rem, 2.5vh, 1.75rem);
+  min-height: calc(100svh - 4.25rem);
+  padding: clamp(1.5rem, 3vw, 2.75rem) clamp(1.5rem, 4vw, 4rem) 1.4rem;
+  background:
+    radial-gradient(
+      28rem 22rem at 50% 48%,
+      color-mix(in srgb, var(--dusky-accent-soft) 16%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(var(--pair-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pair-grid) 1px, transparent 1px);
+  background-size:
+    auto,
+    32px 32px,
+    32px 32px;
+  background-position:
+    center,
+    -1px -1px,
+    -1px -1px;
+}
+
+.startStage::before {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, var(--dusky-surface), transparent 3rem),
+    linear-gradient(to top, var(--dusky-surface), transparent 2.75rem),
+    linear-gradient(to right, var(--dusky-surface), transparent 2.25rem),
+    linear-gradient(to left, var(--dusky-surface), transparent 2.25rem);
+  pointer-events: none;
+}
+
+.startCopy {
+  position: relative;
+  z-index: 6;
+  min-width: 0;
+  max-width: 42rem;
+}
+
+.startEyebrow {
+  margin: 0 0 0.65rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.64rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
 }
 
 .h1 {
   margin: 0;
   font-weight: 300;
-  font-size: 1.4rem;
-  letter-spacing: -0.025em;
+  font-size: clamp(2.5rem, 4vw, 4.25rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
   color: var(--dusky-ink-strong);
+  text-wrap: balance;
 }
 
-.primary {
-  padding: 0.7em 1.4em;
+.startLede {
+  max-width: 40ch;
+  margin: 0.75rem 0 0;
+  font-size: clamp(0.92rem, 1.1vw, 1.04rem);
+  line-height: 1.5;
+  color: var(--dusky-ink-dim);
+}
+
+.pairGraph {
+  position: relative;
+  z-index: 2;
+  min-height: clamp(21rem, 48vh, 30rem);
+  min-width: 0;
+  padding-inline: clamp(1rem, 3vw, 3rem);
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) minmax(17rem, 21rem) minmax(9rem, 1fr);
+  align-items: center;
+  gap: clamp(3.5rem, 7vw, 7rem);
+}
+
+.pairGraphConnections {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.pairEndpoint {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 11.5rem);
+  aspect-ratio: 1;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 90%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dusky-surface) 92%, transparent);
+  box-shadow: 0 12px 30px rgb(20 22 19 / 5%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.pairEndpoint[data-side="browser"] {
+  justify-self: end;
+}
+
+.pairEndpoint[data-side="display"] {
+  justify-self: start;
+  border-color: var(--emit-ground);
+  background: var(--emit-ground);
+  color: var(--emit-bright);
+  box-shadow: 0 16px 34px rgb(20 22 19 / 14%);
+}
+
+.pairEndpointKicker,
+.pairEndpointState {
+  font-family: var(--dusky-mono);
+  font-size: 0.6rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pairEndpointKicker {
+  margin-bottom: 0.5rem;
+  color: var(--dusky-ink-dim);
+}
+
+.pairEndpoint[data-side="display"] .pairEndpointKicker,
+.pairEndpoint[data-side="display"] .pairEndpointState {
+  color: var(--emit-dim);
+}
+
+.pairEndpoint strong {
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+}
+
+.pairEndpointState {
+  margin-top: auto;
+  padding-top: 1rem;
+  color: var(--dusky-ok);
+}
+
+.pairPort {
+  position: absolute;
+  top: 50%;
+  width: 0.58rem;
+  height: 0.58rem;
+  border: 2px solid var(--dusky-surface);
+  border-radius: 50%;
+  background: var(--dusky-accent);
+  transform: translateY(-50%);
+}
+
+.pairEndpoint[data-side="browser"] .pairPort {
+  right: -0.3rem;
+}
+
+.pairEndpoint[data-side="display"] .pairPort {
+  left: -0.3rem;
+}
+
+.pairCodePort {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  width: 0.58rem;
+  height: 0.58rem;
+  border: 2px solid var(--dusky-surface);
+  border-radius: 50%;
+  background: var(--dusky-accent);
+  transform: translateY(-50%);
+}
+
+.pairCodePort[data-side="in"] {
+  left: -0.3rem;
+}
+
+.pairCodePort[data-side="out"] {
+  right: -0.3rem;
+}
+
+.pair {
+  position: relative;
+  z-index: 3;
+  justify-self: center;
+  width: min(100%, 21rem);
+  min-width: 0;
+  padding: 1.55rem 1.15rem 1.15rem;
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 90%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--dusky-surface) 94%, transparent);
+  box-shadow: 0 16px 34px rgb(20 22 19 / 7%);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.label {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  min-height: 1.7rem;
+  padding: 0.32rem 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 90%, transparent);
+  border-radius: 8px;
+  background: var(--dusky-surface);
+  transform: translate(-50%, -50%);
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dusky-accent);
+}
+
+.input {
+  width: 100%;
+  height: 5.25rem;
+  min-width: 0;
+  padding: 0 1rem;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--dusky-surface);
+  color: var(--dusky-ink-strong);
+  font-family: var(--dusky-mono);
+  font-size: clamp(1.55rem, 2.5vw, 2rem);
+  letter-spacing: 0.34em;
+  text-align: center;
+  text-indent: 0.34em;
+  text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.input::placeholder {
+  color: var(--dusky-ink-faint);
+  opacity: 0.6;
+}
+
+.input:focus-visible {
+  border-color: var(--dusky-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dusky-accent) 13%, transparent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--dusky-stop) 55%, var(--dusky-hair));
+}
+
+.pairButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  font: inherit;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dusky-motion) var(--dusky-ease),
+    border-color var(--dusky-motion) var(--dusky-ease),
+    color var(--dusky-motion) var(--dusky-ease),
+    transform var(--dusky-motion) var(--dusky-ease);
+}
+
+.pairButton {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0 1rem;
   border: 1px solid var(--dusky-accent);
-  border-radius: var(--dusky-radius);
+  border-radius: 10px;
   background: var(--dusky-accent);
   color: var(--dusky-surface);
-  font: inherit;
-  font-size: 0.98rem;
-  cursor: pointer;
 }
-.primary:hover {
-  filter: brightness(1.08);
+.pairButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.pairButton:hover:not(:disabled) {
+  background: var(--dusky-ink-strong);
+  border-color: var(--dusky-ink-strong);
+}
+.pairButton:disabled {
+  border-color: var(--dusky-hair);
+  background: transparent;
+  color: var(--dusky-ink-faint);
+  cursor: not-allowed;
+}
+
+.pairHelp {
+  min-height: 1.2em;
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.pairHelp[data-error] {
+  color: var(--dusky-stop);
 }
 
 /* 600 x 600 is not negotiable, so the panel scales rather than reflows.
@@ -433,40 +859,1361 @@
   height: 600px;
   border: 0;
   display: block;
-  /* 432 / 600. The panel scales rather than reflows, because reflowing it would
+  /* 368 / 600. The panel scales rather than reflows, because reflowing it would
      be showing something the glasses cannot show. */
-  transform: scale(0.72);
+  transform: scale(0.613333);
   transform-origin: top left;
 }
 
-/* The route to the pairing form, for somebody who owns a pair. Set apart from
-   the source buttons, because it does something else entirely. */
 /*
- * The hardware route, as a control rather than a ghost.
- *
- * It was the same outlined pill as the two source buttons beside it, at the far
- * end of a row of its own, under a page whose content is four large boxes. It
- * read as a third source. Those buttons are gone with the restriction they
- * controlled, and the row they shared was costing the page fifty pixels that
- * three site frames and eleven actions now need, so this sits in the header with
- * the other ways out. It carries the product's own accent, which is the one
- * thing on this page that does.
+ * A mode switch in the running browser demo, not its primary action. The
+ * pairing screen owns the accent; this control simply leads back to it.
  */
 .pairLink {
   height: 2rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--dusky-accent);
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dusky-accent) 10%, var(--dusky-surface));
+  background: none;
   font: inherit;
   font-size: 0.9rem;
-  color: var(--dusky-ink-strong);
+  color: var(--dusky-ink-dim);
   white-space: nowrap;
   cursor: pointer;
 }
 .pairLink:hover {
+  background: color-mix(in srgb, var(--dusky-ink-strong) 6%, transparent);
+  color: var(--dusky-ink-strong);
+}
+
+@media (max-width: 999px) {
+  .startStage {
+    grid-template-rows: auto auto;
+    min-height: auto;
+    padding-inline: clamp(1.25rem, 5vw, 3rem);
+  }
+  .pairGraph {
+    min-height: 38rem;
+    padding: 1.75rem 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 9rem minmax(14rem, auto) 9rem;
+    gap: 3rem;
+  }
+  .pairEndpoint[data-side="browser"],
+  .pairEndpoint[data-side="display"] {
+    width: 9rem;
+    justify-self: center;
+  }
+  .pairEndpoint[data-side="browser"] .pairPort {
+    top: auto;
+    right: auto;
+    bottom: -0.3rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .pairEndpoint[data-side="display"] .pairPort {
+    top: -0.3rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .pairCodePort[data-side="in"] {
+    top: -0.3rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .pairCodePort[data-side="out"] {
+    top: auto;
+    right: auto;
+    bottom: -0.3rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .pair {
+    width: min(100%, 22rem);
+  }
+}
+
+@media (max-width: 650px) {
+  .startStage {
+    padding: 1.5rem 1rem 1rem;
+  }
+  .startCopy {
+    padding: 0;
+  }
+  .h1 {
+    font-size: clamp(2.35rem, 12vw, 3.4rem);
+  }
+  .startLede {
+    margin-top: 0.55rem;
+  }
+  .pairGraph {
+    min-height: 35rem;
+    padding-block: 1.25rem;
+    grid-template-rows: 8.5rem minmax(13.5rem, auto) 8.5rem;
+    gap: 2.25rem;
+  }
+  .pairEndpoint[data-side="browser"],
+  .pairEndpoint[data-side="display"] {
+    width: 8.5rem;
+  }
+  .pair {
+    width: min(100%, 20rem);
+    padding-inline: 1rem;
+  }
+  .input {
+    height: 4.8rem;
+    font-size: 1.65rem;
+  }
+  .stage {
+    width: min(100%, var(--dusky-live));
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
+
+@media (max-width: 400px) {
+  .lens {
+    transform: scale(0.4);
+  }
+}
+
+@media (max-width: 340px) {
+  .lens {
+    transform: scale(0.28);
+  }
+}
+
+@media (max-width: 560px) {
+  .reqAnchor > [id="requirements"],
+  .reqAnchor > [id="what"] {
+    position: fixed;
+    top: 4.75rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    max-height: calc(100dvh - 5.5rem);
+    overflow: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pairButton {
+    transition: none;
+  }
+  .pairButton:hover:not(:disabled) {
+    transform: none;
+  }
+  .connector[data-connected] {
+    stroke-dasharray: none;
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------- topology control plane
+ *
+ * The running demo is drawn directly between the page rails. This final block
+ * intentionally owns the active topology generation while older prototypes
+ * above remain untouched until the dirty redesign branch is consolidated.
+ */
+
+.activePage {
+  width: calc(100% + 2 * var(--dusky-s4));
+  margin-inline: calc(-1 * var(--dusky-s4));
+}
+
+.topologyCanvas {
+  --topology-capability: #587069;
+  width: 100%;
+  height: calc(100svh - 4.25rem);
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(
+      34rem 26rem at 18% 48%,
+      color-mix(in srgb, var(--dusky-accent-soft) 16%, transparent),
+      transparent 74%
+    ),
+    radial-gradient(
+      28rem 22rem at 82% 30%,
+      color-mix(in srgb, var(--topology-capability) 8%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      color-mix(in srgb, var(--dusky-hair-soft) 48%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--dusky-hair-soft) 48%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    auto,
+    32px 32px,
+    32px 32px;
+  background-position:
+    center,
+    center,
+    -1px -1px,
+    -1px -1px;
+}
+
+.topologyCanvas::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dusky-surface) 42%, transparent),
+    transparent 18%,
+    transparent 82%,
+    color-mix(in srgb, var(--dusky-surface) 58%, transparent)
+  );
+}
+
+.canvasMeta {
+  top: 1.35rem;
+  right: 2rem;
+  left: 2rem;
+}
+
+.canvasTitle {
+  font-size: clamp(1.45rem, 2.1vw, 2.05rem);
+  font-weight: 300;
+}
+
+.canvasControls {
+  top: 1.2rem;
+  right: 2rem;
+  gap: 0;
+  border-color: color-mix(in srgb, var(--dusky-hair) 86%, transparent);
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgb(20 22 19 / 5%);
+}
+
+.canvasControls button {
+  min-height: 2.15rem;
+  padding: 0 0.68rem;
+  gap: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.63rem;
+  letter-spacing: 0.04em;
+}
+
+.layoutGlyph {
+  font-family: var(--dusky-sans);
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--dusky-accent);
+}
+
+.graphPlane {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  transform: translate3d(var(--canvas-pan-x, 0), var(--canvas-pan-y, 0), 0);
+  transform-origin: center;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.topologyCanvas[data-panning] .graphPlane {
+  transition: none;
+}
+
+.graphNodes {
+  top: 5.8rem;
+  right: 2rem;
+  bottom: 1.45rem;
+  left: 2rem;
+  grid-template-columns: 23rem minmax(9rem, 10rem) minmax(36rem, 1fr);
+  gap: clamp(1.5rem, 2.5vw, 2.75rem);
+  width: auto;
+  margin: 0;
+  transform: none;
+  transition: none;
+  will-change: auto;
+}
+
+.browserRuntimeColumn {
+  min-height: 25rem;
+}
+
+.browserRuntimeNode {
+  width: 8.5rem;
+  height: 9.5rem;
+  padding: 1.1rem 0.9rem;
+  border-color: var(--dusky-hair);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dusky-surface) 96%, transparent);
+  box-shadow: 0 14px 34px rgb(20 22 19 / 7%);
+}
+
+.browserRuntimeNode::before {
+  display: none;
+}
+
+.browserRuntimeNode::before {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 1rem;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
   background: var(--dusky-accent);
-  color: var(--dusky-surface);
+  opacity: 0.72;
+}
+
+.browserRuntimeNode p,
+.browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+
+.browserRuntimeNode h2 {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 1.22rem;
+}
+
+.runtimePort,
+.runtimeLogPort,
+.activityPort,
+.displayPort,
+.providerPort,
+.providerActionPort,
+.actionPort {
+  width: 0;
+  height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.displayPort {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.runtimePort {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.runtimePort[data-side="in"] {
+  left: 0;
+}
+
+.runtimePort[data-side="out"] {
+  right: 0;
+}
+
+.runtimeLogPort,
+.activityPort {
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+.runtimeLogPort {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.activityPort {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.technicalLog {
+  top: calc(50% + 6.05rem);
+  width: 10.25rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgb(20 22 19 / 5%);
+}
+
+.activitySummary {
+  min-height: 3.1rem;
+}
+
+.activitySummary span {
+  font-size: 0.61rem;
+}
+
+.activitySummary strong {
+  border-radius: 7px;
+}
+
+.displayGraphNode,
+.providerActionPair,
+.browserRuntimeColumn,
+.technicalLog {
+  outline: none;
+}
+
+.displayGraphNode:hover .nodePill,
+.displayGraphNode:focus-within .nodePill,
+.providerActionPair:hover .nodePill,
+.providerActionPair:focus-within .nodePill {
+  border-color: color-mix(in srgb, var(--dusky-accent) 42%, var(--dusky-hair));
+}
+
+.nodePill {
+  min-height: 2.05rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.78rem;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgb(20 22 19 / 5%);
+}
+
+.nodePill > span:first-child {
+  font-size: 0.82rem;
+}
+
+.providerActionField {
+  position: relative;
+  padding: 2.2rem 0 0.35rem;
+  gap: clamp(0.9rem, 2vh, 1.3rem);
+  overflow-y: auto;
+}
+
+.providerClusterLabel {
+  position: absolute;
+  top: 0.45rem;
+  left: 0;
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.providerActionPair {
+  min-height: 0;
+  height: clamp(8.5rem, 18vh, 9.75rem);
+  grid-template-columns: minmax(12rem, 0.95fr) minmax(14rem, 1.05fr);
+  align-items: center;
+  gap: clamp(2.4rem, 3.5vw, 3.75rem);
+}
+
+.providerNode,
+.providerActionPair .providerNode {
+  min-height: 0;
+  height: 100%;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dusky-surface) 91%, transparent);
+}
+
+.actionNode {
+  --action-node-max-height: 10.75rem;
+
+  min-height: 0;
+  height: fit-content;
+  max-height: var(--action-node-max-height);
+  align-self: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dusky-surface) 91%, transparent);
+}
+
+.actionList {
+  flex: none;
+  min-height: 0;
+  max-height: calc(var(--action-node-max-height) - 1.56rem - 2px);
+  overflow-y: auto;
+}
+
+.providerNode .frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 14px 14px 0 0;
+}
+
+.providerPort {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.providerActionPort {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  background: transparent;
+}
+
+.actionPort {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  background: transparent;
+}
+
+.actionNode {
+  padding: 0.78rem 0.82rem;
+}
+
+.actionNodeHead h2,
+.actionNodeHead span {
+  font-size: 0.63rem;
+  letter-spacing: 0.07em;
+}
+
+.actionName {
+  font-size: 0.76rem;
+}
+
+.actionApproval {
+  font-size: 0.58rem;
+}
+
+.nodeFooter {
+  font-size: 0.59rem;
+}
+
+.topologyEdges {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.canvasFades span[data-edge="top"],
+.canvasFades span[data-edge="bottom"] {
+  height: 3.25rem;
+}
+
+.canvasFades span[data-edge="left"],
+.canvasFades span[data-edge="right"] {
+  width: 2.75rem;
+}
+
+.canvasStanding {
+  right: 2rem;
+  bottom: 0.45rem;
+}
+
+/* The alternate is the same topology rotated into a deterministic vertical
+ * reading order. The graph plane still owns both nodes and bitmap edges. */
+.topologyCanvas[data-layout="vertical"] .graphNodes {
+  top: 5.8rem;
+  right: 2rem;
+  bottom: auto;
+  left: 2rem;
+  min-height: 45rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  gap: 3.75rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode,
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .stage {
+  width: 18rem;
+  height: 18rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .lens {
+  transform: scale(0.48);
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort {
+  top: auto;
+  right: auto;
+  bottom: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
+  height: 13.5rem;
+  min-height: 13.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"] {
+  top: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"] {
+  top: auto;
+  right: auto;
+  bottom: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionField {
+  width: 100%;
+  padding: 2.5rem 0 3rem;
+  grid-template-columns: repeat(3, minmax(14rem, 1fr));
+  gap: 1.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair {
+  height: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 8.75rem minmax(9.5rem, auto);
+  gap: 2.25rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair .providerNode {
+  height: 8.75rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerPort {
+  top: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPort {
+  top: auto;
+  right: auto;
+  bottom: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  top: -0.34rem;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+@media (max-width: 1200px) and (min-width: 841px) {
+  .graphNodes {
+    right: 1.5rem;
+    left: 1.5rem;
+    grid-template-columns: 20rem minmax(8rem, 8.75rem) minmax(31rem, 1fr);
+    gap: 1.5rem;
+  }
+
+  .displayGraphNode,
+  .displayGraphNode .stage {
+    width: 20rem;
+    height: 20rem;
+  }
+
+  .displayGraphNode .lens {
+    transform: scale(0.533333);
+  }
+
+  .browserRuntimeNode {
+    width: 7.75rem;
+    height: 9rem;
+  }
+
+  .providerActionPair {
+    grid-template-columns: minmax(10.5rem, 0.9fr) minmax(12rem, 1.1fr);
+    gap: 2.25rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .activePage {
+    height: auto;
+    min-height: 0;
+  }
+
+  .topologyCanvas {
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 7.4rem 1rem 1.5rem;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  .canvasMeta {
+    top: 1.15rem;
+    right: 1rem;
+    left: 1rem;
+  }
+
+  .canvasControls {
+    top: 4.7rem;
+    right: 1rem;
+    display: flex;
+  }
+
+  .canvasControls button {
+    min-width: 2.2rem;
+    padding: 0 0.58rem;
+  }
+
+  .canvasControls button > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .graphPlane {
+    position: relative;
+    inset: auto;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-layout] .graphNodes {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 17.5rem;
+    height: 17.5rem;
+  }
+
+  .topologyCanvas[data-layout] .displayGraphNode {
+    align-self: center;
+  }
+
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.466667);
+  }
+
+  .topologyCanvas[data-layout] .displayPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .topologyCanvas[data-layout] .browserRuntimeColumn {
+    width: 100%;
+    height: 10.5rem;
+    min-height: 10.5rem;
+  }
+
+  .browserRuntimeNode {
+    width: 7.5rem;
+    height: 7.5rem;
+  }
+
+  .topologyCanvas[data-layout] .runtimePort[data-side="in"] {
+    top: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .topologyCanvas[data-layout] .runtimePort[data-side="out"] {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .technicalLog {
+    top: calc(50% + 4.5rem);
+    width: 9.75rem;
+  }
+
+  .technicalLog[data-open] {
+    top: 8rem;
+    width: min(30rem, calc(100vw - 3rem));
+  }
+
+  .topologyCanvas[data-layout] .browserRuntimeColumn:has(.technicalLog[data-open]) {
+    height: 33rem;
+    min-height: 33rem;
+  }
+
+  .topologyCanvas[data-layout] .providerActionField {
+    width: 100%;
+    max-height: none;
+    padding: 2.6rem 0 0;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    gap: 3rem;
+    overflow: visible;
+  }
+
+  .topologyCanvas[data-layout] .providerActionPair {
+    width: 100%;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 10.75rem auto;
+    align-items: start;
+    gap: 2.5rem;
+  }
+
+  .topologyCanvas[data-layout] .providerActionPair .providerNode {
+    width: 100%;
+    height: 10.75rem;
+  }
+  .actionNode {
+    --action-node-max-height: 22rem;
+
+    min-height: 0;
+    max-height: var(--action-node-max-height);
+    align-self: start;
+  }
+
+  .topologyCanvas[data-layout] .providerPort {
+    top: 1.75rem;
+    left: -0.34rem;
+    transform: translateY(-50%);
+  }
+
+  .topologyCanvas[data-layout] .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .topologyCanvas[data-layout] .actionPort {
+    top: -0.34rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .canvasFades,
+  .canvasStanding {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .canvasTitle {
+    max-width: 15rem;
+    font-size: 1.35rem;
+  }
+
+  .topologyCanvas {
+    padding-inline: 0.75rem;
+  }
+
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 17rem;
+    height: 17rem;
+  }
+
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.453333);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graphPlane,
+  .providerNode,
+  .actionNode,
+  .displayGraphNode[data-mode="glasses"] {
+    transition: none;
+  }
+}
+
+/*
+ * Canvas interaction and edge treatment.
+ *
+ * Empty space still pans the whole coordinate plane. Each major topology
+ * group has its own translation so moving a component no longer drags every
+ * other component with it. The same measured DOM boundaries continue to drive
+ * the Canvas2D edges.
+ */
+@media (min-width: 841px) {
+  body .topologyCanvas[data-testid="topology-canvas"] [data-topology-node][data-node-id] {
+    transform: translate3d(var(--node-drag-x, 0), var(--node-drag-y, 0), 0);
+    transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    cursor: grab;
+    touch-action: none;
+  }
+
+  body
+    .topologyCanvas[data-testid="topology-canvas"]
+    [data-topology-node][data-node-id][data-node-dragging] {
+    z-index: 5;
+    transition: none;
+    cursor: grabbing;
+  }
+
+  body .topologyCanvas[data-testid="topology-canvas"][data-node-dragging] [data-topology-node] {
+    user-select: none;
+  }
+
+  body
+    .topologyCanvas[data-testid="topology-canvas"]
+    [data-topology-node][data-node-id]
+    :is(iframe, button, a, input, textarea, select) {
+    cursor: auto;
+  }
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
+  z-index: 6;
+  display: block;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades span {
+  position: absolute;
+  display: block;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"]
+  .canvasFades
+  span:is([data-edge="top"], [data-edge="bottom"]) {
+  right: 0;
+  left: 0;
+  height: clamp(2.25rem, 4vw, 3.25rem);
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"]
+  .canvasFades
+  span:is([data-edge="left"], [data-edge="right"]) {
+  top: 0;
+  bottom: 0;
+  width: clamp(2rem, 3.4vw, 2.8rem);
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades span[data-edge="top"] {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--dusky-surface) 98%, transparent),
+    color-mix(in srgb, var(--dusky-surface) 70%, transparent) 42%,
+    transparent
+  );
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades span[data-edge="right"] {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--dusky-surface) 98%, transparent),
+    color-mix(in srgb, var(--dusky-surface) 70%, transparent) 42%,
+    transparent
+  );
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades span[data-edge="bottom"] {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--dusky-surface) 98%, transparent),
+    color-mix(in srgb, var(--dusky-surface) 70%, transparent) 42%,
+    transparent
+  );
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades span[data-edge="left"] {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--dusky-surface) 98%, transparent),
+    color-mix(in srgb, var(--dusky-surface) 70%, transparent) 42%,
+    transparent
+  );
+}
+
+/* The rows already establish the object type; the count now bisects the card. */
+.actionCountLabel {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 50%;
+  min-height: 1.55rem;
+  margin: 0;
+  padding: 0.28rem 0.68rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 88%, transparent);
+  border-radius: 8px;
+  background: var(--dusky-surface);
+  box-shadow: 0 5px 14px rgb(20 22 19 / 4%);
+  transform: translate(-50%, -50%);
+  font-family: var(--dusky-mono);
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dusky-accent);
+}
+
+.actionListWithCount {
+  padding-top: 0.45rem;
+}
+
+@media (max-width: 840px) {
+  body
+    .topologyCanvas[data-testid="topology-canvas"]
+    .canvasFades
+    span:is([data-edge="top"], [data-edge="bottom"]) {
+    height: 1.75rem;
+  }
+
+  body
+    .topologyCanvas[data-testid="topology-canvas"]
+    .canvasFades
+    span:is([data-edge="left"], [data-edge="right"]) {
+    width: 1.35rem;
+  }
+}
+
+/* Final connection geometry and structural-frame integration. */
+body .topologyCanvas[data-testid="topology-canvas"] .browserRuntimeNode {
+  border-color: var(--dusky-hair);
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .browserRuntimeNode::before {
+  display: none;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-runtime-end],
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-end],
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-origin],
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-action-end],
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end] {
+  width: 0;
+  height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-runtime-end="display"],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-provider-end="runtime"],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-action-end="provider"] {
+  top: 50%;
+  right: 0;
+  bottom: auto;
+  left: auto;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-runtime-end="browser"],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-provider-origin],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  [data-action-end="actions"] {
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 0;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end="runtime"] {
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end="activity"] {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  [data-runtime-end="display"],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  [data-provider-end="runtime"],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  [data-action-end="provider"] {
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  [data-runtime-end="browser"],
+body .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"] [data-provider-origin],
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  [data-action-end="actions"] {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .topologyEdges {
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
+  display: block;
+}
+
+@media (min-width: 841px) {
+  body
+    .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+    .providerActionPair {
+    height: 10.75rem;
+  }
+}
+
+@media (max-width: 840px) {
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-runtime-end="display"],
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-end="runtime"],
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-action-end="provider"] {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+  }
+
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-runtime-end="browser"],
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-origin],
+  body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-action-end="actions"] {
+    top: 0;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+  }
+}
+
+.browserRuntimeNode {
+  border-color: var(--dusky-hair);
+}
+
+.browserRuntimeNode::before {
+  display: none;
+}
+
+.runtimePort,
+.runtimeLogPort,
+.activityPort,
+.displayPort,
+.providerPort,
+.providerActionPort,
+.actionPort {
+  width: 0;
+  height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.displayPort,
+.runtimePort[data-side="out"],
+.providerActionPort {
+  right: 0;
+}
+
+.runtimePort[data-side="in"],
+.providerPort,
+.actionPort {
+  left: 0;
+}
+
+.runtimeLogPort {
+  bottom: 0;
+}
+
+.activityPort {
+  top: 0;
+}
+
+/* The grid reaches the document dividers; only the wire layer fades at an edge. */
+.topologyEdges {
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.canvasFades {
+  display: none;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort,
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"],
+.topologyCanvas[data-layout="vertical"] .providerActionPort {
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"],
+.topologyCanvas[data-layout="vertical"] .providerPort,
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+}
+
+@media (max-width: 840px) {
+  .topologyCanvas[data-layout] .displayPort,
+  .topologyCanvas[data-layout] .runtimePort[data-side="out"],
+  .topologyCanvas[data-layout] .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+  }
+
+  .topologyCanvas[data-layout] .runtimePort[data-side="in"],
+  .topologyCanvas[data-layout] .providerPort,
+  .topologyCanvas[data-layout] .actionPort {
+    top: 0;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+  }
+}
+
+/* Prototype-era topology overrides end here; the final cascade follows later. */
+
+/*
+ * Connections terminate directly on component boundaries. The hidden anchors
+ * remain measurable, but no decorative bars or accent rails compete with the
+ * actual Bézier edges.
+ */
+.browserRuntimeNode {
+  border-color: var(--dusky-hair);
+}
+
+.browserRuntimeNode::before {
+  display: none;
+}
+
+.runtimePort,
+.runtimeLogPort,
+.activityPort,
+.displayPort,
+.providerPort,
+.providerActionPort,
+.actionPort {
+  width: 0;
+  height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.displayPort,
+.runtimePort[data-side="out"],
+.providerActionPort {
+  right: 0;
+}
+
+.runtimePort[data-side="in"],
+.providerPort,
+.actionPort {
+  left: 0;
+}
+
+.runtimeLogPort {
+  bottom: 0;
+}
+
+.activityPort {
+  top: 0;
+}
+
+/* Keep the document grid against its structural dividers; fade only wires. */
+.topologyEdges {
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  mask-image:
+    linear-gradient(to right, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent),
+    linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.canvasFades {
+  display: none;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort,
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"],
+.topologyCanvas[data-layout="vertical"] .providerActionPort {
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"],
+.topologyCanvas[data-layout="vertical"] .providerPort,
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+}
+
+@media (max-width: 840px) {
+  .topologyCanvas[data-layout] .displayPort,
+  .topologyCanvas[data-layout] .runtimePort[data-side="out"],
+  .topologyCanvas[data-layout] .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+  }
+
+  .topologyCanvas[data-layout] .runtimePort[data-side="in"],
+  .topologyCanvas[data-layout] .providerPort,
+  .topologyCanvas[data-layout] .actionPort {
+    top: 0;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+  }
 }
 
 /*
@@ -516,4 +2263,2010 @@
   border-top: 1px solid var(--dusky-hair-soft);
   font-size: 0.94rem;
   color: var(--dusky-ink-strong);
+}
+
+/* ------------------------------------------------- live topology canvas */
+
+.activePage {
+  max-width: none;
+  height: calc(100svh - 4.25rem);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+
+/*
+ * The active demo is a viewport, not a container card. Every object inside is
+ * an independent node; the background is the shared coordinate plane.
+ */
+.topologyCanvas {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  height: calc(100% - 0.75rem);
+  min-height: 0;
+  margin: 0 0.75rem 0.75rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 78%, transparent);
+  border-radius: 26px;
+  cursor: grab;
+  background:
+    radial-gradient(
+      42rem 30rem at 20% 46%,
+      color-mix(in srgb, var(--dusky-accent-soft) 20%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      38rem 28rem at 78% 26%,
+      color-mix(in srgb, var(--dusky-ok) 9%, transparent),
+      transparent 74%
+    ),
+    linear-gradient(
+      color-mix(in srgb, var(--dusky-hair-soft) 42%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--dusky-hair-soft) 42%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    auto,
+    32px 32px,
+    32px 32px;
+  background-position:
+    center,
+    center,
+    -1px -1px,
+    -1px -1px;
+}
+
+.topologyCanvas[data-panning] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.topologyCanvas::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dusky-surface) 58%, transparent),
+    transparent 20%,
+    transparent 76%,
+    color-mix(in srgb, var(--dusky-surface) 72%, transparent)
+  );
+}
+
+.canvasMeta {
+  position: absolute;
+  z-index: 7;
+  top: 1.65rem;
+  right: 1.5rem;
+  left: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dusky-s5);
+  pointer-events: none;
+}
+
+.canvasControls {
+  position: absolute;
+  z-index: 8;
+  top: 1.45rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dusky-surface) 88%, transparent);
+  overflow: hidden;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.canvasControls button {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-right: 1px solid var(--dusky-hair-soft);
+  background: transparent;
+  font-family: var(--dusky-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-dim);
+  cursor: pointer;
+}
+
+.canvasControls button:last-child {
+  border-right: 0;
+}
+
+.canvasControls button:hover {
+  background: color-mix(in srgb, var(--dusky-accent-soft) 18%, transparent);
+  color: var(--dusky-accent);
+}
+
+.canvasControls button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--dusky-accent);
+  outline-offset: -2px;
+}
+
+.canvasEyebrow,
+.canvasTitle {
+  margin: 0;
+}
+.canvasEyebrow {
+  margin-bottom: 0.25rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.63rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+}
+.canvasTitle {
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--dusky-ink-strong);
+}
+
+.canvasProblem {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--dusky-stop);
+}
+
+.canvasStatus {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding-top: 0.35rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+.canvasStatus span:first-child {
+  position: relative;
+  padding-left: 0.9rem;
+  color: var(--dusky-ink-dim);
+}
+.canvasStatus span:first-child::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--dusky-warn);
+  transform: translateY(-50%);
+}
+.canvasStatus span[data-state="open"]::before {
+  background: var(--dusky-ok);
+}
+.canvasStatus span[data-state="offline"]::before,
+.canvasStatus span[data-state="superseded"]::before {
+  background: var(--dusky-stop);
+}
+
+.graphNodes {
+  position: absolute;
+  z-index: 2;
+  top: 6.15rem;
+  right: clamp(1.25rem, 3vw, 3.5rem);
+  bottom: 1.5rem;
+  left: clamp(1.25rem, 3vw, 3.5rem);
+  display: grid;
+  grid-template-columns: minmax(20rem, 23rem) 8rem minmax(28rem, 1fr);
+  align-items: center;
+  gap: clamp(1.75rem, 2.5vw, 3rem);
+  width: min(calc(100% - clamp(2.5rem, 6vw, 7rem)), 104rem);
+  margin: 0 auto;
+  transform: translate3d(var(--canvas-pan-x, 0), var(--canvas-pan-y, 0), 0);
+  transform-origin: center;
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.topologyCanvas[data-panning] .graphNodes {
+  transition: none;
+}
+
+.browserRuntimeColumn {
+  position: relative;
+  z-index: 6;
+  width: 100%;
+  height: 100%;
+  min-height: 26rem;
+}
+
+.browserRuntimeNode {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7.25rem;
+  height: 7.25rem;
+  padding: 1rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--dusky-surface) 94%, transparent);
+  transform: translate(-50%, -50%);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.browserRuntimeNode p,
+.browserRuntimeNode h2,
+.browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
+  margin: 0;
+}
+
+.browserRuntimeNode p,
+.browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
+  font-family: var(--dusky-mono);
+  font-size: 0.53rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.browserRuntimeNode h2 {
+  margin: 0.18rem 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  color: var(--dusky-ink-strong);
+}
+
+.runtimePort,
+.runtimeLogPort,
+.activityPort {
+  position: absolute;
+  z-index: 3;
+  width: 0.48rem;
+  height: 0.48rem;
+  border: 1.5px solid var(--dusky-surface);
+  border-radius: 50%;
+  background: var(--dusky-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dusky-accent) 40%, var(--dusky-hair));
+}
+
+.runtimePort {
+  top: var(--port-top);
+  transform: translateY(-50%);
+}
+
+.runtimePort[data-side="in"] {
+  left: -0.28rem;
+}
+
+.runtimePort[data-side="out"] {
+  right: -0.28rem;
+}
+
+.runtimeLogPort {
+  bottom: -0.28rem;
+  left: 50%;
+  background: var(--dusky-warn);
+  transform: translateX(-50%);
+}
+
+.technicalLog {
+  position: absolute;
+  z-index: 12;
+  top: calc(50% + 5.1rem);
+  left: 50%;
+  width: 9.5rem;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--dusky-surface) 94%, transparent);
+  transform: translateX(-50%);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+  transition:
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 240ms ease;
+}
+
+.activityPort {
+  top: -0.28rem;
+  left: 50%;
+  background: var(--dusky-warn);
+  transform: translateX(-50%);
+}
+
+.activitySummary {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--dusky-ink-dim);
+  cursor: pointer;
+}
+
+.activitySummary span {
+  font-family: var(--dusky-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.activitySummary strong {
+  min-width: 1.65rem;
+  height: 1.65rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--dusky-warn) 12%, transparent);
+  font-family: var(--dusky-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--dusky-warn);
+}
+
+.activitySummary:hover,
+.activitySummary[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--dusky-warn) 7%, transparent);
+  color: var(--dusky-ink-strong);
+}
+
+.activitySummary:focus-visible {
+  outline: 2px solid var(--dusky-accent);
+  outline-offset: 2px;
+}
+
+.technicalLog[data-open] {
+  top: 60%;
+  width: min(38rem, calc(100vw - 5rem));
+  border-radius: 22px;
+  transform: translate(-50%, -50%);
+}
+
+.technicalLog[data-open] .activitySummary {
+  display: none;
+}
+
+.technicalLogPanel {
+  padding: 1rem;
+}
+
+.technicalLogHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.technicalLogHead h2,
+.technicalLogHead p {
+  margin: 0;
+}
+
+.technicalLogHead h2 {
+  font-size: 1rem;
+  font-weight: 450;
+  color: var(--dusky-ink-strong);
+}
+
+.technicalLogHead p {
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLogHead > div:last-child {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.technicalLogHead > div:last-child span,
+.technicalLogHead > div:last-child button {
+  font-family: var(--dusky-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.technicalLogHead > div:last-child span {
+  color: var(--dusky-warn);
+}
+
+.technicalLogHead > div:last-child button {
+  min-height: 1.8rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dusky-ink-dim);
+  cursor: pointer;
+}
+
+.technicalLogHead > div:last-child button:hover {
+  border-color: var(--dusky-accent);
+  color: var(--dusky-accent);
+}
+
+.technicalLogColumns,
+.technicalLogEvents li {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(8rem, 0.75fr) minmax(12rem, 1.25fr);
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.technicalLogColumns {
+  padding: 0 0.65rem 0.4rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.48rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.technicalLogEvents {
+  max-height: min(20rem, 46vh);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow: auto;
+  list-style: none;
+}
+
+.technicalLogEvents li {
+  min-height: 2.85rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--dusky-hair-soft);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dusky-surface) 72%, transparent);
+}
+
+.technicalLogEvents li strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.73rem;
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dusky-ink-strong);
+}
+
+.eventLabel {
+  width: fit-content;
+  padding: 0.25rem 0.4rem;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dusky-accent) 10%, transparent);
+  font-family: var(--dusky-mono);
+  font-size: 0.48rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+}
+
+.technicalLogEvents li[data-kind="invocation"] .eventLabel {
+  background: color-mix(in srgb, var(--dusky-warn) 12%, transparent);
+  color: var(--dusky-warn);
+}
+
+.technicalLogEvents li[data-kind="result"] .eventLabel {
+  background: color-mix(in srgb, var(--dusky-ok) 10%, transparent);
+  color: var(--dusky-ok);
+}
+
+.technicalLogEvents li[data-kind="agent"] .eventLabel {
+  background: color-mix(in srgb, var(--dusky-accent-soft) 30%, transparent);
+  color: var(--dusky-accent);
+}
+
+.technicalLogEvents li[data-kind="error"] {
+  border-color: color-mix(in srgb, var(--dusky-stop) 24%, var(--dusky-hair-soft));
+}
+
+.technicalLogEvents li[data-kind="error"] .eventLabel {
+  background: color-mix(in srgb, var(--dusky-stop) 9%, transparent);
+  color: var(--dusky-stop);
+}
+
+.eventDetail {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--dusky-mono);
+  font-size: 0.58rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLogEvents .noEvents {
+  display: block;
+  color: var(--dusky-ink-faint);
+}
+
+.displayGraphNode,
+.providerNode {
+  position: relative;
+  min-width: 0;
+}
+
+.displayGraphNode {
+  width: var(--dusky-live);
+  max-width: 100%;
+  align-self: center;
+  justify-self: end;
+}
+
+.displayGraphNode[data-mode="glasses"] {
+  min-height: var(--dusky-live);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dusky-surface) 78%, transparent);
+  box-shadow: none;
+}
+
+.nodePill {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 50%;
+  max-width: calc(100% - 2rem);
+  min-height: 2.3rem;
+  margin: 0;
+  padding: 0.25rem 0.45rem 0.25rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 999px;
+  background: var(--dusky-surface);
+  color: var(--dusky-ink-strong);
+  box-shadow: none;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+.nodePill > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.83rem;
+}
+
+.nodeState {
+  flex: none;
+  min-height: 1.45rem;
+  padding: 0 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  border-left: 1px solid var(--dusky-hair);
+  font-family: var(--dusky-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+.nodeState[data-live] {
+  color: var(--dusky-accent);
+}
+
+.displayPort,
+.providerPort {
+  position: absolute;
+  z-index: 6;
+  width: 0.56rem;
+  height: 0.56rem;
+  border: 1.5px solid var(--dusky-surface);
+  border-radius: 50%;
+  background: var(--dusky-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dusky-accent) 42%, var(--dusky-hair));
+}
+.displayPort {
+  top: var(--port-top);
+  right: -0.36rem;
+  transform: translateY(-50%);
+}
+.providerPort {
+  top: 50%;
+  left: -0.36rem;
+  transform: translateY(-50%);
+}
+
+.providerField {
+  width: min(100%, 22rem);
+  min-width: 0;
+  max-height: 100%;
+  justify-self: center;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.9rem, 1.8vh, 1.2rem);
+  transform: translateX(2.75rem);
+}
+.providerField[data-many] {
+  overflow-y: auto;
+  padding: 1.25rem 2rem;
+}
+
+.providerNode {
+  flex: none;
+  width: calc(100% - 2rem);
+  height: clamp(8.6rem, 17.5vh, 10.25rem);
+  margin: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dusky-surface) 84%, transparent);
+  box-shadow: none;
+}
+.providerNode:nth-child(3n + 1) {
+  transform: translateX(-0.8rem);
+}
+.providerNode:nth-child(3n + 2) {
+  transform: translateX(1.4rem);
+}
+.providerNode:nth-child(3n + 3) {
+  transform: translateX(-0.1rem);
+}
+
+.providerNode .frame {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+  border: 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--dusky-surface);
+}
+
+.nodeFooter {
+  min-width: 0;
+  min-height: 2.15rem;
+  padding: 0.45rem 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid var(--dusky-hair-soft);
+  font-family: var(--dusky-mono);
+  font-size: 0.53rem;
+  letter-spacing: 0.05em;
+  color: var(--dusky-ink-faint);
+}
+.nodeFooter span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nodeFooter span:last-child {
+  flex: none;
+  text-transform: uppercase;
+}
+
+/* Each provider and the actions it exposed form one row in the topology.
+   Their short connector encodes a real origin relationship, not decoration. */
+.providerActionField {
+  min-width: 0;
+  max-height: 100%;
+  padding: 1.25rem 1.25rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(2rem, 3.2vh, 2.5rem);
+  overflow-y: auto;
+}
+
+.providerActionPair {
+  flex: none;
+  min-width: 0;
+  height: clamp(7.875rem, 16vh, 9.25rem);
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) minmax(13rem, 1fr);
+  align-items: stretch;
+  gap: clamp(2.5rem, 4vw, 4.5rem);
+}
+.providerActionPair .providerNode {
+  width: 100%;
+  height: 100%;
+  transform: none;
+}
+
+.providerActionPort,
+.actionPort {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  width: 0.46rem;
+  height: 0.46rem;
+  border: 1.5px solid var(--dusky-surface);
+  border-radius: 50%;
+  background: var(--dusky-ink-dim);
+  transform: translateY(-50%);
+}
+.providerActionPort {
+  right: -0.24rem;
+}
+.actionPort {
+  left: -0.24rem;
+}
+
+.actionNode {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.8rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 82%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--dusky-surface) 84%, transparent);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.providerNode,
+.actionNode,
+.displayGraphNode[data-mode="glasses"] {
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.providerNode:hover,
+.actionNode:hover,
+.displayGraphNode[data-mode="glasses"]:hover {
+  border-color: color-mix(in srgb, var(--dusky-accent) 42%, var(--dusky-hair));
+  background-color: color-mix(in srgb, var(--dusky-surface) 92%, transparent);
+}
+
+.actionNodeHead {
+  flex: none;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.4rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+.actionNodeHead h2,
+.actionNodeHead span {
+  margin: 0;
+  font-family: var(--dusky-mono);
+  font-size: 0.56rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.actionNodeHead h2 {
+  color: var(--dusky-ink-dim);
+}
+.actionNodeHead span {
+  flex: none;
+  color: var(--dusky-accent);
+}
+
+.actionList {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.actionList li {
+  min-width: 0;
+  padding: 0.28rem 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  border-bottom: 1px solid var(--dusky-hair-soft);
+}
+.actionList li:last-child {
+  border-bottom: 0;
+}
+.actionName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.74rem;
+  color: var(--dusky-ink-strong);
+}
+.actionApproval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dusky-ok);
+}
+.actionApproval::before {
+  content: "";
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.actionApproval[data-confirm] {
+  color: var(--dusky-warn);
+}
+.actionList .actionEmpty {
+  display: block;
+  border-bottom: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--dusky-ink-faint);
+}
+
+/* The alternate composition follows the same deterministic topology top to
+   bottom. It changes the reading direction; it never changes tool state. */
+.topologyCanvas[data-layout="vertical"] .graphNodes {
+  top: 6.25rem;
+  right: 3rem;
+  bottom: auto;
+  left: 3rem;
+  min-height: 48rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  gap: 4.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
+  height: 16rem;
+  min-height: 16rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"] {
+  top: -0.28rem;
+  left: var(--port-left);
+  transform: translateX(-50%);
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"] {
+  top: auto;
+  right: auto;
+  bottom: -0.28rem;
+  left: var(--port-left);
+  transform: translateX(-50%);
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode {
+  width: 17.5rem;
+  align-self: start;
+  justify-self: center;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode,
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .stage {
+  height: 17.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .lens {
+  transform: scale(0.466667);
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort {
+  top: auto;
+  right: auto;
+  bottom: -0.36rem;
+  left: var(--port-left);
+  transform: translateX(-50%);
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionField {
+  width: 100%;
+  max-height: none;
+  padding: 1.25rem 0.5rem 4rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(15rem, 1fr));
+  align-items: start;
+  gap: 2.5rem;
+  overflow: visible;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair {
+  width: 100%;
+  height: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 10.25rem minmax(10rem, auto);
+  gap: 3rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair .providerNode {
+  height: 10.25rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerPort {
+  top: -0.36rem;
+  left: 1.25rem;
+  transform: translateX(-50%);
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPort {
+  top: auto;
+  right: auto;
+  bottom: -0.24rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  top: -0.24rem;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.stage {
+  border-radius: 22px;
+  border-color: color-mix(in srgb, var(--dusky-ink-strong) 72%, var(--dusky-hair));
+  background: var(--emit-ground);
+  box-shadow: 0 22px 46px rgb(20 22 19 / 18%);
+}
+
+.sessionNotice {
+  position: absolute;
+  z-index: 7;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--dusky-stop) 38%, var(--dusky-hair));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dusky-surface) 88%, transparent);
+  font-size: 0.76rem;
+  color: var(--dusky-ink-dim);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.glassesNodeCopy {
+  width: min(100% - 3rem, 18rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: center;
+}
+.glassesNodeCopy p,
+.glassesNodeCopy strong,
+.glassesNodeCopy span {
+  margin: 0;
+}
+.glassesNodeCopy p {
+  font-family: var(--dusky-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dusky-accent);
+}
+.glassesNodeCopy strong {
+  font-family: var(--dusky-mono);
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  color: var(--dusky-ink-strong);
+}
+.glassesNodeCopy span {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--dusky-ink-dim);
+}
+
+.topologyEdges {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvasFades {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvasFades span {
+  position: absolute;
+  display: block;
+}
+
+.canvasFades span[data-edge="top"],
+.canvasFades span[data-edge="bottom"] {
+  right: 0;
+  left: 0;
+  height: 4rem;
+}
+
+.canvasFades span[data-edge="left"],
+.canvasFades span[data-edge="right"] {
+  top: 0;
+  bottom: 0;
+  width: 3.5rem;
+}
+
+.canvasFades span[data-edge="top"] {
+  top: 0;
+  background: linear-gradient(180deg, var(--dusky-surface), transparent);
+}
+
+.canvasFades span[data-edge="right"] {
+  right: 0;
+  background: linear-gradient(270deg, var(--dusky-surface), transparent);
+}
+
+.canvasFades span[data-edge="bottom"] {
+  bottom: 0;
+  background: linear-gradient(0deg, var(--dusky-surface), transparent);
+}
+
+.canvasFades span[data-edge="left"] {
+  left: 0;
+  background: linear-gradient(90deg, var(--dusky-surface), transparent);
+}
+
+.inspectorDock {
+  position: absolute;
+  z-index: 8;
+  right: auto;
+  bottom: 1.35rem;
+  left: 1.5rem;
+  width: min(46rem, calc(100% - 30rem));
+  min-height: 9.5rem;
+  max-height: 10.25rem;
+  padding: 0.95rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--dusky-hair) 85%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dusky-surface) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 76%),
+    0 20px 54px rgb(20 22 19 / 13%);
+  -webkit-backdrop-filter: blur(24px) saturate(1.32);
+  backdrop-filter: blur(24px) saturate(1.32);
+}
+
+.inspectorActions,
+.inspectorActivity {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.inspectorActivity {
+  padding-left: 1rem;
+  border-left: 1px solid var(--dusky-hair-soft);
+}
+
+.inspectorTitle {
+  flex: none;
+  margin: 0 0 0.45rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--dusky-mono);
+  font-size: 0.61rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+.inspectorTitle span {
+  color: var(--dusky-accent);
+}
+
+.inspectorHelp {
+  flex: none;
+  margin: -0.15rem 0 0.4rem;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--dusky-ink-dim);
+}
+
+.inspectorDock .tools {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  column-gap: 1rem;
+}
+.inspectorDock .tool {
+  min-width: 0;
+  padding: 0.15rem 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 0 0.5rem;
+}
+.inspectorDock .toolName {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+.inspectorDock .toolSite {
+  grid-column: 1;
+  grid-row: 2;
+  margin-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.61rem;
+}
+.inspectorDock .chip {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 0.53rem;
+}
+.inspectorDock .empty {
+  padding: 0.45rem 0;
+  font-size: 0.72rem;
+}
+
+.inspectorDock .log {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dusky-ink-strong) 4%, transparent);
+  font-size: 0.63rem;
+  line-height: 1.55;
+}
+
+.canvasStanding {
+  position: absolute;
+  z-index: 9;
+  right: 2rem;
+  bottom: 0.35rem;
+  margin: 0;
+  font-size: 0.63rem;
+  color: var(--dusky-ink-faint);
+}
+
+@media (max-width: 1100px) {
+  .graphNodes {
+    grid-template-columns: minmax(17rem, 20rem) 7rem minmax(22rem, 1fr);
+    gap: 1.5rem;
+  }
+  .displayGraphNode,
+  .displayGraphNode .stage {
+    width: 20rem;
+    height: 20rem;
+  }
+  .displayGraphNode .lens {
+    transform: scale(0.533333);
+  }
+  .providerField {
+    width: min(100%, 19rem);
+  }
+  .providerActionField {
+    padding-right: 0;
+    padding-left: 0;
+  }
+  .providerActionPair {
+    grid-template-columns: minmax(10rem, 1fr) minmax(11rem, 0.9fr);
+    gap: 2.5rem;
+  }
+  .browserRuntimeNode {
+    width: 6.75rem;
+    height: 6.75rem;
+  }
+  .technicalLog[data-open] {
+    width: min(34rem, calc(100vw - 4rem));
+  }
+  .inspectorDock {
+    width: min(42rem, calc(100% - 23rem));
+    grid-template-columns: minmax(0, 1.2fr) minmax(15rem, 0.8fr);
+  }
+}
+
+@media (max-width: 840px) {
+  .activePage {
+    height: auto;
+    min-height: 0;
+  }
+  .topologyCanvas {
+    height: auto;
+    min-height: auto;
+    margin: 0 0.5rem 0.5rem;
+  }
+  .topologyCanvas {
+    overflow: hidden;
+    padding: 7rem 1rem 1rem;
+  }
+  .canvasMeta {
+    right: 1rem;
+    left: 1rem;
+  }
+  .canvasStatus {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .topologyCanvas[data-layout] .graphNodes {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode {
+    width: var(--dusky-live);
+    justify-self: auto;
+  }
+  .topologyCanvas[data-layout] .browserRuntimeColumn {
+    width: 100%;
+    height: 16rem;
+    min-height: 16rem;
+  }
+  .topologyCanvas[data-layout] .runtimePort[data-side="in"] {
+    top: -0.28rem;
+    left: var(--port-left);
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .runtimePort[data-side="out"] {
+    top: auto;
+    right: auto;
+    bottom: -0.28rem;
+    left: var(--port-left);
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 20rem;
+    height: 20rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.533333);
+  }
+  .providerField {
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    transform: none;
+  }
+  .topologyCanvas[data-layout] .providerActionField {
+    width: 100%;
+    max-height: none;
+    padding: 0;
+    overflow: visible;
+  }
+  .topologyCanvas[data-layout] .providerActionPair {
+    width: 100%;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3rem;
+    transform: none;
+  }
+  .topologyCanvas[data-layout] .providerActionPair .providerNode {
+    width: 100%;
+    height: 22rem;
+  }
+  .actionNode {
+    min-height: 12rem;
+  }
+  .providerNode {
+    width: 100%;
+    height: 22rem;
+    transform: none;
+  }
+  .displayPort {
+    top: auto;
+    right: auto;
+    bottom: -0.36rem;
+    left: var(--port-left);
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .providerPort {
+    top: -0.36rem;
+    left: 1.25rem;
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: -0.24rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .actionPort {
+    top: -0.24rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .inspectorDock {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    max-height: none;
+    width: auto;
+    margin-top: 3rem;
+    grid-template-columns: 1fr;
+  }
+  .inspectorActivity {
+    padding-top: 1rem;
+    padding-left: 0;
+    border-top: 1px solid var(--dusky-hair-soft);
+    border-left: 0;
+  }
+  .inspectorDock .tools {
+    max-height: 14rem;
+  }
+  .inspectorDock .log {
+    max-height: 12rem;
+  }
+  .canvasStanding {
+    position: static;
+    margin: 0.6rem 0 0;
+    text-align: right;
+  }
+  .canvasControls {
+    display: none;
+  }
+  .technicalLog[data-open] {
+    top: 10rem;
+    width: min(30rem, calc(100vw - 3rem));
+    transform: translateX(-50%);
+  }
+  .topologyCanvas[data-layout] .browserRuntimeColumn:has(.technicalLog[data-open]) {
+    height: 38rem;
+    min-height: 38rem;
+  }
+}
+
+@media (max-width: 650px) {
+  .topologyCanvas {
+    padding-top: 9rem;
+  }
+  .canvasMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .canvasTitle {
+    max-width: none;
+  }
+  .canvasStatus {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+  }
+  .canvasStatus span:last-child {
+    max-width: none;
+    text-align: left;
+  }
+  .providerField {
+    grid-template-columns: 1fr;
+  }
+  .providerNode {
+    height: 24rem;
+  }
+  .topologyCanvas[data-layout] .providerActionPair .providerNode {
+    height: 24rem;
+  }
+  .actionNode {
+    min-height: 13rem;
+  }
+  .technicalLogColumns {
+    display: none;
+  }
+  .technicalLogEvents li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+  .technicalLogEvents li strong,
+  .eventDetail {
+    white-space: normal;
+  }
+  .inspectorDock {
+    padding: 0.85rem;
+  }
+  .inspectorDock .tools {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 18.75rem;
+    height: 18.75rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.5);
+  }
+}
+
+@media (max-width: 340px) {
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 17.5rem;
+    height: 17.5rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.466667);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topologyEdge[data-connected] {
+    stroke-dasharray: none;
+    animation: none;
+  }
+  .edgeSignal {
+    display: none;
+  }
+}
+
+/* Final cascade ownership for the active control-plane topology. */
+.activePage {
+  max-width: none;
+  width: calc(100% + 2 * var(--dusky-s4));
+  height: calc(100svh - 4.25rem);
+  margin: 0 calc(-1 * var(--dusky-s4));
+  padding: 0;
+  gap: 0;
+}
+
+.topologyCanvas {
+  --topology-capability: #587069;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(
+      34rem 26rem at 18% 48%,
+      color-mix(in srgb, var(--dusky-accent-soft) 16%, transparent),
+      transparent 74%
+    ),
+    radial-gradient(
+      28rem 22rem at 82% 30%,
+      color-mix(in srgb, var(--topology-capability) 8%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      color-mix(in srgb, var(--dusky-hair-soft) 48%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--dusky-hair-soft) 48%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    auto,
+    32px 32px,
+    32px 32px;
+  background-position:
+    center,
+    center,
+    -1px -1px,
+    -1px -1px;
+}
+
+.canvasMeta {
+  top: 1.35rem;
+  right: 2rem;
+  left: 2rem;
+}
+
+.canvasControls {
+  top: 1.2rem;
+  right: 2rem;
+  display: flex;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgb(20 22 19 / 5%);
+}
+
+.canvasControls button {
+  min-height: 2.15rem;
+  padding: 0 0.68rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.63rem;
+}
+
+.graphNodes {
+  top: 5.8rem;
+  right: 2rem;
+  bottom: 1.45rem;
+  left: 2rem;
+  width: auto;
+  margin: 0;
+  grid-template-columns: 23rem minmax(9rem, 10rem) minmax(36rem, 1fr);
+  gap: clamp(1.5rem, 2.5vw, 2.75rem);
+  transform: none;
+  transition: none;
+}
+
+.browserRuntimeColumn {
+  min-height: 25rem;
+}
+
+.browserRuntimeNode {
+  width: 8.5rem;
+  height: 9.5rem;
+  padding: 1.1rem 0.9rem;
+  border-color: color-mix(in srgb, var(--dusky-accent) 24%, var(--dusky-hair));
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgb(20 22 19 / 7%);
+}
+
+.browserRuntimeNode p,
+.browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
+  font-size: 0.62rem;
+}
+
+.browserRuntimeNode h2 {
+  font-size: 1.22rem;
+}
+
+.runtimePort,
+.runtimeLogPort,
+.activityPort,
+.displayPort,
+.providerPort,
+.providerActionPort,
+.actionPort {
+  width: 0.75rem;
+  height: 0.2rem;
+  border: 0;
+  border-radius: 2px;
+  background: var(--dusky-accent);
+  box-shadow: 0 0 0 2px var(--dusky-surface);
+}
+
+.displayPort {
+  top: 50%;
+  right: -0.34rem;
+  transform: translateY(-50%);
+}
+
+.runtimePort {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.runtimePort[data-side="in"] {
+  left: -0.34rem;
+}
+
+.runtimePort[data-side="out"] {
+  right: -0.34rem;
+}
+
+.runtimeLogPort,
+.activityPort {
+  width: 0.2rem;
+  height: 0.75rem;
+  background: var(--dusky-warn);
+}
+
+.runtimeLogPort {
+  bottom: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.activityPort {
+  top: -0.34rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.technicalLog {
+  top: calc(50% + 6.05rem);
+  width: 10.25rem;
+  border-radius: 12px;
+}
+
+.nodePill {
+  min-height: 2.05rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.78rem;
+  border-radius: 8px;
+}
+
+.providerActionField {
+  position: relative;
+  padding: 2.2rem 0 0.35rem;
+  gap: clamp(0.9rem, 2vh, 1.3rem);
+}
+
+.providerActionPair {
+  min-height: 0;
+  height: clamp(8.5rem, 18vh, 9.75rem);
+  grid-template-columns: minmax(12rem, 0.95fr) minmax(14rem, 1.05fr);
+  align-items: center;
+  gap: clamp(2.4rem, 3.5vw, 3.75rem);
+}
+
+.providerNode,
+.providerActionPair .providerNode {
+  min-height: 0;
+  height: 100%;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dusky-surface) 91%, transparent);
+}
+
+.actionNode {
+  --action-node-max-height: 10.75rem;
+
+  min-height: 0;
+  height: fit-content;
+  max-height: var(--action-node-max-height);
+  align-self: center;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dusky-surface) 91%, transparent);
+}
+
+.actionList {
+  flex: none;
+  min-height: 0;
+  max-height: calc(var(--action-node-max-height) - 1.56rem - 2px);
+  overflow-y: auto;
+}
+
+.providerNode .frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 14px 14px 0 0;
+}
+
+.providerPort {
+  top: 50%;
+  left: -0.34rem;
+  transform: translateY(-50%);
+}
+
+.providerActionPort {
+  top: 50%;
+  right: -0.34rem;
+  transform: translateY(-50%);
+  background: var(--topology-capability);
+}
+
+.actionPort {
+  top: 50%;
+  left: -0.34rem;
+  transform: translateY(-50%);
+  background: var(--topology-capability);
+}
+
+.actionNodeHead h2,
+.actionNodeHead span {
+  font-size: 0.63rem;
+}
+
+.actionApproval {
+  font-size: 0.58rem;
+}
+
+.nodeFooter {
+  font-size: 0.59rem;
+}
+
+.topologyEdges {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.canvasFades span[data-edge="top"],
+.canvasFades span[data-edge="bottom"] {
+  height: 3.25rem;
+}
+
+.canvasFades span[data-edge="left"],
+.canvasFades span[data-edge="right"] {
+  width: 2.75rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .graphNodes {
+  top: 5.8rem;
+  right: 2rem;
+  bottom: auto;
+  left: 2rem;
+  min-height: 45rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  gap: 3.75rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode,
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .stage {
+  width: 18rem;
+  height: 18rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .displayGraphNode .lens {
+  transform: scale(0.48);
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort,
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"],
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"],
+.topologyCanvas[data-layout="vertical"] .providerPort,
+.topologyCanvas[data-layout="vertical"] .providerActionPort,
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.topologyCanvas[data-layout="vertical"] .displayPort,
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="out"],
+.topologyCanvas[data-layout="vertical"] .providerActionPort {
+  top: auto;
+  bottom: -0.34rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"],
+.topologyCanvas[data-layout="vertical"] .providerPort,
+.topologyCanvas[data-layout="vertical"] .actionPort {
+  top: -0.34rem;
+  bottom: auto;
+}
+
+.topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
+  height: 13.5rem;
+  min-height: 13.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionField {
+  width: 100%;
+  padding: 2.5rem 0 3rem;
+  grid-template-columns: repeat(3, minmax(14rem, 1fr));
+  gap: 1.5rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair {
+  height: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 8.75rem minmax(9.5rem, auto);
+  gap: 2.25rem;
+}
+
+.topologyCanvas[data-layout="vertical"] .providerActionPair .providerNode {
+  height: 8.75rem;
+}
+
+@media (max-width: 1200px) and (min-width: 841px) {
+  .graphNodes {
+    right: 1.5rem;
+    left: 1.5rem;
+    grid-template-columns: 20rem minmax(8rem, 8.75rem) minmax(31rem, 1fr);
+    gap: 1.5rem;
+  }
+  .displayGraphNode,
+  .displayGraphNode .stage {
+    width: 20rem;
+    height: 20rem;
+  }
+  .displayGraphNode .lens {
+    transform: scale(0.533333);
+  }
+  .providerActionPair {
+    grid-template-columns: minmax(10.5rem, 0.9fr) minmax(12rem, 1.1fr);
+    gap: 2.25rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .activePage {
+    height: auto;
+  }
+  .topologyCanvas {
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 7.4rem 1rem 1.5rem;
+    cursor: default;
+  }
+  .canvasMeta {
+    top: 1.15rem;
+    right: 1rem;
+    left: 1rem;
+  }
+  .canvasControls {
+    top: 4.7rem;
+    right: 1rem;
+    display: flex;
+  }
+  .canvasControls button > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .graphPlane {
+    position: relative;
+    inset: auto;
+    transform: none;
+    transition: none;
+  }
+  .topologyCanvas[data-layout] .graphNodes {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 17.5rem;
+    height: 17.5rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode {
+    align-self: center;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.466667);
+  }
+  .topologyCanvas[data-layout] .displayPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .topologyCanvas[data-layout] .browserRuntimeColumn {
+    width: 100%;
+    height: 10.5rem;
+    min-height: 10.5rem;
+  }
+  .browserRuntimeNode {
+    width: 7.5rem;
+    height: 7.5rem;
+  }
+  .topologyCanvas[data-layout] .runtimePort[data-side="in"] {
+    top: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .topologyCanvas[data-layout] .runtimePort[data-side="out"] {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .technicalLog {
+    top: calc(50% + 4.5rem);
+    width: 9.75rem;
+  }
+  .topologyCanvas[data-layout] .providerActionField {
+    width: 100%;
+    max-height: none;
+    padding: 2.6rem 0 0;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    gap: 3rem;
+    overflow: visible;
+  }
+  .topologyCanvas[data-layout] .providerActionPair {
+    width: 100%;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 10.75rem auto;
+    align-items: start;
+    gap: 2.5rem;
+  }
+  .topologyCanvas[data-layout] .providerActionPair .providerNode {
+    width: 100%;
+    height: 10.75rem;
+  }
+  .actionNode {
+    --action-node-max-height: 22rem;
+
+    min-height: 0;
+    max-height: var(--action-node-max-height);
+    align-self: start;
+  }
+  .topologyCanvas[data-layout] .providerPort {
+    top: 1.75rem;
+    left: -0.34rem;
+    transform: translateY(-50%);
+  }
+  .topologyCanvas[data-layout] .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .topologyCanvas[data-layout] .actionPort {
+    top: -0.34rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .canvasFades,
+  .canvasStanding {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .topologyCanvas {
+    padding-inline: 0.75rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode,
+  .topologyCanvas[data-layout] .displayGraphNode .stage {
+    width: 17rem;
+    height: 17rem;
+  }
+  .topologyCanvas[data-layout] .displayGraphNode .lens {
+    transform: scale(0.453333);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graphPlane,
+  .providerNode,
+  .actionNode,
+  .displayGraphNode[data-mode="glasses"] {
+    transition: none;
+  }
 }
