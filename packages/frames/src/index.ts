@@ -50,6 +50,7 @@ export interface ShareableProjection {
 /* ------------------------------------------------------- schema inspection */
 
 export type ParamKind = "enum" | "boolean" | "text" | "number" | "unsupported";
+export type ParamValue = string | number | boolean;
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return typeof v === "object" && v !== null && !Array.isArray(v)
@@ -57,12 +58,324 @@ function asRecord(v: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function isParamValue(value: unknown): value is ParamValue {
+  return (
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function safeDeclaredChoices(values: unknown[]): ParamValue[] {
+  const out: ParamValue[] = [];
+  const ids = new Set<string>();
+  for (const value of values) {
+    if (!isParamValue(value)) continue;
+    const id = String(value);
+    if (id === "" || id.startsWith("__") || ids.has(id)) continue;
+    ids.add(id);
+    out.push(value);
+  }
+  return out;
+}
+
+/** The one value-bearing branch of a nullable union, when it is unambiguous. */
+function nullableValueSchema(schema: Record<string, unknown>): Record<string, unknown> | null {
+  for (const keyword of ["anyOf", "oneOf"]) {
+    const branches = schema[keyword];
+    if (!Array.isArray(branches) || branches.length < 2) continue;
+    const records = branches.map(asRecord);
+    if (records.some((branch) => branch === null)) continue;
+    const nonNull = (records as Record<string, unknown>[]).filter(
+      (branch) => branch["type"] !== "null" && branch["const"] !== null,
+    );
+    const nullCount = records.length - nonNull.length;
+    if (nonNull.length === 1 && nullCount === records.length - 1) return nonNull[0] ?? null;
+  }
+  return null;
+}
+
+/** Declared button values, or null when this is not an enum-like schema. */
+export function declaredChoices(schema: unknown): ParamValue[] | null {
+  const s = asRecord(schema);
+  if (!s) return null;
+  if (Array.isArray(s["enum"])) return safeDeclaredChoices(s["enum"]);
+  if (Object.hasOwn(s, "const")) {
+    return safeDeclaredChoices([s["const"]]);
+  }
+  const nullable = nullableValueSchema(s);
+  if (nullable) return declaredChoices(nullable);
+  return null;
+}
+
+/** One unambiguous primitive, tolerating the nullable union common generators emit. */
+function primitiveType(schema: Record<string, unknown>): string | null {
+  const raw = schema["type"];
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) {
+    const nonNull = [...new Set(raw.filter((type) => type !== "null"))];
+    return nonNull.length === 1 && typeof nonNull[0] === "string" ? nonNull[0] : null;
+  }
+
+  const nullable = nullableValueSchema(schema);
+  if (nullable) return primitiveType(nullable);
+  return null;
+}
+
+const DISPLAY_PRIMITIVE_TYPES = new Set(["string", "boolean", "number", "integer"]);
+const SCHEMA_ANNOTATION_KEYS = new Set([
+  "description",
+  "title",
+  "default",
+  "examples",
+  "deprecated",
+  "readOnly",
+  "writeOnly",
+  "$comment",
+]);
+const PRIMITIVE_CONSTRAINT_KEYS = new Set(["type", "enum", "const", "anyOf", "oneOf"]);
+
+function localDefinition(
+  ref: string,
+  document: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (!ref.startsWith("#/")) return null;
+  const encoded = ref.slice(2).split("/");
+  if (encoded.length !== 2 || (encoded[0] !== "$defs" && encoded[0] !== "definitions")) {
+    return null;
+  }
+  const encodedName = encoded[1];
+  if (!encodedName || /~(?:[^01]|$)/.test(encodedName)) return null;
+  const name = encodedName.replace(/~1/g, "/").replace(/~0/g, "~");
+  const definitions = asRecord(document[encoded[0]]);
+  if (!definitions || !Object.hasOwn(definitions, name)) return null;
+  return asRecord(definitions[name]);
+}
+
+function annotationEntries(schema: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(schema).filter(([key]) => SCHEMA_ANNOTATION_KEYS.has(key)),
+  );
+}
+
+function mergeProperty(properties: Record<string, unknown>, name: string, schema: unknown): void {
+  if (!Object.hasOwn(properties, name)) {
+    properties[name] = schema;
+    return;
+  }
+  properties[name] = { allOf: [properties[name], schema] };
+}
+
+/** Recover only an object property bag and its required names from the root schema. */
+function resolveObjectSchema(
+  value: unknown,
+  document: Record<string, unknown>,
+  seen = new Set<string>(),
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 8) return null;
+  const schema = asRecord(value);
+  if (!schema) return null;
+
+  if (Object.hasOwn(schema, "$ref")) {
+    const ref = schema["$ref"];
+    const allowedSibling = (key: string) =>
+      key === "$ref" || key === "$defs" || key === "definitions" || SCHEMA_ANNOTATION_KEYS.has(key);
+    if (
+      typeof ref !== "string" ||
+      seen.has(ref) ||
+      Object.keys(schema).some((key) => !allowedSibling(key))
+    ) {
+      return null;
+    }
+    const target = localDefinition(ref, document);
+    if (!target) return null;
+    const nextSeen = new Set(seen);
+    nextSeen.add(ref);
+    const resolved = resolveObjectSchema(target, document, nextSeen, depth + 1);
+    return resolved ? { ...resolved, ...annotationEntries(schema) } : null;
+  }
+
+  if (Object.hasOwn(schema, "oneOf") || Object.hasOwn(schema, "anyOf")) return null;
+
+  if (Object.hasOwn(schema, "allOf")) {
+    const allOf = schema["allOf"];
+    if (!Array.isArray(allOf) || allOf.length === 0) return null;
+    const direct = Object.fromEntries(
+      Object.entries(schema).filter(([key]) => ["type", "properties", "required"].includes(key)),
+    );
+    const branches = Object.keys(direct).length > 0 ? [direct, ...allOf] : allOf;
+    const properties: Record<string, unknown> = {};
+    const required = new Set<string>();
+
+    for (const branch of branches) {
+      const resolved = resolveObjectSchema(branch, document, new Set(seen), depth + 1);
+      if (!resolved) return null;
+      const branchProperties = asRecord(resolved["properties"]) ?? {};
+      for (const [name, property] of Object.entries(branchProperties)) {
+        mergeProperty(properties, name, property);
+      }
+      const branchRequired = resolved["required"];
+      if (Array.isArray(branchRequired)) {
+        for (const name of branchRequired) {
+          if (typeof name === "string") required.add(name);
+        }
+      }
+    }
+    return {
+      type: "object",
+      properties,
+      required: [...required],
+      ...annotationEntries(schema),
+    };
+  }
+
+  const type = schema["type"];
+  if (type !== undefined && type !== "object") return null;
+  if (Object.hasOwn(schema, "items")) return null;
+  const properties = Object.hasOwn(schema, "properties") ? asRecord(schema["properties"]) : {};
+  if (!properties) return null;
+  const requiredValue = schema["required"];
+  if (
+    requiredValue !== undefined &&
+    (!Array.isArray(requiredValue) || requiredValue.some((name) => typeof name !== "string"))
+  ) {
+    return null;
+  }
+  return {
+    type: "object",
+    properties,
+    required: Array.isArray(requiredValue) ? [...new Set(requiredValue as string[])] : [],
+    ...annotationEntries(schema),
+  };
+}
+
+function primitiveConstraint(
+  schema: Record<string, unknown>,
+): { type: string | null; choices: ParamValue[] | null } | null {
+  const hasType = Object.hasOwn(schema, "type") || "anyOf" in schema || "oneOf" in schema;
+  const type = primitiveType(schema);
+  if (hasType && (!type || !DISPLAY_PRIMITIVE_TYPES.has(type))) return null;
+
+  const hasChoices = Object.hasOwn(schema, "enum") || Object.hasOwn(schema, "const");
+  const choices = declaredChoices(schema);
+  if (hasChoices && (choices === null || choices.length === 0)) return null;
+  return { type, choices };
+}
+
+function sameParamValue(left: ParamValue, right: ParamValue): boolean {
+  return typeof left === typeof right && left === right;
+}
+
+function valueMatchesType(value: ParamValue, type: string): boolean {
+  if (type === "string") return typeof value === "string";
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "integer") return typeof value === "number" && Number.isInteger(value);
+  return type === "number" && typeof value === "number" && Number.isFinite(value);
+}
+
+function intersectTypes(left: string | null, right: string | null): string | null | undefined {
+  if (left === null) return right;
+  if (right === null) return left;
+  if (left === right) return left;
+  if ((left === "number" && right === "integer") || (left === "integer" && right === "number")) {
+    return "integer";
+  }
+  return undefined;
+}
+
+function flattenPrimitiveAllOf(
+  schema: Record<string, unknown>,
+  document: Record<string, unknown>,
+  seen: Set<string>,
+  depth: number,
+): Record<string, unknown> | null {
+  const allOf = schema["allOf"];
+  if (!Array.isArray(allOf) || allOf.length === 0) return null;
+
+  const direct = Object.fromEntries(
+    Object.entries(schema).filter(([key]) => PRIMITIVE_CONSTRAINT_KEYS.has(key)),
+  );
+  const branches = direct && Object.keys(direct).length > 0 ? [direct, ...allOf] : allOf;
+  let type: string | null = null;
+  let choices: ParamValue[] | null = null;
+  const annotations: Record<string, unknown> = {};
+
+  for (const raw of branches) {
+    const resolved = resolveDisplaySchema(raw, document, new Set(seen), depth + 1);
+    if (!resolved) return null;
+    const constraint = primitiveConstraint(resolved);
+    if (!constraint) return null;
+    const nextType = intersectTypes(type, constraint.type);
+    if (nextType === undefined) return null;
+    type = nextType;
+    if (constraint.choices !== null) {
+      choices =
+        choices === null
+          ? constraint.choices
+          : choices.filter((value) =>
+              constraint.choices?.some((candidate) => sameParamValue(value, candidate)),
+            );
+      if (choices.length === 0) return null;
+    }
+    Object.assign(annotations, annotationEntries(resolved));
+  }
+
+  if (type && choices) {
+    choices = choices.filter((value) => valueMatchesType(value, type as string));
+    if (choices.length === 0) return null;
+  }
+  if (!type && !choices) return null;
+  return {
+    ...annotations,
+    ...annotationEntries(schema),
+    ...(type ? { type } : {}),
+    ...(choices ? { enum: choices } : {}),
+  };
+}
+
+/** Resolve only the shallow composition the Display can still collect safely. */
+function resolveDisplaySchema(
+  value: unknown,
+  document: Record<string, unknown>,
+  seen = new Set<string>(),
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 8) return null;
+  const schema = asRecord(value);
+  if (!schema) return null;
+
+  if (Object.hasOwn(schema, "$ref")) {
+    const ref = schema["$ref"];
+    if (
+      typeof ref !== "string" ||
+      seen.has(ref) ||
+      Object.keys(schema).some((key) => key !== "$ref" && !SCHEMA_ANNOTATION_KEYS.has(key))
+    ) {
+      return null;
+    }
+    const target = localDefinition(ref, document);
+    if (!target) return null;
+    const nextSeen = new Set(seen);
+    nextSeen.add(ref);
+    const resolved = resolveDisplaySchema(target, document, nextSeen, depth + 1);
+    return resolved ? { ...resolved, ...annotationEntries(schema) } : null;
+  }
+
+  if (Object.hasOwn(schema, "allOf")) {
+    return flattenPrimitiveAllOf(schema, document, seen, depth);
+  }
+  return schema;
+}
+
 /** What kind of frame can collect this parameter, if any. */
 export function paramKind(schema: unknown): ParamKind {
-  const s = asRecord(schema);
+  const raw = asRecord(schema);
+  const s = raw ? resolveDisplaySchema(raw, raw) : null;
   if (!s) return "unsupported";
-  if (Array.isArray(s["enum"]) && s["enum"].length > 0) return "enum";
-  const type = s["type"];
+  const choices = declaredChoices(s);
+  if (choices !== null) return choices.length > 0 ? "enum" : "unsupported";
+  const type = primitiveType(s);
   if (type === "boolean") return "boolean";
   if (type === "string") return "text";
   if (type === "number" || type === "integer") return "number";
@@ -79,27 +392,45 @@ export interface ParamSpec {
   description?: string;
 }
 
-/** Flatten a tool's inputSchema into an ordered list of parameters. */
-export function parameters(tool: ToolDescriptor): ParamSpec[] {
-  const s = tool.inputSchema;
-  if (!s) return [];
-  const props = asRecord(s.properties);
-  if (!props) return [];
-  const required = new Set(
-    Array.isArray(s["required"])
-      ? (s["required"] as unknown[]).filter((x) => typeof x === "string")
-      : [],
-  );
-  return Object.entries(props).map(([name, raw]) => {
+function compiledParameters(tool: ToolDescriptor): ParamSpec[] | null {
+  const document = tool.inputSchema;
+  if (!document) return [];
+  const s = resolveObjectSchema(document, document);
+  if (!s) return null;
+  const props = asRecord(s["properties"]) ?? {};
+  const requiredNames = Array.isArray(s["required"])
+    ? (s["required"] as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const required = new Set(requiredNames);
+  const out = Object.entries(props).map(([name, raw]) => {
     const rec = asRecord(raw) ?? {};
+    const resolved = resolveDisplaySchema(rec, document);
+    const schema = resolved ?? rec;
     return {
       name,
-      schema: rec as JsonSchema,
+      schema: schema as JsonSchema,
       required: required.has(name),
-      kind: paramKind(rec),
-      description: typeof rec["description"] === "string" ? rec["description"] : undefined,
+      kind: resolved ? paramKind(resolved) : "unsupported",
+      description: typeof schema["description"] === "string" ? schema["description"] : undefined,
     };
   });
+  const declared = new Set(Object.keys(props));
+  for (const name of required) {
+    if (declared.has(name)) continue;
+    out.push({
+      name,
+      schema: {},
+      required: true,
+      kind: "unsupported",
+      description: undefined,
+    });
+  }
+  return out;
+}
+
+/** Flatten a tool's inputSchema into an ordered list of parameters. */
+export function parameters(tool: ToolDescriptor): ParamSpec[] {
+  return compiledParameters(tool) ?? [];
 }
 
 /** The next required parameter still missing from args, or null when ready. */
@@ -117,7 +448,9 @@ export function nextMissingParam(
 
 /** True when this tool can be driven to completion on a six-key display. */
 export function isOperable(tool: ToolDescriptor): boolean {
-  return parameters(tool).every((p) => !p.required || p.kind !== "unsupported");
+  const params = compiledParameters(tool);
+  if (params === null) return false;
+  return params.every((p) => !p.required || p.kind !== "unsupported");
 }
 
 /* ----------------------------------------------------------- humanization */
@@ -156,8 +489,8 @@ export function valueForParam(value: unknown, spec: ParamSpec): unknown {
 
   switch (spec.kind) {
     case "enum": {
-      const allowed = spec.schema["enum"];
-      if (!Array.isArray(allowed)) return undefined;
+      const allowed = declaredChoices(spec.schema);
+      if (!allowed) return undefined;
       // The DECLARED member, not a parsed copy of the label, which is how an
       // integer enum survives a Display that can only send text.
       const hit = allowed.find((a) => String(a) === String(value));
@@ -169,10 +502,15 @@ export function valueForParam(value: unknown, spec: ParamSpec): unknown {
       if (value === "false") return false;
       return undefined;
     case "number": {
-      if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+      const declaredType = primitiveType(asRecord(spec.schema) ?? {});
+      if (typeof value === "number") {
+        if (!Number.isFinite(value)) return undefined;
+        return declaredType === "integer" && !Number.isInteger(value) ? undefined : value;
+      }
       if (typeof value === "string" && value.trim() !== "") {
         const n = Number(value);
-        return Number.isFinite(n) ? n : undefined;
+        if (!Number.isFinite(n)) return undefined;
+        return declaredType === "integer" && !Number.isInteger(n) ? undefined : n;
       }
       return undefined;
     }
@@ -539,7 +877,7 @@ export function paramFrame(
   }
 
   if (param.kind === "enum") {
-    const values = (param.schema["enum"] as unknown[]) ?? [];
+    const values = declaredChoices(param.schema) ?? [];
     const all: Choice[] = values.map((v) => ({ id: String(v), label: String(v) }));
     return { kind: "choose", source, title, choices: withBack(all), note: label(tool) };
   }
@@ -813,8 +1151,15 @@ function completeResultText(raw: string): string | null {
  */
 export function outcomeFromResult(raw: string): { ok: boolean; message?: string } {
   if (raw.length > MAX_RESULT_CHARS) return { ok: true };
-  const rec = asRecord(safeParse(raw));
-  if (!rec) return { ok: true };
+  return negativeOutcome(safeParse(raw)) ?? { ok: true };
+}
+
+/** Find only an explicit negative, including one inside a protocol text envelope. */
+function negativeOutcome(value: unknown, depth = 0): { ok: false; message?: string } | null {
+  const rec = asRecord(value);
+  if (!rec) return null;
+
+  if (rec["isError"] === true) return { ok: false };
 
   const said = (): string | undefined => {
     const m = rec["message"];
@@ -833,6 +1178,13 @@ export function outcomeFromResult(raw: string): { ok: boolean; message?: string 
     // An error object with something in it is a report of a failure even when
     // it does not carry prose. An empty one reports nothing.
     if (Object.keys(errRec).length > 0) return { ok: false, message: said() };
+  }
+  if (
+    err === true ||
+    (typeof err === "number" && err !== 0) ||
+    (Array.isArray(err) && err.length > 0)
+  ) {
+    return { ok: false, message: said() };
   }
 
   // A site says no in whichever way its own house style says no. These are
@@ -856,22 +1208,49 @@ export function outcomeFromResult(raw: string): { ok: boolean; message?: string 
     return { ok: false, message: said() };
   }
 
-  return { ok: true };
+  if (depth < 2) {
+    if (Object.hasOwn(rec, "structuredContent")) {
+      const nested = negativeOutcome(rec["structuredContent"], depth + 1);
+      if (nested) return nested;
+    }
+    const content = rec["content"];
+    if (Array.isArray(content)) {
+      for (const item of content) {
+        const block = asRecord(item);
+        const text = block?.["text"];
+        if (typeof text !== "string" || text.length > MAX_RESULT_CHARS) continue;
+        const nested = negativeOutcome(safeParse(text), depth + 1);
+        if (nested) return nested;
+      }
+    }
+  }
+
+  return null;
 }
 
 /** Keys that describe the call rather than the outcome, so never shown as facts. */
-const VERDICT_KEYS = new Set(["ok", "success", "error", "status", "code"]);
+const RESULT_METADATA_KEYS = new Set([
+  "ok",
+  "success",
+  "error",
+  "status",
+  "code",
+  "iserror",
+  "content",
+  "structuredcontent",
+]);
 
 /** Money is the one value a wearer must never misread, so it is formatted. */
 const MONEY_KEY = /(price|amount|cost|total|subtotal|fee|balance|charge)/;
 
 function humanizeKey(key: string): string {
-  const words = key
+  const words = cleanResultText(key)
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .trim()
     .toLowerCase();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  const label = words.charAt(0).toUpperCase() + words.slice(1);
+  return safeResultText(label || "Field", 40);
 }
 
 function factValue(key: string, value: unknown): string | null {
@@ -951,6 +1330,16 @@ export function textFromResult(raw: string): string | null {
   const said = contentText(rec);
   if (said.length > 0) return said.join(" ");
 
+  const structured = asRecord(rec["structuredContent"]);
+  if (structured) {
+    for (const key of ["message", "text", "summary"]) {
+      const value = structured[key];
+      if (typeof value !== "string") continue;
+      const clean = completeResultText(value);
+      if (clean !== null) return clean;
+    }
+  }
+
   for (const key of ["message", "text", "summary"]) {
     const v = rec[key];
     if (typeof v === "string") {
@@ -978,30 +1367,35 @@ function contentText(rec: Record<string, unknown>): string[] {
 }
 
 export function factsFromResult(raw: string, limit = 4): Fact[] {
-  if (raw.length > MAX_RESULT_CHARS) return [];
-  const rec = asRecord(safeParse(raw));
-  if (!rec) return [];
+  if (raw.length > MAX_RESULT_CHARS || limit <= 0 || !outcomeFromResult(raw).ok) return [];
+  const parsed = safeParse(raw);
+  if (parsed === null) return [];
 
-  // A result that is a single wrapper around one object, `{"product": {...}}`,
-  // is describing that object. Read through it rather than reporting nothing.
-  // A protocol content envelope carries a sentence, not fields. Counting its
-  // blocks produced "Content / 1 item" and threw the sentence away.
-  // `textFromResult` reads it; there is nothing key-value to add here.
-  if (contentText(rec).length > 0) return [];
+  for (const payload of resultPayloads(parsed)) {
+    const rec = asRecord(payload.value);
+    if (!rec) continue;
 
-  const entries = Object.entries(rec);
-  const inner = entries.length === 1 && entries[0] ? asRecord(entries[0][1] as unknown) : null;
-  const source = inner ?? rec;
+    // A protocol envelope is transport, not a fact. Its structured or JSON
+    // text payloads were visited first by `resultPayloads`; plain text remains
+    // available to `textFromResult` without becoming "Content / 1 item".
+    if (Object.hasOwn(rec, "structuredContent") || contentText(rec).length > 0) continue;
 
-  const out: Fact[] = [];
-  for (const [key, value] of Object.entries(source)) {
-    if (out.length >= limit) break;
-    if (VERDICT_KEYS.has(key.toLowerCase())) continue;
-    const v = factValue(key, value);
-    if (v === null) continue;
-    out.push({ label: humanizeKey(key), value: v });
+    // A result that is a single wrapper around one object, `{"item": {...}}`,
+    // is describing that object. Read through it rather than reporting nothing.
+    const entries = Object.entries(rec);
+    const inner = entries.length === 1 && entries[0] ? asRecord(entries[0][1] as unknown) : null;
+    const source = inner ?? rec;
+    const out: Fact[] = [];
+    for (const [key, value] of Object.entries(source)) {
+      if (out.length >= limit) break;
+      if (RESULT_METADATA_KEYS.has(key.toLowerCase())) continue;
+      const v = factValue(key, value);
+      if (v === null) continue;
+      out.push({ label: humanizeKey(key), value: v });
+    }
+    if (out.length > 0) return out;
   }
-  return out;
+  return [];
 }
 
 function safeParse(raw: string): unknown {
@@ -1011,6 +1405,50 @@ function safeParse(raw: string): unknown {
   } catch {
     return null;
   }
+}
+
+interface ResultPayload {
+  value: unknown;
+  location: string;
+}
+
+/** Protocol payloads in priority order, bounded before any result-specific walk. */
+function resultPayloads(
+  value: unknown,
+  depth = 0,
+  budget: { visited: number } = { visited: 0 },
+  location = "",
+): ResultPayload[] {
+  if (budget.visited >= MAX_RESULT_NODES) return [];
+  budget.visited += 1;
+  const rec = asRecord(value);
+  if (!rec || depth >= 2) return [{ value, location }];
+
+  const out: ResultPayload[] = [];
+  if (Object.hasOwn(rec, "structuredContent")) {
+    out.push(
+      ...resultPayloads(
+        rec["structuredContent"],
+        depth + 1,
+        budget,
+        `${location}/structuredContent`,
+      ),
+    );
+  }
+  const content = rec["content"];
+  if (Array.isArray(content)) {
+    for (const [index, item] of content.entries()) {
+      if (budget.visited >= MAX_RESULT_NODES) break;
+      const text = asRecord(item)?.["text"];
+      if (typeof text !== "string" || text.length > MAX_RESULT_CHARS) continue;
+      const parsed = safeParse(text);
+      if (parsed !== null) {
+        out.push(...resultPayloads(parsed, depth + 1, budget, `${location}/content/${index}/text`));
+      }
+    }
+  }
+  out.push({ value, location });
+  return out;
 }
 
 function projectionValue(value: unknown): ShareableValue | null {
@@ -1039,7 +1477,9 @@ export function shareableProjectionsFromResult(
 ): ShareableProjection[] {
   if (limit <= 0 || raw.length > MAX_RESULT_CHARS) return [];
   const parsed = safeParse(raw);
-  if (parsed === null) return [];
+  if (parsed === null || !outcomeFromResult(raw).ok) return [];
+  const payloads = resultPayloads(parsed);
+  if (payloads.length === 0) return [];
 
   const out: ShareableProjection[] = [];
   const facts = factsFromResult(raw, 4);
@@ -1063,7 +1503,12 @@ export function shareableProjectionsFromResult(
     key?: string;
   }
 
-  const queue: Node[] = [{ value: parsed, location: "", label: "Result", depth: 0 }];
+  const queue: Node[] = payloads.map((payload) => ({
+    value: payload.value,
+    location: payload.location,
+    label: "Result",
+    depth: 0,
+  }));
   let visited = 0;
   while (queue.length > 0 && out.length < limit && visited < MAX_RESULT_NODES) {
     const node = queue.shift() as Node;
@@ -1071,7 +1516,7 @@ export function shareableProjectionsFromResult(
 
     const primitive = projectionValue(node.value);
     if (primitive !== null) {
-      if (node.key && VERDICT_KEYS.has(node.key.toLowerCase())) continue;
+      if (node.key && RESULT_METADATA_KEYS.has(node.key.toLowerCase())) continue;
       if (!out.some((p) => p.valueType === typeof primitive && p.value === primitive)) {
         out.push({
           location: node.location || "#value",
@@ -1100,6 +1545,7 @@ export function shareableProjectionsFromResult(
     const rec = asRecord(node.value);
     if (!rec) continue;
     for (const [key, value] of Object.entries(rec).slice(0, 24)) {
+      if (RESULT_METADATA_KEYS.has(key.toLowerCase())) continue;
       const part = pointerPart(key);
       if (part === null) continue;
       queue.push({
@@ -1144,51 +1590,69 @@ function idKeyOf(o: Record<string, unknown>): string | undefined {
  * inventing structure that is not there.
  */
 export function candidatesFromResult(raw: string, limit = 8): Choice[] {
-  if (raw.length > MAX_RESULT_CHARS) return [];
+  if (raw.length > MAX_RESULT_CHARS || limit <= 0 || !outcomeFromResult(raw).ok) return [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     return [];
   }
-  const rec = asRecord(parsed);
-  const arr: unknown[] | null = Array.isArray(parsed)
-    ? parsed
-    : rec
-      ? ((Object.values(rec).find((v) => Array.isArray(v)) as unknown[] | undefined) ?? null)
-      : null;
-  if (!arr) return [];
-
   const LABEL_KEYS = ["name", "title", "label", "summary", "text", "description"];
   const META_KEYS = ["price", "amount", "cost", "total", "count", "date", "status"];
 
-  const out: Choice[] = [];
-  for (const item of arr.slice(0, limit)) {
-    const o = asRecord(item);
-    if (!o) continue;
-    const idKey = idKeyOf(o);
-    const labelKey = LABEL_KEYS.find((k) => typeof o[k] === "string");
-    if (!idKey || !labelKey) continue;
-    const metaKey = META_KEYS.find((k) => o[k] !== undefined && o[k] !== null);
-    const metaVal = metaKey ? o[metaKey] : undefined;
-    const id = String(o[idKey]);
-    const safeId = completeResultText(id);
-    const safeLabel = completeResultText(String(o[labelKey]));
-    // An identifier is sent onward exactly as selected. If making it safe to
-    // display would change it, it cannot be offered honestly.
-    if (safeId === null || safeId !== id || safeId.startsWith("__") || safeLabel === null) {
+  for (const arr of candidateArrays(parsed)) {
+    const out: Choice[] = [];
+    for (const item of arr.slice(0, MAX_RESULT_NODES)) {
+      const o = asRecord(item);
+      if (!o) continue;
+      const idKey = idKeyOf(o);
+      const labelKey = LABEL_KEYS.find((k) => typeof o[k] === "string");
+      if (!idKey || !labelKey) continue;
+      const metaKey = META_KEYS.find((k) => o[k] !== undefined && o[k] !== null);
+      const metaVal = metaKey ? o[metaKey] : undefined;
+      const id = String(o[idKey]);
+      const safeId = completeResultText(id);
+      const safeLabel = completeResultText(String(o[labelKey]));
+      // An identifier is sent onward exactly as selected. If making it safe to
+      // display would change it, it cannot be offered honestly.
+      if (safeId === null || safeId !== id || safeId.startsWith("__") || safeLabel === null) {
+        continue;
+      }
+      out.push({
+        id: safeId,
+        label: safeLabel,
+        meta:
+          typeof metaVal === "number" && metaKey && /price|amount|cost|total/.test(metaKey)
+            ? `$${metaVal.toFixed(2)}`
+            : metaVal !== undefined
+              ? safeResultText(String(metaVal), 32)
+              : undefined,
+      });
+      if (out.length >= limit) break;
+    }
+    // Object key order chooses only between arrays that actually satisfy the
+    // generic id and label convention. Metadata arrays no longer win merely
+    // because a provider serialized them first.
+    if (out.length > 0) return out;
+  }
+  return [];
+}
+
+/** Candidate-bearing arrays, after the shared protocol-envelope unwrap. */
+function candidateArrays(value: unknown): unknown[][] {
+  const out: unknown[][] = [];
+  for (const payload of resultPayloads(value)) {
+    if (Array.isArray(payload.value)) {
+      out.push(payload.value);
       continue;
     }
-    out.push({
-      id: safeId,
-      label: safeLabel,
-      meta:
-        typeof metaVal === "number" && metaKey && /price|amount|cost|total/.test(metaKey)
-          ? `$${metaVal.toFixed(2)}`
-          : metaVal !== undefined
-            ? safeResultText(String(metaVal), 32)
-            : undefined,
-    });
+    const rec = asRecord(payload.value);
+    if (!rec) continue;
+    for (const [key, candidate] of Object.entries(rec)) {
+      if (!RESULT_METADATA_KEYS.has(key.toLowerCase()) && Array.isArray(candidate)) {
+        out.push(candidate);
+      }
+    }
   }
   return out;
 }

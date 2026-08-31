@@ -27,7 +27,7 @@
  */
 
 import type { ToolDescriptor } from "@dusky/contracts";
-import { type ParamSpec, parameters } from "@dusky/frames";
+import { declaredChoices, type ParamSpec, parameters } from "@dusky/frames";
 import { classify } from "@dusky/policy";
 
 const MAX_DESCRIPTION = 240;
@@ -79,8 +79,8 @@ function renderParam(p: ParamSpec): string {
   const bits = [`${flatten(p.name, MAX_NAME)}: ${p.kind}`];
   if (p.required) bits.push("required");
   if (p.kind === "unsupported") bits.push("cannot be collected on the display");
-  const en = p.schema["enum"];
-  if (Array.isArray(en) && en.length > 0) {
+  const en = declaredChoices(p.schema);
+  if (en && en.length > 0) {
     const shown = en.slice(0, MAX_ENUM_VALUES).map((v) => flatten(String(v), MAX_ENUM_VALUE));
     bits.push(`one of ${shown.join(", ")}${en.length > shown.length ? ", ..." : ""}`);
   }
@@ -98,6 +98,7 @@ export function renderCard(tool: ToolDescriptor): string {
   const lines = [
     `- tool: ${flatten(tool.name, MAX_NAME)}`,
     `  from: ${tool.origin}`,
+    `  identity: ${tool.origin} ${flatten(tool.name, MAX_NAME)}`,
     `  ${ceremony(tool)}`,
   ];
   if (tool.annotations.untrustedContentHint) {

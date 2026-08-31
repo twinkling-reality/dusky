@@ -94,6 +94,10 @@ describe("a planner whose model cannot be reached", () => {
     // than the wearer being shown a mystery.
     const failures = audit.filter((e) => e.kind === "error" && e.detail?.["stage"] === "planner");
     expect(failures.length).toBeGreaterThanOrEqual(2);
+    expect(failures.every((entry) => entry.detail?.["reason"] === "planner request failed")).toBe(
+      true,
+    );
+    expect(failures.every((entry) => entry.detail?.["message"] === undefined)).toBe(true);
   }, 30_000);
 
   it("still collects a parameter by asking, when the resolver cannot be planned", async () => {

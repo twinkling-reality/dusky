@@ -36,6 +36,16 @@ interface ModelContextLike {
   ontoolchange?: ((this: unknown, ev: Event) => unknown) | null;
 }
 
+const ARGUMENT_PROBE_PREFIX = "dusky_internal_argument_shape_probe_";
+let argumentProbeSequence = 0;
+const argumentProbeNames = new WeakMap<Window, Set<string>>();
+
+/** A probe is local only when both its name and owning window say so. */
+function isCallingDocumentProbe(tool: RegisteredToolLike): boolean {
+  const owner = globalThis.window;
+  return tool.window === owner && argumentProbeNames.get(owner)?.has(tool.name) === true;
+}
+
 function ctx(): ModelContextLike | null {
   const d = globalThis.document as unknown as { modelContext?: ModelContextLike } | undefined;
   return d?.modelContext ?? null;
@@ -111,11 +121,22 @@ function toDescriptor(t: RegisteredToolLike): ToolDescriptor {
   };
 }
 
+function descriptorKey(tool: ToolDescriptor): string {
+  return JSON.stringify({
+    origin: tool.origin,
+    name: tool.name,
+    title: tool.title ?? null,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    annotations: tool.annotations,
+  });
+}
+
 /** Stable enough to notice a registry change without retaining live handles. */
 function registrySignature(raw: RegisteredToolLike[], origins: readonly string[]): string {
   return JSON.stringify(
     raw
-      .filter((tool) => origins.includes(tool.origin))
+      .filter((tool) => origins.includes(tool.origin) && !isCallingDocumentProbe(tool))
       .map(toDescriptor)
       .sort((a, b) => `${a.origin}\u0000${a.name}`.localeCompare(`${b.origin}\u0000${b.name}`)),
   );
@@ -151,6 +172,9 @@ export class WebMcpBridge {
    */
   private argShape: "unknown" | "object" | "string" = "unknown";
 
+  /** Shared by concurrent first calls so the compatibility probe runs once. */
+  private argShapeProbe: Promise<"object" | "string"> | null = null;
+
   constructor(private readonly origins: string[]) {}
 
   private key(origin: string, name: string): string {
@@ -179,11 +203,71 @@ export class WebMcpBridge {
       // the shop had offered it. We asked for specific origins, so we accept
       // answers only from those origins. Re-check when Chrome fixes this;
       // the filter is correct either way and should stay.
-      if (!this.origins.includes(t.origin)) continue;
+      if (!this.origins.includes(t.origin) || isCallingDocumentProbe(t)) continue;
       this.live.set(this.key(t.origin, t.name), t);
       out.push(toDescriptor(t));
     }
     return out;
+  }
+
+  /**
+   * Settle the browser's input shape against a temporary read-only local tool.
+   *
+   * Compatibility detection must never use the provider tool as the probe. A
+   * provider may complete a side effect and then throw any error string it
+   * likes. Retrying that provider based on its message would turn one request
+   * into two executions. This tool has no side effect and is removed as soon
+   * as the browser shape is known.
+   */
+  private async probeArgumentShape(mc: ModelContextLike): Promise<"object" | "string"> {
+    const name = `${ARGUMENT_PROBE_PREFIX}${++argumentProbeSequence}`;
+    const owner = globalThis.window;
+    const names = argumentProbeNames.get(owner) ?? new Set<string>();
+    names.add(name);
+    argumentProbeNames.set(owner, names);
+    const lifetime = new AbortController();
+    try {
+      await mc.registerTool(
+        {
+          name,
+          description: "Checks the local browser WebMCP argument format.",
+          inputSchema: { type: "object", properties: {} },
+          annotations: { readOnlyHint: true, untrustedContentHint: false },
+          execute: async () => "{}",
+        },
+        { signal: lifetime.signal },
+      );
+      const registered = await mc.getTools();
+      // Any provider may publish the same name, and browser order is not ours.
+      // Only the handle owned by this calling document is the harmless probe.
+      const handle = registered.find((tool) => tool.name === name && tool.window === owner);
+      if (!handle) throw new Error("could not discover the local WebMCP argument probe");
+
+      try {
+        await mc.executeTool(handle, {});
+        return "object";
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes("Failed to parse input")) throw err;
+        await mc.executeTool(handle, JSON.stringify({}) as unknown);
+        return "string";
+      }
+    } finally {
+      lifetime.abort();
+      names.delete(name);
+      if (names.size === 0) argumentProbeNames.delete(owner);
+    }
+  }
+
+  private async argumentShape(mc: ModelContextLike): Promise<"object" | "string"> {
+    if (this.argShape !== "unknown") return this.argShape;
+    this.argShapeProbe ??= this.probeArgumentShape(mc);
+    try {
+      this.argShape = await this.argShapeProbe;
+      return this.argShape;
+    } finally {
+      this.argShapeProbe = null;
+    }
   }
 
   /** Fires whenever a page adds or removes tools, so we never poll. */
@@ -250,11 +334,9 @@ export class WebMcpBridge {
    * Two deviations from the current spec are handled here:
    *
    * 1. The spec accepted an object as of commit #246 (2026-08-17), but
-   *    Chrome 151 still requires a JSON string and throws
-   *    "Failed to parse input arguments" for an object. We try the spec shape
-   *    first so this code gets more correct for free as browsers update, then
-   *    fall back. Google's own extension sample carries the same fallback.
-   *    Remove when Chrome stable accepts objects.
+   *    Chrome 151 still requires a JSON string. A temporary local read-only
+   *    tool settles the shape before any provider is invoked. The provider is
+   *    then called exactly once.
    *
    * 2. AbortSignal cancellation is unreliable (WPT executeTool-abort 0/5,
    *    executeTool-signal-cross-origin 0/2). We still pass the signal so we
@@ -265,36 +347,24 @@ export class WebMcpBridge {
     origin: string,
     name: string,
     args: Record<string, unknown>,
+    expectedTool?: ToolDescriptor,
     signal?: AbortSignal,
   ): Promise<string> {
     const mc = ctx();
     if (!mc) throw new Error(ENABLE_HINT);
     const handle = this.live.get(this.key(origin, name));
     if (!handle) throw new Error(`tool not currently exposed: ${name} from ${origin}`);
+    if (expectedTool && descriptorKey(toDescriptor(handle)) !== descriptorKey(expectedTool)) {
+      throw new Error("The provider changed this tool after it was shown.");
+    }
 
     const opts = signal ? { signal } : undefined;
 
-    // Shape already settled: one call, no retry, whatever the site says.
-    if (this.argShape === "string") {
+    const shape = await this.argumentShape(mc);
+    if (shape === "string") {
       return await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
     }
-    if (this.argShape === "object") {
-      return await mc.executeTool(handle, args, opts);
-    }
-
-    // First invocation in this document. This is the only call that may be
-    // repeated, and it is repeated at most once, ever.
-    try {
-      const out = await mc.executeTool(handle, args, opts);
-      this.argShape = "object";
-      return out;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("Failed to parse input")) throw err;
-      const out = await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
-      this.argShape = "string";
-      return out;
-    }
+    return await mc.executeTool(handle, args, opts);
   }
 }
 

@@ -57,6 +57,7 @@ export interface ToolRunner {
     origin: string,
     name: string,
     args: Record<string, unknown>,
+    expectedTool: ToolDescriptor,
     signal?: AbortSignal,
   ): Promise<string>;
 }
@@ -66,7 +67,7 @@ export interface ToolRunner {
  * explicit menu navigation, which is why a model outage cannot strand a wearer.
  */
 export interface Planner {
-  /** Choose a tool for a spoken request. Returns null when genuinely unsure. */
+  /** Choose by qualified identity or a unique bare name. Returns null when unsure. */
   pickTool(
     intent: string,
     tools: ToolDescriptor[],
@@ -188,8 +189,8 @@ interface Pending {
 }
 
 interface PlannedStep {
-  origin: string;
-  name: string;
+  tool: ToolDescriptor;
+  version: string;
   args: Record<string, unknown>;
 }
 
@@ -332,10 +333,9 @@ export class Session {
   /**
    * Resolve a choice, or a planner's proposal, to exactly one tool.
    *
-   * Two namespaces arrive here and they are not the same thing. A gesture
-   * carries the qualified id the menu put on the row, which names an origin
-   * and cannot be mistaken for anything else. A planner carries a bare NAME,
-   * because a model is only ever shown names.
+   * A gesture carries the qualified id the menu put on the row, which names an
+   * origin and cannot be mistaken for anything else. The built-in planner can
+   * carry that same id; another Planner implementation may return a bare name.
    *
    * A bare name is an identity only for as long as it is unique. When two
    * origins claim one, this refuses instead of picking, exactly as
@@ -345,11 +345,11 @@ export class Session {
    * browser happened to return, which let a site hijack a familiar name by
    * registering it too.
    */
-  private byName(name: string): ToolDescriptor | undefined {
-    const exact = this.tools.find((t) => toolId(t) === name);
+  private byName(name: string, within: ToolDescriptor[] = this.tools): ToolDescriptor | undefined {
+    const exact = within.find((t) => toolId(t) === name);
     if (exact) return exact;
 
-    const matches = this.tools.filter((t) => t.name === name);
+    const matches = within.filter((t) => t.name === name);
     if (matches.length === 1) return matches[0];
     if (matches.length > 1) {
       this.audit({
@@ -503,12 +503,12 @@ export class Session {
   async refresh(): Promise<DisplayFrame> {
     try {
       await this.discover();
-    } catch (err) {
+    } catch {
       // A failed re-discovery is not news the wearer can act on, and replacing
       // a live frame with an error because a background refresh failed would
       // be the interruption this method exists to avoid. `start` still reports
       // a failure, because there the wearer is waiting for the answer.
-      this.audit({ kind: "error", detail: { reason: "refresh failed", message: msg(err) } });
+      this.audit({ kind: "error", detail: { reason: "refresh failed" } });
       return this.frame;
     }
     if (this.frame.kind === "idle") this.show(this.menu());
@@ -544,16 +544,17 @@ export class Session {
     // including throwing, has to land the wearer on the menu they can already
     // drive rather than anywhere they cannot get out of.
     let picks: { name: string; args: Record<string, unknown> }[] | null = null;
+    const offered = this.tools.filter(isOperable);
     const path = this.o.planner.pickTools ? "pickTools" : "pickTool";
     try {
       if (this.o.planner.pickTools) {
-        picks = await this.o.planner.pickTools(text, this.tools.filter(isOperable));
+        picks = await this.o.planner.pickTools(text, offered);
       } else {
-        const pick = await this.o.planner.pickTool(text, this.tools.filter(isOperable));
+        const pick = await this.o.planner.pickTool(text, offered);
         picks = pick ? [pick] : null;
       }
-    } catch (err) {
-      this.audit({ kind: "plan", detail: { path, failed: msg(err) } });
+    } catch {
+      this.audit({ kind: "plan", detail: { path, accepted: false, reason: "planner failed" } });
     }
 
     // Every way of failing to help says the same thing, deliberately. The
@@ -573,14 +574,35 @@ export class Session {
 
     const planned: { tool: ToolDescriptor; args: Record<string, unknown> }[] = [];
     for (const pick of picks) {
-      const tool = this.byName(pick.name);
+      // Resolve against the exact snapshot passed to the Planner port. A
+      // concurrent refresh may replace the registry while a model is
+      // answering; resolving against the new list would let a different site
+      // inherit a bare name it was never offered under this request.
+      const tool = this.byName(pick.name, offered);
       if (!tool) {
         // All or nothing. Running the valid half would silently discard the
         // invalid half, which is the exact behavior multi-step fixes.
         this.audit({
           kind: "plan",
-          toolName: pick.name,
-          detail: { path, accepted: false, reason: "not a discovered tool" },
+          detail: {
+            path,
+            accepted: false,
+            reason: "not a discovered tool",
+            proposedNameLength: pick.name.length,
+          },
+        });
+        return this.show(this.menu(UNHEARD));
+      }
+      // The planner was offered only Display-operable tools. A Planner is a
+      // port, though, so another implementation can still name a discovered
+      // tool that was never offered. Refuse the whole plan here instead of
+      // starting its valid half or falling into an unsupported parameter.
+      if (!isOperable(tool)) {
+        this.audit({
+          kind: "plan",
+          toolName: tool.name,
+          origin: tool.origin,
+          detail: { path, accepted: false, reason: "cannot be driven on the display" },
         });
         return this.show(this.menu(UNHEARD));
       }
@@ -608,8 +630,8 @@ export class Session {
     this.taskStep = 1;
     this.taskTotal = planned.length;
     this.queued = planned.slice(1).map((step) => ({
-      origin: step.tool.origin,
-      name: step.tool.name,
+      tool: step.tool,
+      version: descriptorKey(step.tool),
       args: step.args,
     }));
     return this.startStep(first.tool, first.args);
@@ -617,8 +639,8 @@ export class Session {
 
   /** The single entry point for a gesture selection. */
   async handle(choiceId: string): Promise<DisplayFrame> {
-    // The transfer frame has exactly two valid exits. A stale frame id or a
-    // forged choice must not fall through to the ordinary parameter branch,
+    // The transfer frame has exactly two valid exits. A forged choice or a
+    // direct caller must not fall through to the ordinary parameter branch,
     // because that would replace the retained value without recording a share
     // decision and move straight to the destination action gate.
     if (this.transfer && choiceId !== "__share" && choiceId !== "__cancel") return this.frame;
@@ -637,6 +659,24 @@ export class Session {
       // notice itself reaches the menu rather than the notice again.
       const inFlight = this.frame.kind === "working" ? this.executing : null;
 
+      if (choiceId === "__cancel" && this.transfer) {
+        const transfer = this.transfer;
+        this.audit({
+          kind: "transfer",
+          origin: transfer.destinationOrigin,
+          toolName: transfer.destinationTool,
+          detail: {
+            sourceOrigin: transfer.source.origin,
+            sourceTool: transfer.source.toolName,
+            sourceStep: transfer.source.step,
+            ...projectionLocationAudit(transfer.projection),
+            valueType: transfer.projection.valueType,
+            destinationOrigin: transfer.destinationOrigin,
+            destinationArgument: transfer.destinationArgument,
+            decision: "rejected",
+          },
+        });
+      }
       if (choiceId === "__cancel") {
         this.audit({
           kind: "cancel",
@@ -681,16 +721,24 @@ export class Session {
       // control on screen, the panel did not move, and because no frame was
       // pushed the progress hairline kept sweeping. Re-run the thing that
       // actually failed.
-      if (!this.pending) return this.start();
+      if (!this.pending) {
+        if (this.frame.kind !== "error" || !this.frame.retryable) return this.frame;
+        return this.start();
+      }
+
+      // Retry is valid only on the retryable error frame that offered it. A
+      // forged current-frame id must not use this control word to jump out of
+      // parameter collection or another decision.
+      if (this.frame.kind !== "error" || !this.frame.retryable) return this.frame;
+      if (nextMissingParam(this.pending.tool, this.pending.args)) return this.frame;
 
       // Rule 5: never auto-retry anything that is not read-only. A timeout is
       // "unknown", not "did not happen", so repeating a write can charge
       // twice. The error frame already declines to OFFER a retry for a write,
-      // but the frame is not the guard. `onDisplayMessage` forwards whatever
-      // choice id arrives on the display socket without checking it against
-      // the frame it just sent, so anyone holding the six-character pairing
-      // code could send `__retry` and run a purchase again. The rule has to
-      // hold in the machine, not in the screen.
+      // but the frame is not the guard. The relay rejects an old frame id, yet
+      // anyone holding the six-character pairing code could still attach and
+      // forge `__retry` under the CURRENT id. The rule has to hold in the
+      // machine, not only in the transport or screen.
       if (gate(this.pending.tool).consequence !== "read") {
         this.audit({
           kind: "error",
@@ -751,17 +799,14 @@ export class Session {
 
     // Selecting a value for the parameter currently on screen.
     if (this.pending?.awaiting) {
-      this.pending.args[this.pending.awaiting] = coerce(choiceId, this.awaitingParam());
-      this.pending.awaiting = undefined;
-      this.pending.candidates = undefined;
-      this.pending.transferOptions = undefined;
+      if (!this.acceptAwaiting(choiceId)) return this.frame;
       this.page = 0;
       return this.advance();
     }
 
     // Otherwise this is a tool chosen from the menu.
     const tool = this.byName(choiceId);
-    if (tool) return this.beginTool(tool, {});
+    if (tool && isOperable(tool)) return this.beginTool(tool, {});
     return this.frame;
   }
 
@@ -771,10 +816,7 @@ export class Session {
     // forged and cannot be used to skip the dedicated share decision.
     if (this.transfer) return this.frame;
     if (this.pending?.awaiting) {
-      this.pending.args[this.pending.awaiting] = coerce(value, this.awaitingParam());
-      this.pending.awaiting = undefined;
-      this.pending.candidates = undefined;
-      this.pending.transferOptions = undefined;
+      if (!this.acceptAwaiting(value)) return this.frame;
       return this.advance();
     }
     return this.submitIntent(value);
@@ -785,6 +827,20 @@ export class Session {
     const p = this.pending;
     if (!p?.awaiting) return undefined;
     return parameters(p.tool).find((x) => x.name === p.awaiting);
+  }
+
+  /** Accept Display text only when the exact declaration can convert it. */
+  private acceptAwaiting(raw: string): boolean {
+    const p = this.pending;
+    const param = this.awaitingParam();
+    if (!p?.awaiting || !param) return false;
+    const value = valueForParam(raw, param);
+    if (value === undefined || value === null || value === "") return false;
+    p.args[p.awaiting] = value;
+    p.awaiting = undefined;
+    p.candidates = undefined;
+    p.transferOptions = undefined;
+    return true;
   }
 
   /** Retained values that the destination's current parameter can accept. */
@@ -940,7 +996,7 @@ export class Session {
         sourceOrigin: transfer.source.origin,
         sourceTool: transfer.source.toolName,
         sourceStep: transfer.source.step,
-        sourceField: transfer.projection.location,
+        ...projectionLocationAudit(transfer.projection),
         valueType: transfer.projection.valueType,
         destinationOrigin: current.tool.origin,
         destinationArgument: transfer.destinationArgument,
@@ -965,7 +1021,7 @@ export class Session {
               sourceOrigin: transfer.source.origin,
               sourceTool: transfer.source.toolName,
               sourceStep: transfer.source.step,
-              sourceField: transfer.projection.location,
+              ...projectionLocationAudit(transfer.projection),
               valueType: transfer.projection.valueType,
               destinationOrigin: transfer.destinationOrigin,
               destinationArgument: transfer.destinationArgument,
@@ -1029,6 +1085,36 @@ export class Session {
     return this.advance();
   }
 
+  /** Resolve the exact declaration this task was built from against the live registry. */
+  private currentToolVersion(tool: ToolDescriptor): ToolDescriptor | null {
+    const current = this.tools.find(
+      (candidate) => candidate.origin === tool.origin && candidate.name === tool.name,
+    );
+    if (!current || !isOperable(current) || descriptorKey(current) !== descriptorKey(tool)) {
+      return null;
+    }
+    return current;
+  }
+
+  private invalidatePendingTool(p: Pending): DisplayFrame {
+    this.audit({
+      kind: "error",
+      toolName: p.tool.name,
+      origin: p.tool.origin,
+      detail: { reason: "pending tool changed" },
+    });
+    this.pending = null;
+    this.clearTask();
+    return this.show(
+      errorFrame(
+        this.siteOf(p.tool.origin),
+        "This changed while you were deciding",
+        "Choose it again so Dusky uses what the site offers now.",
+        false,
+      ),
+    );
+  }
+
   private clearTask(): void {
     this.intent = "";
     this.queued = [];
@@ -1060,12 +1146,13 @@ export class Session {
     // wearer was completing the previous step.
     const tool = this.tools.find(
       (candidate) =>
-        candidate.origin === planned.origin &&
-        candidate.name === planned.name &&
-        isOperable(candidate),
+        candidate.origin === planned.tool.origin &&
+        candidate.name === planned.tool.name &&
+        isOperable(candidate) &&
+        descriptorKey(candidate) === planned.version,
     );
     if (!tool) {
-      const source = this.siteOf(planned.origin);
+      const source = this.siteOf(planned.tool.origin);
       this.clearTask();
       return this.show(
         errorFrame(
@@ -1092,6 +1179,13 @@ export class Session {
   private async advance(): Promise<DisplayFrame> {
     const p = this.pending;
     if (!p) return this.frame;
+
+    // Discovery replaces live handles by identity. Bind the pending flow to
+    // the exact declaration that produced its parameters and policy, so a
+    // provider cannot swap a read into a write while the wearer is answering.
+    const current = this.currentToolVersion(p.tool);
+    if (!current) return this.invalidatePendingTool(p);
+    p.tool = current;
 
     const missing = nextMissingParam(p.tool, p.args);
     if (missing) {
@@ -1131,14 +1225,10 @@ export class Session {
         // asked anything, because the wearer is already waiting by then.
         const resolverStartedAt = this.now();
         let plan: { name: string; args: Record<string, unknown> } | null = null;
+        const offeredResolvers = this.resolversFor(p.tool);
         try {
           const decided = await Session.within(
-            this.o.planner.planResolver(
-              missing.name,
-              p.tool,
-              this.resolversFor(p.tool),
-              this.intent,
-            ),
+            this.o.planner.planResolver(missing.name, p.tool, offeredResolvers, this.intent),
             RESOLVER_PLAN_BUDGET_MS,
           );
           if (decided.timedOut) {
@@ -1157,12 +1247,18 @@ export class Session {
           } else {
             plan = decided.value;
           }
-        } catch (err) {
-          this.audit({ kind: "plan", detail: { path: "planResolver", failed: msg(err) } });
+        } catch {
+          this.audit({
+            kind: "plan",
+            detail: { path: "planResolver", accepted: false, reason: "planner failed" },
+          });
         }
 
         if (plan) {
-          const resolver = this.byName(plan.name);
+          const proposedResolver = this.byName(plan.name, offeredResolvers);
+          const resolver = proposedResolver
+            ? (this.currentToolVersion(proposedResolver) ?? undefined)
+            : undefined;
           /*
            * Enforced in code, twice: a resolver must be read-only AND from the
            * target's own origin. A planner that names anything else is ignored,
@@ -1177,69 +1273,94 @@ export class Session {
            * A cross-origin resolver would send the wearer's own words to a
            * business their request never mentioned.
            */
-          const wrongOrigin = resolver !== undefined && resolver.origin !== p.tool.origin;
+          const wrongOrigin =
+            proposedResolver !== undefined && proposedResolver.origin !== p.tool.origin;
           const allowed =
-            resolver !== undefined && !wrongOrigin && gate(resolver).consequence === "read";
+            proposedResolver !== undefined &&
+            resolver !== undefined &&
+            !wrongOrigin &&
+            gate(proposedResolver).consequence === "read";
           if (!allowed) {
             this.audit({
               kind: "plan",
-              toolName: plan.name,
-              origin: resolver?.origin,
+              ...(proposedResolver
+                ? { toolName: proposedResolver.name, origin: proposedResolver.origin }
+                : {}),
               detail: {
                 path: "planResolver",
                 accepted: false,
-                reason: !resolver
+                ...(!proposedResolver ? { proposedNameLength: plan.name.length } : {}),
+                reason: !proposedResolver
                   ? "not a discovered tool"
                   : wrongOrigin
                     ? "not same-origin as the target"
-                    : "not read-only",
+                    : gate(proposedResolver).consequence !== "read"
+                      ? "not read-only"
+                      : "resolver changed",
                 ...(wrongOrigin ? { target: p.tool.origin } : {}),
               },
             });
           } else if (resolver) {
             const args = declaredArgs(resolver, plan.args ?? {});
-            this.audit({
-              kind: "plan",
-              toolName: resolver.name,
-              origin: resolver.origin,
-              detail: {
-                path: "planResolver",
-                accepted: true,
-                arguments: argumentAudit(args),
-              },
-            });
-            // What is LEFT of the attempt, not the whole budget over again.
-            // Deciding and looking up used to get `RESOLVER_BUDGET_MS` each,
-            // so the ceiling the constant names could be exceeded without
-            // either half going over it.
-            const left = RESOLVER_BUDGET_MS - (this.now() - resolverStartedAt);
-            const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, left);
-            if (budget <= 0) {
-              // Nothing left to look up with. Say so and let them write.
+            if (nextMissingParam(resolver, args)) {
               this.audit({
-                kind: "error",
+                kind: "plan",
                 toolName: resolver.name,
                 origin: resolver.origin,
-                detail: { reason: "no resolver budget left after planning" },
+                detail: {
+                  path: "planResolver",
+                  accepted: false,
+                  reason: "missing required arguments",
+                },
               });
-              candidates = [];
             } else {
-              try {
-                const out = await this.invokeWithin(resolver.origin, resolver.name, args, budget);
-                if (out.timedOut) {
-                  this.audit({
-                    kind: "error",
-                    toolName: resolver.name,
-                    origin: resolver.origin,
-                    detail: { reason: "resolver timeout" },
-                  });
-                  candidates = [];
-                } else {
-                  this.audit({ kind: "invoke", toolName: resolver.name, origin: resolver.origin });
-                  candidates = candidatesFromResult(out.raw);
-                }
-              } catch {
+              this.audit({
+                kind: "plan",
+                toolName: resolver.name,
+                origin: resolver.origin,
+                detail: {
+                  path: "planResolver",
+                  accepted: true,
+                  arguments: argumentAudit(args),
+                },
+              });
+              // What is LEFT of the attempt, not the whole budget over again.
+              // Deciding and looking up used to get `RESOLVER_BUDGET_MS` each,
+              // so the ceiling the constant names could be exceeded without
+              // either half going over it.
+              const left = RESOLVER_BUDGET_MS - (this.now() - resolverStartedAt);
+              const budget = Math.min(this.o.invokeTimeoutMs ?? 15_000, left);
+              if (budget <= 0) {
+                // Nothing left to look up with. Say so and let them write.
+                this.audit({
+                  kind: "error",
+                  toolName: resolver.name,
+                  origin: resolver.origin,
+                  detail: { reason: "no resolver budget left after planning" },
+                });
                 candidates = [];
+              } else {
+                try {
+                  const out = await this.invokeWithin(resolver, args, budget);
+                  if (out.timedOut) {
+                    this.audit({
+                      kind: "error",
+                      toolName: resolver.name,
+                      origin: resolver.origin,
+                      detail: { reason: "resolver timeout" },
+                    });
+                    candidates = [];
+                  } else {
+                    this.audit({
+                      kind: "invoke",
+                      toolName: resolver.name,
+                      origin: resolver.origin,
+                    });
+                    candidates = outcomeFromResult(out.raw).ok ? candidatesFromResult(out.raw) : [];
+                  }
+                } catch {
+                  candidates = [];
+                }
               }
             }
           }
@@ -1336,8 +1457,7 @@ export class Session {
    * with no human in front of it.
    */
   private async invokeWithin(
-    origin: string,
-    name: string,
+    tool: ToolDescriptor,
     args: Record<string, unknown>,
     budgetMs: number,
   ): Promise<{ timedOut: true } | { timedOut: false; raw: string }> {
@@ -1352,7 +1472,7 @@ export class Session {
     try {
       return await Promise.race([
         this.o.runner
-          .invoke(origin, name, args, ctrl.signal)
+          .invoke(tool.origin, tool.name, args, tool, ctrl.signal)
           .then((raw) => ({ timedOut: false as const, raw })),
         deadline,
       ]);
@@ -1410,6 +1530,18 @@ export class Session {
     // layer that owns the rule. A guarantee that holds only while the relay
     // remembers to filter stale frame ids is not a guarantee.
     if (this.executing === p) return this.frame;
+    const current = this.currentToolVersion(p.tool);
+    if (!current) return this.invalidatePendingTool(p);
+    p.tool = current;
+    if (nextMissingParam(p.tool, p.args)) {
+      this.audit({
+        kind: "error",
+        toolName: p.tool.name,
+        origin: p.tool.origin,
+        detail: { reason: "required argument missing before invocation" },
+      });
+      return this.frame;
+    }
     this.executing = p;
 
     this.show(workingFrame(this.siteOf(p.tool.origin), p.tool));
@@ -1418,7 +1550,7 @@ export class Session {
     const retryable = gate(p.tool).consequence === "read";
 
     try {
-      const outcome = await this.invokeWithin(p.tool.origin, p.tool.name, p.args, budget);
+      const outcome = await this.invokeWithin(p.tool, p.args, budget);
 
       // The wearer walked away while this was in flight. It still ran, and it
       // is still worth recording, but the screen belongs to whatever they are
@@ -1477,9 +1609,6 @@ export class Session {
         }
         this.pending = null;
         const next = said.ok ? this.queued[0] : undefined;
-        const nextTool = next
-          ? this.tools.find((t) => t.origin === next.origin && t.name === next.name)
-          : undefined;
         const wasMultiStep = this.taskTotal > 1;
         const finalTaskFacts = wasMultiStep && !next ? this.taskFacts() : facts;
         const resultSource = wasMultiStep && !next ? this.o.source : this.siteOf(p.tool.origin);
@@ -1499,7 +1628,7 @@ export class Session {
             ...(next
               ? {
                   next: {
-                    label: nextTool ? label(nextTool) : next.name,
+                    label: label(next.tool),
                     index: this.taskStep + 1,
                     total: this.taskTotal,
                   },
@@ -1513,7 +1642,10 @@ export class Session {
       this.audit({
         kind: "error",
         toolName: p.tool.name,
-        detail: { message: msg(err), ...(abandoned ? { abandoned: true } : {}) },
+        detail: {
+          reason: "provider invocation failed",
+          ...(abandoned ? { abandoned: true } : {}),
+        },
       });
       if (!abandoned) {
         this.show(
@@ -1560,6 +1692,18 @@ function schemaKey(param: ParamSpec): string {
   });
 }
 
+/** Full declaration snapshot used to bind policy and parameters to invocation. */
+function descriptorKey(tool: ToolDescriptor): string {
+  return JSON.stringify({
+    origin: tool.origin,
+    name: tool.name,
+    title: tool.title ?? null,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    annotations: tool.annotations,
+  });
+}
+
 function transferAudit(
   option: TransferOption,
   destinationArgument: string,
@@ -1569,11 +1713,19 @@ function transferAudit(
     sourceOrigin: option.source.origin,
     sourceTool: option.source.toolName,
     sourceStep: option.source.step,
-    sourceField: option.projection.location,
+    ...projectionLocationAudit(option.projection),
     valueType: option.projection.valueType,
     destinationArgument,
     decision,
   };
+}
+
+/** Keep structural provenance without persisting provider-controlled JSON keys. */
+function projectionLocationAudit(projection: ShareableProjection): Record<string, unknown> {
+  if (projection.location === "#summary") return { sourceField: "#summary", sourceDepth: 0 };
+  if (projection.location === "#value") return { sourceField: "#value", sourceDepth: 0 };
+  const depth = projection.location.split("/").filter(Boolean).length;
+  return { sourceField: "#field", sourceDepth: Math.min(depth, 6) };
 }
 
 /** Argument names and types only. Values do not belong in observability. */
@@ -1584,40 +1736,6 @@ function argumentAudit(args: Record<string, unknown>): Record<string, string> {
       Array.isArray(value) ? "array" : value === null ? "null" : typeof value,
     ]),
   );
-}
-
-/**
- * Turn a choice id or a composed string into the value the SITE declared.
- *
- * Everything arriving from the Display is text: a choice id, or whatever the
- * on-glasses composer committed. A site declaring `"type": "integer"` and
- * handed `"2"` has been given a value that violates its own schema, and a site
- * that validates its input would be right to refuse it. Only the declared
- * schema is consulted here, so this stays true of a site nobody has seen.
- *
- * An enum returns the declared member itself rather than a parsed copy, which
- * is how an integer enum survives the round trip with no type guessing at all.
- * Found by pointing Dusky at a second source: every parameter on the first one
- * was a bare string, so nothing here had ever been asked to preserve a type.
- */
-function coerce(v: string, param?: ParamSpec): unknown {
-  if (param?.kind === "enum") {
-    const values = Array.isArray(param.schema["enum"]) ? (param.schema["enum"] as unknown[]) : [];
-    const declared = values.find((x) => String(x) === v);
-    if (declared !== undefined) return declared;
-  }
-  // A string parameter whose value happens to read "true" is a string. Only a
-  // parameter the site declared as boolean, or one we cannot see a spec for,
-  // gets the literal treatment.
-  if (param === undefined || param.kind === "boolean") {
-    if (v === "true") return true;
-    if (v === "false") return false;
-  }
-  if (param?.kind === "number" && v.trim() !== "") {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return v;
 }
 
 /**

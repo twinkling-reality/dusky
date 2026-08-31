@@ -76,7 +76,7 @@ function toAudit(e: PlanEvent): Omit<AuditEntry, "at" | "sessionId"> {
           path: e.path,
           tier: e.tier,
           confidence: e.confidence,
-          droppedArgs: e.droppedArgs,
+          droppedArgCount: e.droppedArgCount,
           ...(e.step !== undefined ? { step: e.step } : {}),
           ...(e.total !== undefined ? { total: e.total } : {}),
           ms: e.ms,
@@ -85,7 +85,7 @@ function toAudit(e: PlanEvent): Omit<AuditEntry, "at" | "sessionId"> {
     case "rejected":
       return {
         kind: "plan",
-        toolName: e.tool,
+        ...(e.tool ? { toolName: e.tool } : {}),
         detail: { stage: "refused", path: e.path, tier: e.tier, reason: e.reason, ms: e.ms },
       };
     case "abstained":
@@ -96,7 +96,13 @@ function toAudit(e: PlanEvent): Omit<AuditEntry, "at" | "sessionId"> {
     case "failed":
       return {
         kind: "error",
-        detail: { stage: "planner", path: e.path, tier: e.tier, message: e.message, ms: e.ms },
+        detail: {
+          stage: "planner",
+          path: e.path,
+          tier: e.tier,
+          reason: "planner request failed",
+          ms: e.ms,
+        },
       };
   }
 }

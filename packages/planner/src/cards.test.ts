@@ -210,5 +210,6 @@ describe("fields the sanitiser never covered", () => {
       tool({ name: "search_products", description: "Search.", inputSchema: null }),
     );
     expect(card).toContain("- tool: search_products");
+    expect(card).toContain("identity: https://shop.test search_products");
   });
 });

@@ -42,12 +42,21 @@ const INVOKE_REPLY_TIMEOUT_MS = 20_000;
 class RemoteToolRunner implements ToolRunner {
   private waiting = new Map<
     string,
-    { resolve: (v: never) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
+    {
+      resolve: (v: never) => void;
+      reject: (e: Error) => void;
+      timer: NodeJS.Timeout;
+      cleanup?: () => void;
+    }
   >();
 
   constructor(private readonly send: (msg: ServerToConsole) => boolean) {}
 
-  private request<T>(build: (requestId: string) => ServerToConsole): Promise<T> {
+  private request<T>(
+    build: (requestId: string) => ServerToConsole,
+    signal?: AbortSignal,
+    cancel?: (requestId: string) => ServerToConsole,
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const requestId = randomUUID();
       if (!this.send(build(requestId))) {
@@ -55,14 +64,29 @@ class RemoteToolRunner implements ToolRunner {
         return;
       }
       const timer = setTimeout(() => {
+        this.waiting.get(requestId)?.cleanup?.();
         this.waiting.delete(requestId);
         reject(new Error("The browser did not respond."));
       }, INVOKE_REPLY_TIMEOUT_MS);
-      this.waiting.set(requestId, {
+      const pending: {
+        resolve: (v: never) => void;
+        reject: (e: Error) => void;
+        timer: NodeJS.Timeout;
+        cleanup?: () => void;
+      } = {
         resolve: resolve as (v: never) => void,
         reject,
         timer,
-      });
+      };
+      this.waiting.set(requestId, pending);
+      if (signal && cancel) {
+        const onAbort = () => {
+          if (this.waiting.has(requestId)) this.send(cancel(requestId));
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        pending.cleanup = () => signal.removeEventListener("abort", onAbort);
+        if (signal.aborted) onAbort();
+      }
     });
   }
 
@@ -71,6 +95,7 @@ class RemoteToolRunner implements ToolRunner {
     const w = this.waiting.get(requestId);
     if (!w) return;
     clearTimeout(w.timer);
+    w.cleanup?.();
     this.waiting.delete(requestId);
     if (error !== undefined) w.reject(new Error(error));
     else (w.resolve as (v: unknown) => void)(value);
@@ -80,6 +105,7 @@ class RemoteToolRunner implements ToolRunner {
   abortAll(reason: string): void {
     for (const [, w] of this.waiting) {
       clearTimeout(w.timer);
+      w.cleanup?.();
       w.reject(new Error(reason));
     }
     this.waiting.clear();
@@ -95,14 +121,25 @@ class RemoteToolRunner implements ToolRunner {
 
   origins: string[] = [];
 
-  invoke(origin: string, name: string, args: Record<string, unknown>): Promise<string> {
-    return this.request<string>((requestId) => ({
-      t: "invoke",
-      requestId,
-      origin,
-      toolName: name,
-      args,
-    }));
+  invoke(
+    origin: string,
+    name: string,
+    args: Record<string, unknown>,
+    expectedTool: ToolDescriptor,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    return this.request<string>(
+      (requestId) => ({
+        t: "invoke",
+        requestId,
+        origin,
+        toolName: name,
+        args,
+        expectedTool,
+      }),
+      signal,
+      (requestId) => ({ t: "cancelInvoke", requestId }),
+    );
   }
 }
 
@@ -345,6 +382,17 @@ export class SessionActor {
     // glasses, so there may be no way back from that screen.
     if (this.consoleSock?.readyState !== 1) return;
 
+    // A delayed input belongs to the frame that produced it, not whichever
+    // frame happens to be current when the packet arrives. This check lives at
+    // the relay boundary because `Session` intentionally knows nothing about
+    // transport frame ids. Replaying the current frame lets a suspended or
+    // reconnected Display recover without acknowledging or applying the stale
+    // choice.
+    if (msg.frameId !== this.frameId) {
+      this.pushFrame();
+      return;
+    }
+
     switch (msg.t) {
       case "choose":
         // Acknowledge before any work, so the wearer never wonders.
@@ -492,14 +540,15 @@ export class SessionActor {
           value: {
             sent: text,
             ...this.statusValue(),
-            note: "The wearer decides. Anything consequential stops for their approval.",
+            note: "The wearer decides. Every action Dusky does not classify as read-only stops for their approval.",
           },
         };
       }
 
       case "cancel": {
-        // Always allowed. Cancelling can only ever reduce what happens, so
-        // there is no state in which refusing it would protect the wearer.
+        // Always allowed. It clears pending choices and future task steps.
+        // A provider invocation already sent cannot be recalled, and Session
+        // reports that it may still finish instead of claiming it was stopped.
         await this.session.handle("__cancel");
         return { ok: true, value: this.statusValue() };
       }

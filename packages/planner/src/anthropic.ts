@@ -57,7 +57,8 @@ const DECISION_SCHEMA = {
   properties: {
     tool: {
       type: "string",
-      description: 'Exact name of the first candidate tool, or "" to decline.',
+      description:
+        'Exact origin-qualified identity of the first candidate tool, or "" to decline. A bare name is valid only when unique.',
     },
     arguments: {
       type: "string",
@@ -72,7 +73,11 @@ const DECISION_SCHEMA = {
         additionalProperties: false,
         required: ["tool", "arguments"],
         properties: {
-          tool: { type: "string" },
+          tool: {
+            type: "string",
+            description:
+              "Exact origin-qualified candidate identity, or a bare name only when it is unique.",
+          },
           arguments: { type: "string" },
         },
       },

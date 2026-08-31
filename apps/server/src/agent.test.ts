@@ -1,5 +1,5 @@
 import type { AgentRequest, ToolDescriptor } from "@dusky/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SessionActor } from "./hub.js";
 
 /**
@@ -93,6 +93,7 @@ function actor(
       missing: string,
     ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
     results?: Record<string, string>;
+    hangInvokes?: boolean;
   } = {},
 ) {
   const invoked: string[] = [];
@@ -120,6 +121,7 @@ function actor(
         void a.onConsoleMessage({ t: "tools", requestId: msg.requestId, tools: registry });
       } else if (msg.t === "invoke" && msg.requestId) {
         invoked.push(msg.toolName ?? "");
+        if (opts.hangInvokes) return;
         void a.onConsoleMessage({
           t: "invoked",
           requestId: msg.requestId,
@@ -144,6 +146,7 @@ async function paired(
       missing: string,
     ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
     results?: Record<string, string>;
+    hangInvokes?: boolean;
     sites?: { origin: string; name?: string }[];
   } = {},
 ) {
@@ -152,8 +155,18 @@ async function paired(
     built.consoleSock as unknown as Sock,
     opts.sites ?? [{ origin: "https://shop.test" }],
   );
-  if (opts.withDisplay !== false) built.a.attachDisplay(new FakeSocket() as unknown as Sock);
-  return built;
+  const display = opts.withDisplay === false ? undefined : new FakeSocket();
+  if (display) built.a.attachDisplay(display as unknown as Sock);
+  return { ...built, display };
+}
+
+function currentFrameId(display: FakeSocket | undefined): string {
+  const frameId = display?.sent
+    .map((text) => JSON.parse(text) as { t: string; frameId?: string })
+    .filter((message) => message.t === "frame")
+    .at(-1)?.frameId;
+  if (!frameId) throw new Error("expected a frame on the Display socket");
+  return frameId;
 }
 
 const ask = (a: SessionActor, request: AgentRequest) => a.onAgentRequest(request);
@@ -225,10 +238,14 @@ describe("sending a task", () => {
    * old target and their gesture is already under way.
    */
   it("refuses to interrupt a pending confirmation", async () => {
-    const { a, invoked } = await paired({ planner: true });
+    const { a, invoked, display } = await paired({ planner: true });
 
-    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
-    await a.onDisplayMessage({ t: "text", frameId: "2", value: "oat-1" });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "add_to_cart",
+    });
+    await a.onDisplayMessage({ t: "text", frameId: currentFrameId(display), value: "oat-1" });
 
     const status = await ask(a, { op: "status" });
     if (!status.ok) throw new Error("unreachable");
@@ -247,8 +264,12 @@ describe("sending a task", () => {
   });
 
   it("refuses to interrupt a wearer being asked for something", async () => {
-    const { a } = await paired({ planner: false });
-    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
+    const { a, display } = await paired({ planner: false });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "add_to_cart",
+    });
     expect(a.current().kind).toBe("choose");
     expect((await ask(a, { op: "task", text: "do something else" })).ok).toBe(false);
   });
@@ -263,7 +284,7 @@ describe("sending a task", () => {
   });
 
   it("refuses another task while a cross-business task waits on its next step", async () => {
-    const { a } = await paired({
+    const { a, display } = await paired({
       planner: true,
       tools: [...TOOLS, ...ELSEWHERE],
       taskSteps: [
@@ -272,7 +293,11 @@ describe("sending a task", () => {
       ],
     });
     expect((await ask(a, { op: "task", text: "add oat milk and book a table" })).ok).toBe(true);
-    await a.onDisplayMessage({ t: "choose", frameId: "2", choiceId: "__confirm" });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "__confirm",
+    });
 
     const status = await ask(a, { op: "status" });
     if (!status.ok) throw new Error("unreachable");
@@ -318,7 +343,7 @@ describe("sending a task", () => {
       },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
     };
-    const { a, invoked } = await paired({
+    const { a, invoked, display } = await paired({
       tools: [book, find, send],
       taskSteps: [
         { name: "book_table", args: {} },
@@ -339,14 +364,30 @@ describe("sending a task", () => {
     });
 
     expect((await ask(a, { op: "task", text: "Book for four, then tell Dana" })).ok).toBe(true);
-    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "__confirm" });
-    await a.onDisplayMessage({ t: "choose", frameId: "2", choiceId: "__next" });
-    await a.onDisplayMessage({ t: "choose", frameId: "3", choiceId: "dana" });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "__confirm",
+    });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "__next",
+    });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "dana",
+    });
     const choices = a.current();
     if (choices.kind !== "choose") throw new Error("expected projection choices");
     const summary = choices.choices.find((choice) => choice.label === "Summary");
     if (!summary) throw new Error("expected summary");
-    await a.onDisplayMessage({ t: "choose", frameId: "4", choiceId: summary.id });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: summary.id,
+    });
 
     expect(a.current().kind).toBe("transfer");
     const status = await ask(a, { op: "status" });
@@ -369,10 +410,50 @@ describe("sending a task", () => {
 });
 
 describe("cancelling", () => {
-  it("is allowed even mid-confirmation, because it can only reduce what happens", async () => {
-    const { a, invoked } = await paired({ planner: true });
-    await a.onDisplayMessage({ t: "choose", frameId: "1", choiceId: "add_to_cart" });
-    await a.onDisplayMessage({ t: "text", frameId: "2", value: "oat-1" });
+  it("forwards the session deadline to the browser invocation", async () => {
+    vi.useFakeTimers();
+    try {
+      const { a, consoleSock, display } = await paired({
+        tools: [TOOLS[0]!],
+        hangInvokes: true,
+      });
+
+      await a.onDisplayMessage({
+        t: "choose",
+        frameId: currentFrameId(display),
+        choiceId: "search_products",
+      });
+      const running = a.onDisplayMessage({
+        t: "text",
+        frameId: currentFrameId(display),
+        value: "oat",
+      });
+
+      await vi.advanceTimersByTimeAsync(15_100);
+      await running;
+
+      const messages = consoleSock.sent.map(
+        (text) => JSON.parse(text) as { t: string; requestId?: string },
+      );
+      const invoke = messages.find((message) => message.t === "invoke");
+      expect(invoke?.requestId).toBeDefined();
+      expect(messages).toContainEqual({
+        t: "cancelInvoke",
+        requestId: invoke?.requestId,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears a mid-confirmation task without claiming it can recall a sent invocation", async () => {
+    const { a, invoked, display } = await paired({ planner: true });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "add_to_cart",
+    });
+    await a.onDisplayMessage({ t: "text", frameId: currentFrameId(display), value: "oat-1" });
     expect(a.current().kind).toBe("confirm");
 
     const r = await ask(a, { op: "cancel" });
@@ -680,5 +761,50 @@ describe("keeping the wearer's place", () => {
     } as never);
 
     expect(idsOf().at(-1), "a changed frame reused an id").not.toBe(before);
+  });
+
+  it("rejects choices, text and cancellation from an older frame", async () => {
+    const built = await paired({ withDisplay: false });
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+
+    const latestId = () =>
+      display.sent
+        .map((text) => JSON.parse(text) as { t: string; frameId?: string })
+        .filter((message) => message.t === "frame")
+        .at(-1)?.frameId;
+
+    const menuId = latestId();
+    expect(menuId).toBeDefined();
+    await built.a.onDisplayMessage({
+      t: "choose",
+      frameId: menuId ?? "0",
+      choiceId: "https://shop.test search_products",
+    });
+    const questionId = latestId();
+    expect(questionId).toBeDefined();
+    expect(questionId).not.toBe(menuId);
+    expect(built.a.current().kind).toBe("choose");
+
+    await built.a.onDisplayMessage({
+      t: "choose",
+      frameId: menuId ?? "0",
+      choiceId: "__cancel",
+    });
+    await built.a.onDisplayMessage({
+      t: "text",
+      frameId: menuId ?? "0",
+      value: "stale text",
+    });
+    await built.a.onDisplayMessage({ t: "cancel", frameId: menuId ?? "0" });
+
+    expect(built.a.current().kind, "an old input changed the current screen").toBe("choose");
+    expect(latestId(), "a stale input minted a different frame").toBe(questionId);
+    expect(
+      display.sent
+        .map((text) => JSON.parse(text) as { t: string })
+        .filter((message) => message.t === "ack"),
+      "a stale choice was acknowledged",
+    ).toHaveLength(1);
   });
 });

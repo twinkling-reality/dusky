@@ -98,8 +98,8 @@ export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
         "Hand the wearer something to act on, in plain words, for example 'find oat milk' " +
         "or 'book a table and add oat milk to my cart'. Dusky chooses the matching end " +
         "actions from any connected websites and puts them on the glasses in order. You are " +
-        "not performing the actions: each one that spends money or changes data stops for " +
-        "its own approval from the wearer, and you cannot approve it for them. Refused, with " +
+        "not performing the actions: each action Dusky does not classify as read-only stops " +
+        "for approval from the wearer, and you cannot approve it for them. Refused, with " +
         "a reason, if no glasses are connected or the wearer is already mid-decision.",
       inputSchema: {
         type: "object",
@@ -118,8 +118,8 @@ export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
       name: "cancel_active_task",
       title: "Cancel what the glasses are doing",
       description:
-        "Drop whatever Dusky is currently asking the wearer and return them to the menu. " +
-        "Safe at any time: cancelling can only ever stop something from happening.",
+        "Clear pending choices and future task steps. If a provider invocation was already " +
+        "sent, Dusky cannot recall it and will report that it may still finish.",
       inputSchema: { type: "object", properties: {} },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: () => run({ op: "cancel" }),

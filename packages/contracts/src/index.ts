@@ -192,7 +192,16 @@ export interface SiteRef {
  */
 export type ServerToConsole =
   | { t: "discover"; requestId: string; origins: string[] }
-  | { t: "invoke"; requestId: string; origin: string; toolName: string; args: unknown }
+  | {
+      t: "invoke";
+      requestId: string;
+      origin: string;
+      toolName: string;
+      args: unknown;
+      /** The exact declaration whose policy and parameter screens the wearer saw. */
+      expectedTool: ToolDescriptor;
+    }
+  | { t: "cancelInvoke"; requestId: string }
   /** Answer to an outside agent's request, routed back through the console. */
   | { t: "agentReply"; requestId: string; reply: AgentReply }
   | { t: "bye"; reason: string };

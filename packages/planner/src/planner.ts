@@ -1,5 +1,5 @@
 /**
- * The Planner: the difference between a remote control and an agent.
+ * The Planner: optional intent routing above deterministic execution.
  *
  * `@dusky/session` defines the `Planner` port and works without one, degrading
  * to explicit menu navigation. This file implements it, so a wearer can say
@@ -29,7 +29,7 @@
  */
 
 import type { ToolDescriptor } from "@dusky/contracts";
-import { isOperable, parameters, valueForParam } from "@dusky/frames";
+import { isOperable, nextMissingParam, parameters, toolId, valueForParam } from "@dusky/frames";
 import { gate, siteFlagsUntrusted } from "@dusky/policy";
 import { CardCache, safeText } from "./cards.js";
 import { shortlist } from "./rank.js";
@@ -52,7 +52,7 @@ export type Confidence = "high" | "medium" | "low";
  * are parsed in @dusky/webmcp.
  */
 export interface Decision {
-  /** Exact name of a candidate, or "" to decline. */
+  /** Exact qualified identity, a unique bare name, or "" to decline. */
   tool: string;
   /** JSON object as a string. "{}" when nothing could be filled. */
   arguments: string;
@@ -91,6 +91,7 @@ export type RejectReason =
   | "ambiguous tool name"
   | "not read-only"
   | "cannot be driven on the display"
+  | "missing required arguments"
   | "too many steps";
 
 /**
@@ -107,12 +108,19 @@ export type PlanEvent =
       tier: Tier | "none";
       tool: string;
       confidence?: Confidence;
-      droppedArgs: string[];
+      droppedArgCount: number;
       step?: number;
       total?: number;
       ms: number;
     }
-  | { kind: "rejected"; path: PlanPath; tier: Tier; tool: string; reason: RejectReason; ms: number }
+  | {
+      kind: "rejected";
+      path: PlanPath;
+      tier: Tier;
+      tool?: string;
+      reason: RejectReason;
+      ms: number;
+    }
   | { kind: "abstained"; path: PlanPath; tier: Tier | "none"; ms: number }
   | { kind: "failed"; path: PlanPath; tier: Tier; message: string; ms: number };
 
@@ -177,7 +185,8 @@ const UNTRUSTED_NOTICE = [
 
 const ANSWER_SHAPE = [
   "Answer with the given JSON object only.",
-  '- tool: the exact name of the first candidate, copied character for character, or "" to decline.',
+  '- tool: the exact identity of the first candidate, copied from its identity line, or "" to',
+  "  decline. A bare tool name is accepted only when exactly one candidate has that name.",
   '- arguments: a JSON object serialized as a string, mapping argument names to values. "{}"',
   "  when you cannot fill anything from the request. Use only argument names listed under the",
   "  tool you chose. Never invent an identifier, quantity, price, recipient or address: leave",
@@ -212,8 +221,8 @@ const TASK_SYSTEM = [
   ANSWER_SHAPE,
   "",
   'Prefer tool: "" over a plausible guess. Declining costs the wearer one menu; guessing wrong',
-  "costs them a wrong action they have to notice and undo. Every consequential action will",
-  "still stop for a separate approval that you cannot grant.",
+  "costs them a wrong action they have to notice and undo. Every action deterministic policy",
+  "classifies as anything other than read-only will stop for approval that you cannot grant.",
   "",
   UNTRUSTED_NOTICE,
 ].join("\n");
@@ -336,10 +345,10 @@ export class ModelPlanner {
           path: "pickTool",
           tier: "none",
           tool: decisive.name,
-          droppedArgs: [],
+          droppedArgCount: 0,
           ms: this.now() - started,
         });
-        return { name: decisive.name, args: {} };
+        return { name: toolId(verdict.tool), args: {} };
       }
     }
 
@@ -397,12 +406,12 @@ export class ModelPlanner {
           path: "pickTools",
           tier: "none",
           tool: decisive.name,
-          droppedArgs: [],
+          droppedArgCount: 0,
           step: 1,
           total: 1,
           ms: this.now() - started,
         });
-        return [{ name: decisive.name, args: {} }];
+        return [{ name: toolId(verdict.tool), args: {} }];
       }
     }
 
@@ -511,17 +520,17 @@ export class ModelPlanner {
           path: "planResolver",
           tier: "none",
           tool: decisive.name,
-          droppedArgs: [],
+          droppedArgCount: 0,
           ms: this.now() - started,
         });
-        return { name: decisive.name, args: {} };
+        return { name: toolId(verdict.tool), args: {} };
       }
     }
 
     const user = [
       `Request: ${safeText(intent, 400)}`,
-      `Action under way: ${target.name}`,
-      `Missing argument: ${missingParam}${spec?.description ? ` ${safeText(spec.description, 96)}` : ""}`,
+      `Action under way: ${safeText(target.name, 96)}`,
+      `Missing argument: ${safeText(missingParam, 96)}${spec?.description ? ` ${safeText(spec.description, 96)}` : ""}`,
       "",
       "Candidates:",
       this.cache.block(shortlisted),
@@ -721,24 +730,43 @@ export class ModelPlanner {
 
     const check = accept(name, candidates, requireReadOnly);
     if ("reason" in check) {
-      this.emit({ kind: "rejected", path, tier, tool: name, reason: check.reason, ms });
+      const trustedTool = trustedCandidateName(name, candidates);
+      this.emit({
+        kind: "rejected",
+        path,
+        tier,
+        ...(trustedTool ? { tool: trustedTool } : {}),
+        reason: check.reason,
+        ms,
+      });
       return null;
     }
 
     const { args, dropped } = readArgs(decision.arguments, check.tool);
+    if (path === "planResolver" && nextMissingParam(check.tool, args)) {
+      this.emit({
+        kind: "rejected",
+        path,
+        tier,
+        tool: check.tool.name,
+        reason: "missing required arguments",
+        ms,
+      });
+      return null;
+    }
     this.emit({
       kind: "resolved",
       path,
       tier,
       tool: check.tool.name,
       confidence: decision.confidence,
-      droppedArgs: dropped,
+      droppedArgCount: dropped.length,
       ms,
     });
     return {
       tool: check.tool,
       confidence: decision.confidence,
-      proposal: { name: check.tool.name, args },
+      proposal: { name: toolId(check.tool), args },
     };
   }
 
@@ -786,7 +814,6 @@ export class ModelPlanner {
         kind: "rejected",
         path: "pickTools",
         tier,
-        tool: first,
         reason: "too many steps",
         ms,
       });
@@ -798,7 +825,11 @@ export class ModelPlanner {
       confidence: decision.confidence,
       proposals: [],
     };
-    const parsed: { tool: ToolDescriptor; args: Record<string, unknown>; dropped: string[] }[] = [];
+    const parsed: {
+      tool: ToolDescriptor;
+      args: Record<string, unknown>;
+      dropped: string[];
+    }[] = [];
 
     // All or nothing. Dropping one invalid step would recreate the exact bug
     // multi-step planning exists to fix: half a sentence disappearing while
@@ -807,11 +838,12 @@ export class ModelPlanner {
       const name = typeof step.tool === "string" ? step.tool.trim() : "";
       const check = accept(name, candidates, false);
       if ("reason" in check) {
+        const trustedTool = trustedCandidateName(name, candidates);
         this.emit({
           kind: "rejected",
           path: "pickTools",
           tier,
-          tool: name,
+          ...(trustedTool ? { tool: trustedTool } : {}),
           reason: check.reason,
           ms,
         });
@@ -823,14 +855,14 @@ export class ModelPlanner {
 
     for (const [index, step] of parsed.entries()) {
       accepted.tools.push(step.tool);
-      accepted.proposals.push({ name: step.tool.name, args: step.args });
+      accepted.proposals.push({ name: toolId(step.tool), args: step.args });
       this.emit({
         kind: "resolved",
         path: "pickTools",
         tier,
         tool: step.tool.name,
         confidence: decision.confidence,
-        droppedArgs: step.dropped,
+        droppedArgCount: step.dropped.length,
         step: index + 1,
         total: parsed.length,
         ms,
@@ -855,7 +887,7 @@ interface AcceptedTask {
 /* -------------------------------------------------------------- checking */
 
 /**
- * Turn a model's tool NAME into a tool, or say why not.
+ * Turn a model's tool identity into a tool, or say why not.
  *
  * The ambiguity case is the interesting one. Two origins may register the same
  * tool name, and a model answering with a bare name has not said which site it
@@ -867,6 +899,13 @@ export function accept(
   candidates: ToolDescriptor[],
   requireReadOnly: boolean,
 ): { tool: ToolDescriptor } | { reason: RejectReason } {
+  const exact = candidates.find((tool) => toolId(tool) === name);
+  if (exact) {
+    if (requireReadOnly && gate(exact).consequence !== "read") return { reason: "not read-only" };
+    if (!isOperable(exact)) return { reason: "cannot be driven on the display" };
+    return { tool: exact };
+  }
+
   const hits = candidates.filter((t) => t.name === name);
   if (hits.length === 0) return { reason: "unknown tool" };
   if (hits.length > 1) return { reason: "ambiguous tool name" };
@@ -874,6 +913,14 @@ export function accept(
   if (requireReadOnly && gate(tool).consequence !== "read") return { reason: "not read-only" };
   if (!isOperable(tool)) return { reason: "cannot be driven on the display" };
   return { tool };
+}
+
+/** Return only a provider name identified in the offered set. */
+function trustedCandidateName(name: string, candidates: ToolDescriptor[]): string | undefined {
+  const exact = candidates.find((candidate) => toolId(candidate) === name);
+  if (exact) return exact.name;
+  const hits = candidates.filter((candidate) => candidate.name === name);
+  return hits.length === 1 ? hits[0]?.name : undefined;
 }
 
 /**

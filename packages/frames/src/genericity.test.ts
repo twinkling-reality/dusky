@@ -2,12 +2,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
- * Shared behavior cannot know which first-party source happened to expose a
- * tool. Examples in comments are useful field evidence, so this checks the
- * executable source after comments are removed rather than banning the words
- * from the repository.
+ * Shared behavior cannot know which bundled fixture or runtime proof provider
+ * happened to expose a tool. Examples in comments are useful field evidence,
+ * so this checks the executable source after comments are removed rather than
+ * banning the words from the repository.
  */
-describe("shared behavior stays independent of every first-party source", () => {
+describe("shared behavior stays independent of every proof provider", () => {
   const directories = [
     new URL("./", import.meta.url),
     new URL("../../session/src/", import.meta.url),
@@ -28,11 +28,12 @@ describe("shared behavior stays independent of every first-party source", () => 
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\/\/.*$/gm, "");
 
-  it("contains no brand, complete tool name, or source-only result key", () => {
+  it("contains no brand, complete tool name, or provider-only result key", () => {
     const sourceVocabulary = [
       "Verdant Market",
       "Amber & Oak",
       "Northstar Dispatch",
+      "Canopy Lab",
       "search_products",
       "add_to_cart",
       "review_cart",
@@ -44,10 +45,14 @@ describe("shared behavior stays independent of every first-party source", () => 
       "review_messages",
       "draft_message",
       "send_message",
+      "estimate_shade",
       "cart_total",
       "reservation_id",
       "party_size",
       "message_id",
+      "survey_zone",
+      "shade_percent",
+      "canopy_condition",
     ];
 
     for (const term of sourceVocabulary) expect(executable).not.toContain(term);

@@ -202,6 +202,7 @@ export function useConsoleLink(
     let attempts = 0;
     let openedAt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const invocations = new Map<string, AbortController>();
 
     // A different set of sites re-runs this effect. The previous set's tools
     // are not this set's tools, and leaving them on screen until discovery
@@ -248,6 +249,10 @@ export function useConsoleLink(
             }
             return;
           }
+          if (msg.t === "cancelInvoke") {
+            invocations.get(msg.requestId)?.abort();
+            return;
+          }
 
           const b = bridge.current;
           if (!b) return;
@@ -278,14 +283,24 @@ export function useConsoleLink(
 
           if (msg.t === "invoke") {
             const args = (msg.args ?? {}) as Record<string, unknown>;
+            const controller = new AbortController();
+            invocations.set(msg.requestId, controller);
             note(`executeTool(${msg.toolName}, ${JSON.stringify(args)})`);
             try {
-              const value = await b.invoke(msg.origin, msg.toolName, args);
+              const value = await b.invoke(
+                msg.origin,
+                msg.toolName,
+                args,
+                msg.expectedTool,
+                controller.signal,
+              );
               note(`  -> ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`);
               send({ t: "invoked", requestId: msg.requestId, ok: true, value });
             } catch (err) {
               note(`  -> failed: ${errText(err)}`);
               send({ t: "invoked", requestId: msg.requestId, ok: false, error: errText(err) });
+            } finally {
+              invocations.delete(msg.requestId);
             }
           }
         })();
@@ -340,6 +355,8 @@ export function useConsoleLink(
       if (timer !== undefined) clearTimeout(timer);
       if (settle !== undefined) clearTimeout(settle);
       clearTimeout(emptyFor.current);
+      for (const controller of invocations.values()) controller.abort();
+      invocations.clear();
       off?.();
       ws.current?.close();
       ws.current = null;
