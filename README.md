@@ -1,245 +1,219 @@
 # Dusky
 
-**A remote control for everything you are signed into.**
+**Turn web actions into augmented reality.**
 
-Dusky reads what every site in your browser can do, over
-[WebMCP](https://github.com/webmachinelearning/webmcp), and puts all of it on a
-pair of glasses as one list. Starting with Meta Ray-Ban Display.
+Headsets can provide enormous virtual screens. Glasses can stay with you
+throughout the day, but the small form factor that makes them practical also
+makes ordinary page layouts a poor fit. Meta Ray-Ban Display gives a web app a
+600 by 600 canvas, directional controls, and no pointer. A page does not become
+a glasses interface just because it gets smaller.
 
-One sentence can cross businesses that have never heard of each other. When a
-result must cross with it, the exact information stops on the lens first.
-Sharing that information and authorizing the destination action are separate
-decisions.
+Dusky does not try to squeeze a whole website onto the glasses. It uses the
+things the site says it can do to build a simple interface that fits the display
+and works with its controls.
 
-## Why
+A participating site uses
+[WebMCP](https://github.com/webmachinelearning/webmcp) to publish a structured
+list of actions, such as searching a catalogue, reserving a table, or sending a
+message. Dusky turns those declarations into lens-sized screens, one choice or
+question at a time.
+The tool still runs inside the site's own browser page. Dusky supplies the
+interface, task flow, and wearer confirmation. Providers do not design a
+separate glasses UI, and Dusky does not need a custom adapter for each one.
 
-Smart glasses are the wearable that is going to stick. A headset like Vision Pro
-or Quest has a display better than most laptops and nobody wears one down the
-street. Glasses have the form factor people already accept, adoption has climbed
-every year, and Google and Samsung are building Android XR with Warby Parker and
-Gentle Monster as eyewear partners. This stops being a curiosity and becomes a
-daily-carry device.
+![Dusky running beside three WebMCP provider pages](./apps/console/public/stage.png)
 
-The price of that form factor is the screen. Meta Ray-Ban Display is the one
-shipping with a display today, and it is 600x600, six keys of input, no cursor,
-no pointer. You cannot reflow a website onto that. Responsive design is about
-layout, and there is no layout small enough.
+## Why WebMCP and display glasses fit together
 
-So take the actions instead of the page. A site that speaks WebMCP publishes what
-it can *do*: search a catalogue, add something to a cart, review it, check out.
-Dusky reads that list and assembles a screen for it, one question at a time,
-sized for the lens. No app per site, no app store, no per-device port, and
-nothing for the site to build beyond declaring its tools.
+Display glasses are moving from prototypes into a product category.
+[Meta put Ray-Ban Display on sale in 2025](https://about.fb.com/news/2025/09/meta-ray-ban-display-ai-glasses-emg-wristband/).
+[Google describes Android XR as a unified platform for headsets and
+glasses](https://blog.google/products-and-platforms/platforms/android/android-xr/),
+and is building eyewear with Samsung, Gentle Monster, and Warby Parker. In 2026,
+[Google detailed both audio and display eyewear](https://blog.google/products-and-platforms/platforms/android/android-xr-io-2026/)
+and announced that its first audio models would arrive in the fall. The wider
+Android XR ecosystem is already shipping: Google says Samsung Galaxy XR launched
+in 2025 and [more than 100 immersive apps were available by April 2026, more
+than double the number at launch](https://blog.google/products-and-platforms/platforms/android/android-xr-immersive-features-update-april-2026/).
 
-No shared package branches on a particular website, origin, tool, or result key.
-The three first-party sources exist to prove that boundary with unrelated
-vocabularies.
+That does not prove mass adoption, and it does not prove which platform will
+win. It does mean developers are beginning to face several wearable platforms,
+not one isolated prototype.
 
-## The part that needs no integration
+The web was built around pages with room to scroll and a pointer to aim.
+Responsive design can rearrange navigation, forms, popovers, and checkout
+flows, but it cannot turn them into an interaction that works with six keys and
+no cursor. Asking every site to build a separate interface for every pair of
+glasses would repeat the fragmentation that web standards are supposed to
+avoid.
 
-Dusky holds every participating site at once, not one at a time. That is a
-smaller change than it sounds and a bigger claim than it looks.
+[WebMCP changes the unit of integration](https://github.com/webmachinelearning/webmcp).
+A site can publish structured, browser-mediated actions with names,
+descriptions, and input schemas. Dusky can turn a short list of allowed values
+into choices, a true or false value into Yes or No, and a text parameter into
+the glasses composer. One tool can become several small screens without the
+provider designing each screen.
 
-"Reserve a table for four, then send the reservation details to Dana" is one
-errand across a restaurant and a communications desk. The businesses have never
-heard of each other, there is no partnership or connector between them, and the
-shared machine knows neither vocabulary. Doing that normally needs somebody to
-build the bridge. An app cannot do it at all, because an app belongs to one
-company.
+That is the bet behind Dusky: WebMCP makes a site's useful capabilities
+portable beyond its page layout, while display glasses need useful web tasks
+without the page layout. Together they let the web reach a new kind of display
+without requiring a new glasses app for every site.
 
-The browser is what makes it possible, because the browser is the one place that
-already holds all of your sessions. So the glasses stop being a screen and
-become the place a person says yes: an agent may propose anything, across
-anything, and `packages/session` still stops every consequential step and waits
-for the wearer.
+## One task, several providers
 
-That sentence is one task, not a slogan over separate demos. The planner returns
-the reservation and message actions as an ordered plan. Dusky
-validates the whole plan before starting, caps it at four actions, and refuses
-all of it if any action was not actually offered. After the first result, the
-lens shows the next action and its position in the task. The wearer advances it,
-then the second action reaches its own policy gate. One approval never covers
-two calls.
+Dusky can hold actions from several participating providers at once.
 
-One rule earns its keep the moment several sites are held at once. A lookup that
-fills in a missing value runs without asking anybody, so it may only ever use a
-tool from the SAME SITE as the action it is filling in. Otherwise what somebody
-said out loud about a restaurant could be handed to a shop that has nothing to
-do with it, quietly, on the one path with nobody watching.
+> Reserve a table for four, then send the reservation details to Dana.
 
-Cross-site result reuse takes a different path. Dusky reduces the returned
-result to bounded primitive fields and a generic summary, each with source
-provenance and a stable location. It does not retain the raw result or send it
-back to the model. Dana is resolved by the communications site's own read-only
-lookup. The wearer then chooses a result projection and sees a transfer frame
-that names Amber & Oak, Northstar Dispatch, the destination argument, and the
-exact value. Only after Share does that one value fill the message body. Send
-message still stops at its own action confirmation.
+The restaurant and communications service have no partnership and do not need
+a custom connector between them. Each action remains attached to the provider
+that declared it. Before it runs, Dusky checks that the action and its expected
+inputs have not changed.
+
+Crossing that boundary is never silent. Before information from one provider
+becomes an input at another, the glasses show the source, destination, and exact
+value. The wearer decides whether to share it. Sharing that value does not
+approve the destination action. Unless Dusky can determine that the destination
+action only reads information, the wearer confirms it separately before it
+runs.
+
+The glasses are not just the smallest screen in the system. They are where the
+person sees what will happen and decides whether it should.
 
 ## How it works
 
 ```mermaid
 flowchart TD
-  S["A website declares what it can do<br/>WebMCP tools, inside its own page"]
-  B["Your browser hands that list to Dusky"]
-  C["Dusky compiles a screen from the schema"]
-  G["You pick, on the glasses<br/>six keys, no cursor"]
-  T{"Would a result cross<br/>into another site?"}
-  H["Stops. You approve the exact value<br/>and named destination on the lens."]
-  P{"Does it spend money<br/>or delete something?"}
-  K["Stops. You confirm on the lens."]
-  R["The tool runs inside the site's own page,<br/>in your own logged-in session"]
+  P["A provider page declares and authorizes<br/>WebMCP tools"]
+  C["Dusky discovers the tools<br/>inside the browser"]
+  F["Tool schemas become<br/>lens-sized screens"]
+  W["The wearer chooses<br/>with directional input"]
+  X{"Would information cross<br/>to another provider?"}
+  T["Show the exact value and destination<br/>then ask whether to share"]
+  R{"Is this action<br/>clearly read-only?"}
+  A["Ask the wearer to confirm<br/>the action"]
+  I["Run the tool inside<br/>its provider page"]
+  N["Turn the result into<br/>the next screen"]
 
-  S --> B --> C --> G --> T
-  T -- yes --> H --> P
-  T -- no --> P
-  P -- no --> R
-  P -- yes --> K --> R
-  R -- "result becomes the next screen" --> C
+  P --> C --> F --> W --> X
+  X -- yes --> T --> R
+  X -- no --> R
+  R -- yes --> I
+  R -- no --> A --> I
+  I --> N --> F
 ```
 
-Three things worth pointing at:
+The browser keeps each provider's live capabilities and any session state
+available to its page. The console runs the tool there. The relay keeps the
+current task, exchanges invocation requests and results with the console, and
+sends each new screen to the glasses. An optional planner can suggest a short
+sequence of actions, but ordinary code checks every suggestion and applies the
+same confirmation rules to every step.
 
-- **One tool becomes several screens.** Dusky reads the tool's parameters and
-  asks for them one at a time. A list of allowed values becomes buttons. A
-  true/false becomes Yes/No. Free text opens the keyboard on the glasses. Long
-  lists get paged.
-- **Dusky adds the confirmation step.** The site did not ask for it and cannot
-  switch it off. Anything that spends money or deletes something stops and waits
-  for you.
-- **One request can contain several actions.** Every action stays attached to
-  the site that offered it, is checked against that site's live schema before it
-  starts, and receives its own confirmation. A broken step rejects the plan
-  instead of disappearing from the sentence.
-- **Cross-site data gets its own approval.** Only a bounded value shown on the
-  transfer frame can fill the named destination argument. The live destination
-  schema is checked again before use. That approval never approves the action.
-- **Nothing is proxied.** The tool runs in the site's own page, in your browser,
-  in your session. Dusky never sees a login or a password.
+There is no provider-specific execution branch in the shared runtime. The
+market, reservation service, communications desk, and a fourth provider loaded
+only during the browser test use different tool and result vocabularies.
 
-## Try it, without glasses
+## Try it without glasses
 
-You need **Chrome 149+** with `chrome://flags/#enable-webmcp-testing`. The
-ChatGPT desktop app's built-in browser may expose WebMCP for its top-level
-document, but cross-origin partner iframes are runtime-dependent, so Chrome is
-the proof path for this demo.
+Use Node.js 22 or newer, pnpm 10, and Chrome with
+`chrome://flags/#enable-webmcp-testing` enabled.
 
 ```bash
-pnpm install && pnpm dev
+pnpm install
+pnpm dev
 ```
 
-Open <http://localhost:7803> and press **Open Dusky**. You get everything in one
-tab: the glasses view on the left, all three partner sites on the right, and every
-WebMCP call underneath as it happens.
+Open <http://localhost:7803> and choose **Open Dusky**. The browser shows the
+glasses interface beside three live provider pages. Move with the arrow keys,
+choose with Enter, and go back with Escape. Selecting an action on the Display
+runs a real WebMCP tool inside the provider page, so both ends are visible in
+one tab.
 
-Press a row on the glasses panel and watch that site change next to it.
-That is the part worth looking at. The panel itself is a small black rectangle
-with text on it, because that is what a 600x600 additive waveguide renders, but
-pressing a row on it runs a real tool inside the real site and you can watch
-both ends of that at once.
+A model is optional. The menus work without one; natural-language requests use
+the optional planner. The exact planner-enabled setup is documented in the
+[demo guide](./docs/DEMO.md).
 
-Move with <kbd>↑</kbd><kbd>↓</kbd>, choose with <kbd>Enter</kbd>, back with
-<kbd>Esc</kbd>. Those six keys are the entire input surface of the real device,
-which is why the same build runs here and on the glasses unchanged.
+The same guide covers pairing and the complete walkthrough.
 
-All three sites are live at the same time, and their eleven actions are on one
-list. Verdant Market is a shop, Amber & Oak is a restaurant, and Northstar
-Dispatch is a communications desk. Dusky builds every screen from the schemas.
-Eleven actions do not fit a four-row panel, so the menu you land on is a row per
-business and a site's own actions are one press behind it.
+## Audit it with a provider Dusky has never seen
 
-The one-sentence reservation-to-message path needs the optional planner, which
-is off by default. The menu remains fully usable without one. The local browser
-proof in `e2e/transfer.spec.ts` uses a deterministic planner stub and real
-WebMCP tools, so it needs no model credential and still exercises the actual
-reservation and outbox documents.
+The three visible providers are named in the default demo registry, but the
+shared runtime handles them without provider-specific adapters or execution
+branches. A fourth provider is supplied only at browser-test runtime and works
+without changing Dusky's source code, rebuilding the app, or adding an adapter.
 
-Add `?source=market` to the URL to hold a single site instead. Nothing on the
-page offers that, because a control for using less of the product is not one
-anybody wants; it is there for tests and for a slow connection.
-
-### Audit it with a site Dusky has never seen
-
-The three sites above are default demo fixtures, not integrations. A judge can
-replace them at runtime by adding one or more `site` parameters, with no source
-edit and no rebuild:
+To load another provider, pass its encoded URL:
 
 ```text
-http://localhost:7803/demo?start=1&site=https%3A%2F%2Ftools.example%2Fwebmcp
+http://localhost:7803/demo?start=1&site=<encoded-provider-url>
 ```
 
-Each value may also be a URL-encoded JSON object such as
-`{"name":"Example","url":"https://tools.example/webmcp"}`. Repeating `site`
-holds several origins at once. The parser accepts public HTTPS URLs and local
-loopback HTTP, removes duplicate origins, rejects embedded credentials and
-active URL schemes, and discards every supplied field except display name and
-URL.
+Repeat `site` to load several providers at once. A provider must register WebMCP
+tools, permit embedding, and explicitly authorize the exact Dusky console
+origin. Dusky currently supports the parameter shapes documented in the
+[provider guide](./docs/PROVIDER-GUIDE.md). This is an authorization and schema
+contract. Those are deliberate compatibility requirements. Dusky does not gain
+automatic access to every website.
 
-The provider must expose its tools to the exact Dusky console origin through
-WebMCP. That authorization is enforced by the browser and cannot be replaced by
-automatic crawling. Once authorized, Dusky learns actions only from
-`getTools({fromOrigins})`. Shared packages never receive the runtime registry
-and automated tests reject fixture vocabulary or application imports in their
-executable source.
+The genericity claim is narrow and testable: shared production packages do not
+switch on a known provider, origin, tool name, or result key. See
+[Genericity](./docs/GENERICITY.md) for the guardrails and their limits.
 
-## What is in here
+## Verified locally
 
-| Path | What it is |
+- 371 unit and deterministic tests pass.
+- All 34 real-browser tests pass in Chrome with WebMCP enabled.
+- The isolated round-trip suite passes 6 of 6 tests.
+- The browser suite discovers eleven actions from three visible providers,
+  loads a fourth provider at runtime, invokes real WebMCP tools, and completes
+  the consented reservation-to-message transfer.
+- The transfer test uses a deterministic planner and real WebMCP tools, so it
+  exercises the cross-provider data and consent path without a model credential.
+- Type checking, linting, and production builds pass.
+
+These are local results for the current tree. Historical deployment evidence
+and hardware gaps are recorded separately in
+[Verification](./docs/VERIFICATION.md).
+
+## Repository map
+
+| Path | Responsibility |
 | --- | --- |
-| `apps/display` | The 600x600 Web App. What the wearer sees. |
-| `apps/console` | The website and the demo. The only surface that touches WebMCP. |
-| `apps/server` | Session relay. Owns task state so a reload cannot lose your place. |
-| `apps/market`, `apps/reservations`, `apps/dispatch` | Three unrelated first-party test services. Nothing is sold, reserved, or delivered. |
-| `packages/frames` | The schema-to-frame compiler. Knows no site. |
-| `packages/policy` | Deterministic trust rules. No model, no network, no DOM. |
-| `packages/session` | The task machine. Intent in, frames out. |
-| `packages/planner` | Optional. Turns a spoken request into a bounded plan it cannot enforce. |
-| `packages/webmcp` | The only file that knows what browsers actually do, versus what the spec says. |
-| `packages/lens`, `packages/tokens`, `packages/contracts` | The panel, the palettes, the shared types. |
-| `e2e` | The round trip, in real Chrome with the real flag. |
+| `apps/display` | The 600 by 600 interface shown on Meta Ray-Ban Display. |
+| `apps/console` | Discovers and invokes provider tools inside the browser. |
+| `apps/server` | Relays sessions and preserves the current task. |
+| `apps/market`, `apps/reservations`, `apps/dispatch` | Unrelated test providers used to expose genericity bugs. |
+| `packages/frames` | Compiles supported tool schemas into Display frames. |
+| `packages/policy` | Applies deterministic confirmation rules. |
+| `packages/session` | Runs the task state machine and validates every step. |
+| `packages/planner` | Optionally proposes bounded tool plans. |
+| `packages/webmcp` | Contains browser-specific WebMCP compatibility code. |
+| `e2e` | Exercises the complete path in real Chrome. |
 
-## Measured
+## Read the system
 
-- 333 unit and deterministic tests cover the current tree.
-- Shortlist recall is 18/21 over thirteen tools at the shipped six slots. Eight
-  slots remains 18/21; the full registry is 21/21.
-- All expected end actions survive for 6/6 compound requests at six slots.
-- Exact compatible result projections survive for 3/3 handoff fixtures.
-- The 34-test browser suite holds eleven actions from three origins, replaces
-  the fixture registry from a runtime URL, verifies five critical 600 by 600
-  frames, and drives the full reservation-to-message path through real WebMCP.
-
-The production suite passes 10/10 against all six live surfaces. It verifies
-the three deployed origins, eleven tools, WebSocket relay, deployed tool
-invocation, browser-agent control, and a live two-step planner result. The first
-cold planner request exhausted its seven-second budget and safely returned to
-the menu; two immediate repeats produced the intended task. Real-glasses input,
-sleep recovery, composer behavior, and load time remain unverified.
+- [Architecture](./docs/ARCHITECTURE.md) maps the browser, relay, Display, and
+  optional planner.
+- [Trust model](./docs/TRUST-MODEL.md) explains confirmation, transfer consent,
+  and hostile-provider boundaries.
+- [Provider guide](./docs/PROVIDER-GUIDE.md) defines what a provider must expose
+  and authorize.
+- [WebMCP runtime](./docs/WEBMCP-RUNTIME.md) records where browser behavior
+  differs from the published API.
+- [Contributing](./CONTRIBUTING.md), [Security](./SECURITY.md), and
+  [Deployment](./DEPLOY.md) cover project operations.
 
 ## Limits
 
-- **It does not work with any website.** A site has to name Dusky in
-  `exposedTo` before the browser will hand over its tools. That rule is the
-  browser's, and it is the right one: otherwise any page could read the tools of
-  every site you had open. "Everything you are signed into" means everything
-  that has granted Dusky access, which today is three first-party test services.
-- **A model can be wrong.** Nothing consequential runs without you confirming
-  it, and Dusky only reports success if the tool actually returned it.
-- **No microphone or camera on the glasses**, and no raw gestures. The OS moves
-  focus and tells the app what you picked.
-
-## More
-
-- [AGENTS.md](./AGENTS.md): how it is built, and why each decision went the way
-  it did. Includes what Chrome actually does versus what the spec says.
-- [FIELD-NOTES.md](./FIELD-NOTES.md): bugs found by wearing it.
-- [DEPLOY.md](./DEPLOY.md): hosting, and getting it onto a pair of glasses.
-
-```bash
-pnpm test        # unit
-pnpm test:e2e    # round trip in real Chrome with the WebMCP flag
-pnpm typecheck && pnpm lint
-```
+- Dusky cannot use an arbitrary website. The provider must implement WebMCP,
+  permit embedding, authorize the console origin, and use supported schemas.
+- Dusky requires confirmation when a declaration contains known danger signals,
+  but it cannot prove that a hostile provider described every side effect
+  honestly.
+- Automated browser tests do not replace a final pass on physical glasses.
+  Waveguide readability, Neural Band behavior, composer input, sleep recovery,
+  and device load time require hardware verification.
 
 ## License
 
