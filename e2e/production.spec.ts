@@ -6,7 +6,7 @@ import { freshCode } from "./session-code.js";
  * The load-bearing round trip, against the live deployment.
  *
  * This is not a duplicate of `roundtrip.spec.ts`. That one proves the code is
- * correct against four local dev servers. This one proves the DEPLOYMENT is
+ * correct against seven local dev servers. This one proves the DEPLOYMENT is
  * correct, which fails for entirely different reasons: a `ws://` URL an HTTPS
  * page refuses to open, an `exposedTo` origin that is off by a trailing slash,
  * an environment variable that never reached a Vite build, a relay that builds
@@ -59,6 +59,16 @@ test("the front door and the demo route are both served", async ({ request }) =>
     expect(res.status(), `${path} should be served`).toBe(200);
     expect(await res.text(), `${path} should be the app, not a 404`).toContain('id="root"');
   }
+});
+
+test("the deployed front door uses the current product description", async ({ page }) => {
+  await page.goto(CONSOLE);
+
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect(heading).toHaveText("Turn web actions into augmented reality.");
+  await expect(page.locator("main")).toContainText(
+    "Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for AR displays.",
+  );
 });
 
 test("the deployed console discovers the deployed market cross-origin", async ({ page }) => {

@@ -1,13 +1,12 @@
 /**
  * The partner sites this deployment holds.
  *
- * ALL of them, at once. Dusky used to be pointed at one site at a time, which
- * made it a remote control for whichever business you had selected; it is a
- * remote control for everything you are signed into. Nothing about that is a
- * new capability in the protocol: `getTools({ fromOrigins })` has always taken
- * a list and the bridge has always filtered answers to it. One line in the
- * console wrapped a single source in an array and that was the whole
- * restriction.
+ * ALL of them, at once. Dusky used to be pointed at one site at a time, so one
+ * site's tools became the whole visible registry. Nothing about holding
+ * several sites is a new capability in the protocol: `getTools({ fromOrigins
+ * })` has always taken a list and the bridge has always filtered answers to it.
+ * One line in the console wrapped a single source in an array and that was the
+ * whole restriction.
  *
  * This list is the ONLY thing Dusky is told about a site: display metadata and
  * a URL to load. Nothing downstream reads it. The menu, the parameters, the

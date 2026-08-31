@@ -19,17 +19,17 @@ test("the front door states what it is, once, without an acronym in the headline
   // Exactly one h1, and it is the page's own: the panel in the examples drops
   // to an h2 so it does not compete with the document around it.
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  // The claim, in the words the product now supports. It used to be about
-  // turning web actions into AR, which was true of one site at a time and is
-  // the smaller half of what happens when the browser holds all of them.
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "everything you are signed into",
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Turn web actions into augmented reality.",
   );
 
   // No acronym in the headline itself. The subtitle names the protocol once,
   // which is where a judge scoring WebMCP leverage looks and where it costs a
   // stranger one clause rather than the whole hero.
   await expect(page.getByRole("heading", { level: 1 })).not.toContainText("WebMCP");
+  await expect(page.locator("main")).toContainText(
+    "Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for AR displays.",
+  );
 });
 
 test("the front door offers both ways in as controls, and asks once", async ({ page }) => {

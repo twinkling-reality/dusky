@@ -75,8 +75,8 @@ function WhatIsThis({
           <dt>{heading}</dt>
           <dd>
             {sites.length > 1
-              ? "Live sites, unrelated to each other. Dusky read the actions each one publishes and built that screen from all of them."
-              : "A live site. Dusky read the actions it publishes and built that screen from them."}
+              ? "Provider pages. Dusky read each page's authorized actions and built one screen from the combined registry. The bundled pages are test fixtures."
+              : "A provider page. Dusky read its authorized actions and built that screen from them. Bundled pages are test fixtures."}
           </dd>
         </div>
         <div>
@@ -293,23 +293,13 @@ export function Workspace() {
       <div className={styles.page}>
         {!session ? (
           <section className={styles.startCard}>
-            {/*
-              Two places to put the output, not two products.
-
-              This card used to offer "Try it now, no glasses" and "Or pair a
-              REAL pair of glasses", which reads as a toy and the actual thing.
-              It is one build either way: the panel below is an iframe onto the
-              same apps/display the glasses load, over the same relay, driving
-              the same tools in the same site. The only difference is whether
-              the pixels land on a monitor or on a waveguide.
-            */}
             <h1 className={styles.h1}>Where do you want the screen?</h1>
             <button type="button" className={styles.primary} onClick={start}>
               Run it in this browser
             </button>
             <p className={styles.hint}>
-              Opens the glasses build below, on the same relay, driving the same tools in the same
-              site. Arrow keys and Enter, or just click.
+              Opens the glasses build below on the same relay, driving the same authorized tools
+              across the same provider pages. Arrow keys and Enter, or just click.
             </p>
             <form
               className={styles.pair}
