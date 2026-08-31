@@ -55,6 +55,26 @@ test("console discovers the partner site's tools cross-origin", async ({ page })
   await expect(page.locator("text=getTools({fromOrigins})")).toBeVisible();
 });
 
+test("runtime source configuration replaces the fixture registry without a rebuild", async ({
+  page,
+}) => {
+  const source = JSON.stringify({
+    name: "Unfamiliar Provider",
+    url: "http://localhost:7801",
+  });
+  const query = new URLSearchParams({
+    session: freshCode(),
+    mode: "glasses",
+    site: source,
+  });
+  await page.goto(`http://localhost:7803/demo?${query.toString()}`);
+
+  await expect(page.locator('iframe[title="Unfamiliar Provider"]')).toBeVisible();
+  await expect(discovered(page).getByText("Search catalog")).toBeVisible();
+  await expect(page.locator('iframe[title="Amber & Oak"]')).toHaveCount(0);
+  await expect(page.locator('iframe[title="Northstar Dispatch"]')).toHaveCount(0);
+});
+
 test("policy classifies discovered tools without any site-specific rule", async ({ page }) => {
   await pairConsole(page);
   const row = discovered(page).locator("li", { hasText: "Add to cart" }).first();

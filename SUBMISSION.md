@@ -48,8 +48,15 @@ frame compiler handles all three. The deterministic shortlist reaches the
 expected tool in 18 of 21 single-action requests at the shipped six-card limit,
 keeps every expected action for 6 of 6 compound requests, and preserves an
 exact compatible projection for 3 of 3 result-handoff fixtures. The repository
-has 324 unit and deterministic tests plus 32 Playwright tests in real Chrome
+has 333 unit and deterministic tests plus 34 Playwright tests in real Chrome
 with WebMCP enabled.
+
+The three providers are default fixtures, not a closed integration list. A
+judge can supply one or more never-seen HTTPS provider URLs in the demo query
+string without editing or rebuilding Dusky. The console passes only those
+origins to WebMCP. Automated source audits reject fixture brands, fixture tool
+names, fixture result keys, application imports, and source-registry imports in
+the executable frame, session, policy, and planner packages.
 
 Live three-source demo, verified by the 10-test production suite on 2026-08-29:
 https://dusky-console.vercel.app

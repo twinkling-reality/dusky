@@ -51,8 +51,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const agentOrigin = new URLSearchParams(location.search).get("agent") ?? DEFAULT_AGENT_ORIGIN;
-
     // Created synchronously so a StrictMode double-invoke cannot leave the
     // first registration pass alive long enough to collide with the second.
     const lifetime = new AbortController();
@@ -187,12 +185,12 @@ export function App() {
           },
         },
       ],
-      { exposedTo: [agentOrigin], signal: lifetime.signal },
+      { exposedTo: [DEFAULT_AGENT_ORIGIN], signal: lifetime.signal },
     )
       .then(() => {
         if (lifetime.signal.aborted) return;
         setStatus("ready");
-        note(`registered 3 tools, exposedTo ${agentOrigin}`);
+        note(`registered 3 tools, exposedTo ${DEFAULT_AGENT_ORIGIN}`);
       })
       .catch((err: unknown) => {
         if (lifetime.signal.aborted) return;

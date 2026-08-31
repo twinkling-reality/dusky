@@ -25,7 +25,7 @@ const RESERVATIONS_URL = import.meta.env["VITE_RESERVATIONS_URL"] ?? "http://loc
 const DISPATCH_URL = import.meta.env["VITE_DISPATCH_URL"] ?? "http://localhost:7805";
 
 export interface Source {
-  /** Stable key, used in the `?source=` query parameter. */
+  /** Stable key. Default-source keys may be used in the `?source=` query parameter. */
   id: string;
   /** What the wearer reads in the eyebrow of a frame about this site. */
   name: string;
@@ -78,8 +78,92 @@ export function originOf(source: Source): string {
  * from and a typo in a URL should not produce it.
  */
 export function sitesFromQuery(search: string): readonly Source[] {
-  const id = new URLSearchParams(search).get("source");
+  const params = new URLSearchParams(search);
+  const runtime = runtimeSites(params.getAll("site"));
+  if (runtime.length > 0) return runtime;
+
+  const id = params.get("source");
   if (!id) return SOURCES;
   const only = SOURCES.find((s) => s.id === id);
   return only ? [only] : SOURCES;
+}
+
+/**
+ * Turn user-supplied URLs into the same inert records as the demo fixtures.
+ *
+ * Each repeated `site` parameter is either a URL or a small JSON object with a
+ * URL and optional display name. This is intentionally the whole extension
+ * surface. Runtime sources never carry a tool list, policy, adapter, parser, or
+ * result mapping. Those arrive from the site's WebMCP declaration.
+ *
+ * Public sites must use HTTPS. Plain HTTP is accepted only for loopback hosts,
+ * which keeps local provider development possible without making a shared
+ * console URL an active-content downgrade. Credentials and active URL schemes
+ * are refused before an iframe is created.
+ */
+function runtimeSites(values: readonly string[]): readonly Source[] {
+  const sites: Source[] = [];
+  const origins = new Set<string>();
+
+  for (const value of values) {
+    const parsed = runtimeSite(value);
+    if (!parsed) continue;
+    const origin = originOf(parsed);
+    if (origins.has(origin)) continue;
+    origins.add(origin);
+    sites.push(parsed);
+  }
+
+  return sites;
+}
+
+function runtimeSite(value: string): Source | null {
+  let urlText = value.trim();
+  let requestedName: unknown;
+
+  if (urlText.startsWith("{")) {
+    try {
+      const record = JSON.parse(urlText) as unknown;
+      if (!record || typeof record !== "object" || Array.isArray(record)) return null;
+      const fields = record as Record<string, unknown>;
+      if (typeof fields["url"] !== "string") return null;
+      urlText = fields["url"].trim();
+      requestedName = fields["name"];
+    } catch {
+      return null;
+    }
+  }
+
+  if (urlText.length === 0 || urlText.length > 2_048) return null;
+
+  let url: URL;
+  try {
+    url = new URL(urlText);
+  } catch {
+    return null;
+  }
+
+  if (url.username || url.password) return null;
+  const loopback =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
+
+  const supplied = typeof requestedName === "string" ? safeName(requestedName) : "";
+  const name = supplied || url.host;
+  return {
+    id: `runtime:${url.origin}`,
+    name,
+    url: url.toString(),
+    blurb: "Runtime WebMCP source supplied in this console URL.",
+  };
+}
+
+function safeName(value: string): string {
+  const withoutControls = [...value]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 ? " " : character;
+    })
+    .join("");
+  return withoutControls.replace(/\s+/g, " ").trim().slice(0, 48);
 }

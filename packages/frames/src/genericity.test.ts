@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -8,20 +8,27 @@ import { describe, expect, it } from "vitest";
  * from the repository.
  */
 describe("shared behavior stays independent of every first-party source", () => {
+  const directories = [
+    new URL("./", import.meta.url),
+    new URL("../../session/src/", import.meta.url),
+    new URL("../../policy/src/", import.meta.url),
+    new URL("../../planner/src/", import.meta.url),
+  ];
+  const files = directories.flatMap((directory) =>
+    readdirSync(directory)
+      .filter(
+        (name) =>
+          name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".fixtures.ts"),
+      )
+      .map((name) => new URL(name, directory)),
+  );
+  const executable = files
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/.*$/gm, "");
+
   it("contains no brand, complete tool name, or source-only result key", () => {
-    const files = [
-      new URL("./index.ts", import.meta.url),
-      new URL("../../session/src/index.ts", import.meta.url),
-      new URL("../../policy/src/index.ts", import.meta.url),
-      new URL("../../planner/src/planner.ts", import.meta.url),
-      new URL("../../planner/src/rank.ts", import.meta.url),
-      new URL("../../planner/src/cards.ts", import.meta.url),
-    ];
-    const executable = files
-      .map((file) => readFileSync(file, "utf8"))
-      .join("\n")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/.*$/gm, "");
     const sourceVocabulary = [
       "Verdant Market",
       "Amber & Oak",
@@ -44,5 +51,17 @@ describe("shared behavior stays independent of every first-party source", () => 
     ];
 
     for (const term of sourceVocabulary) expect(executable).not.toContain(term);
+  });
+
+  it("cannot import an application or its source registry", () => {
+    const imports = [...executable.matchAll(/(?:from\s+|import\s*\()\s*["']([^"']+)["']/g)].map(
+      (match) => match[1] ?? "",
+    );
+
+    for (const specifier of imports) {
+      expect(specifier).not.toMatch(/^@dusky\/app-/);
+      expect(specifier).not.toMatch(/(?:^|\/)apps\//);
+      expect(specifier).not.toMatch(/(?:^|\/)sources(?:\.[cm]?[jt]s)?$/);
+    }
   });
 });

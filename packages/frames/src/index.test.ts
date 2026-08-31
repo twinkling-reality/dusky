@@ -72,7 +72,7 @@ describe("a never-before-seen tool", () => {
     expect(f.kind).toBe("choose");
     if (f.kind !== "choose") throw new Error("unreachable");
     expect(f.title).toBe("Pickup window?");
-    expect(f.choices.map((c) => c.id)).toEqual(["morning", "afternoon", "evening"]);
+    expect(f.choices.map((c) => c.id)).toEqual(["morning", "afternoon", "evening", "__cancel"]);
   });
 
   it("stops asking once required parameters are filled", () => {
@@ -165,6 +165,7 @@ describe("results become the next frame's choices", () => {
     if (f.kind !== "choose") throw new Error("unreachable");
     // Not a composer prompt: real choices, derived from the earlier result.
     expect(f.choices[0]).toEqual({ id: "oat-1", label: "Organic oat milk", meta: "$4.29" });
+    expect(f.choices.at(-1)?.id).toBe("__cancel");
   });
 });
 
@@ -431,7 +432,7 @@ describe("the order of the wearer's menu", () => {
       if (f.kind !== "idle") throw new Error("unreachable");
       let wrapped = false;
       for (const c of f.choices) {
-        if (c.id === "__more" || c.id === "__compose") continue;
+        if (c.id === "__more" || c.id === "__compose" || c.id === "__home") continue;
         // Pagination wraps, so a repeat is the end of the list.
         if (seen.has(c.id)) {
           wrapped = true;
@@ -681,6 +682,8 @@ describe("the order of the wearer's menu", () => {
       const labels = f.choices.map((c) => c.label);
       expect(f.title).toBe("What do you want to do?");
       expect(labels).toContain("Book table");
+      expect(labels).toContain("Back to sites");
+      expect(labels).not.toContain("Say what you want");
       expect(labels).not.toContain("Add to cart");
     });
 

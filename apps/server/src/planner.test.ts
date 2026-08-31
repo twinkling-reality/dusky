@@ -104,7 +104,7 @@ describe("a planner whose model cannot be reached", () => {
     const f = await s.handle("add_to_cart");
     expect(f.kind).toBe("choose");
     if (f.kind !== "choose") throw new Error("unreachable");
-    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit"]);
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit", "__cancel"]);
     // Nothing ran on the partner site on the way to asking.
     expect(calls).toEqual([]);
   }, 30_000);

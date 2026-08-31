@@ -280,6 +280,7 @@ describe("resolving a parameter from a prior read", () => {
     expect(f.choices).toEqual([
       { id: "oat-1", label: "Organic oat milk", meta: "$4.29" },
       { id: "oat-2", label: "Barista oat milk", meta: "$5.10" },
+      { id: "__cancel", label: "Back", meta: "cancel" },
     ]);
   });
 
@@ -327,7 +328,7 @@ describe("the resolver's budget covers deciding, not just looking up", () => {
     // The composer, which is where they were always going to end up.
     expect(f.kind).toBe("choose");
     if (f.kind !== "choose") throw new Error("unreachable");
-    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit"]);
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit", "__cancel"]);
     expect(f.note).toBe("Tap to write or speak, then Done");
     // And nothing was invoked on the wearer's behalf while they waited.
     expect(runner.calls).toEqual([]);
@@ -716,7 +717,7 @@ describe("a planner the machine does not trust", () => {
     // The wearer is asked for the value instead of being stranded.
     expect(f.kind).toBe("choose");
     if (f.kind !== "choose") throw new Error("unreachable");
-    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit"]);
+    expect(f.choices.map((c) => c.id)).toEqual(["__compose", "__submit", "__cancel"]);
     expect(runner.calls).toEqual([]);
   });
 });
@@ -1832,7 +1833,10 @@ describe("consented result transfer between task steps", () => {
     if (choices.kind !== "choose") throw new Error("expected projection choices");
     expect(
       choices.choices.every(
-        (choice) => choice.id === "__more" || choice.id.startsWith("__projection:"),
+        (choice) =>
+          choice.id === "__more" ||
+          choice.id === "__cancel" ||
+          choice.id.startsWith("__projection:"),
       ),
     ).toBe(true);
     expect(choices.choices.some((choice) => choice.id === "__share")).toBe(false);
@@ -1879,7 +1883,7 @@ describe("consented result transfer between task steps", () => {
     await session.submitText("contact-dana");
     const body = session.current();
     if (body.kind !== "choose") throw new Error("expected the ordinary composer");
-    expect(body.choices.map((choice) => choice.id)).toEqual(["__compose", "__submit"]);
+    expect(body.choices.map((choice) => choice.id)).toEqual(["__compose", "__submit", "__cancel"]);
   });
 
   it("does not retain or offer a failed source result", async () => {
@@ -1909,7 +1913,7 @@ describe("consented result transfer between task steps", () => {
     const { session } = setup({ send: enumSend });
     const frame = await reachProjection(session);
     if (frame.kind !== "choose") throw new Error("expected an enum question");
-    expect(frame.choices.map((choice) => choice.id)).toEqual(["fixed text"]);
+    expect(frame.choices.map((choice) => choice.id)).toEqual(["fixed text", "__cancel"]);
   });
 
   it("does not write transferred content into the audit trail", async () => {

@@ -39,7 +39,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const agentOrigin = new URLSearchParams(location.search).get("agent") ?? DEFAULT_AGENT_ORIGIN;
     const lifetime = new AbortController();
     const contact = (id: unknown) => CONTACTS.find((entry) => entry.id === String(id ?? ""));
     const nextId = (prefix: string) =>
@@ -167,12 +166,12 @@ export function App() {
           },
         },
       ],
-      { exposedTo: [agentOrigin], signal: lifetime.signal },
+      { exposedTo: [DEFAULT_AGENT_ORIGIN], signal: lifetime.signal },
     )
       .then(() => {
         if (lifetime.signal.aborted) return;
         setStatus("ready");
-        note(`registered 4 tools, exposedTo ${agentOrigin}`);
+        note(`registered 4 tools, exposedTo ${DEFAULT_AGENT_ORIGIN}`);
       })
       .catch((error: unknown) => {
         if (lifetime.signal.aborted) return;

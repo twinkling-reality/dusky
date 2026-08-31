@@ -33,6 +33,19 @@ Three surfaces, and confusing them is the most common mistake:
   a control for holding less of the web is a control for using less of the
   product. It survives because end-to-end tests need to assert about one site's
   tools without another's arriving mid-assertion.
+
+  Repeated `?site=` parameters replace the default fixture registry at runtime.
+  Each value is a validated HTTPS URL, or loopback HTTP for local development,
+  with an optional display name. A source record has only `id`, `name`, `url`
+  and `blurb`. It never carries tools, policy, adapters or result mappings.
+  Shared packages are tested to reject application imports, source-registry
+  imports and fixture vocabulary in executable code.
+
+  This is configuration, not discovery by crawling. A provider still has to
+  name the console's exact origin in `exposedTo`, and that grant must come from
+  trusted provider configuration. No query parameter may override it. A
+  provider that reflects an embedding page's requested origin has replaced a
+  browser authorization boundary with caller input.
 - **`apps/server`** owns the task state, so a console reload or a dropped socket
   replays the current frame rather than restarting the task.
 
@@ -455,6 +468,10 @@ These are in `packages/webmcp`, the only file allowed to know them:
 - Input is Neural Band and temple captouch translated by the OS into
   `ArrowUp/Down/Left/Right`, `Enter`, `Escape`. No mouse, no cursor, no raw
   gestures.
+- Parameter and projection frames always reserve one of the four rows for a
+  visible Back control. A site submenu reserves one for Back to sites. The
+  navigation ids are handled before argument coercion, so they can never become
+  values sent to a provider.
 - **No camera, no microphone, no notifications.** Free text arrives through the
   on-glasses composer (handwriting or dictation) on focus-then-tap, committing
   via ordinary `input`/`change` events.

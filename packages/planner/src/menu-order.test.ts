@@ -31,7 +31,7 @@ const rowsOf = (tools: ToolDescriptor[], site?: string): Choice[] => {
     if (f.kind !== "idle") throw new Error("unreachable");
     let wrapped = false;
     for (const c of f.choices) {
-      if (c.id === "__more" || c.id === "__compose") continue;
+      if (c.id === "__more" || c.id === "__compose" || c.id === "__home") continue;
       if (seen.has(c.id)) {
         wrapped = true;
         break;

@@ -402,7 +402,7 @@ export function Workspace() {
                   it works" cannot ask anybody to scroll to find out whether it
                   did.
                 */}
-                <div className={styles.sites}>
+                <div className={styles.sites} data-many={sites.length > 3 ? "" : undefined}>
                   {sites.map((s) => (
                     <figure key={s.id} className={styles.site}>
                       {/*
@@ -416,7 +416,7 @@ export function Workspace() {
                         className={styles.frame}
                         data-squircle=""
                         title={s.name}
-                        src={`${s.url}?agent=${encodeURIComponent(location.origin)}`}
+                        src={s.url}
                         allow="tools"
                       />
                       {/* The origin is the one value worth printing beside a

@@ -168,11 +168,11 @@ partner site's `exposedTo` grant, and the browser compares it to the console's r
 origin character by character. A trailing slash, a path, `http` instead of
 `https`, or a preview URL instead of the production one, and Dusky discovers
 zero tools. That failure looks identical to "WebMCP is broken", so check it
-first whenever the console shows an empty tool list. The `?agent=` query
-parameter, which each partner site reads, overrides it at runtime, and that is
-the fastest way to confirm a mismatch is the cause. Check every site: the
-console holds them all at once, so one site's grant being wrong shows up as a
-short list rather than an empty one.
+first whenever the console shows an empty tool list. No query parameter can
+override this grant. Letting an embedding page choose its own authorization
+origin would turn `exposedTo` into reflected input instead of a provider
+decision. Check every site: the console holds them all at once, so one site's
+grant being wrong shows up as a short list rather than an empty one.
 
 **`wss://`, never `ws://`.** An HTTPS page cannot open an insecure WebSocket;
 the browser blocks it as mixed content and the Display sits on "no connection".

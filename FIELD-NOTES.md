@@ -559,6 +559,31 @@ Worth listing separately: these were all live in a passing test suite.
 - **"Tap to speak" had nothing to tap.** The composer was only ever produced by
   the parameter-collection frame, so the planner's entry point was unreachable
   from the glasses and could only be driven by an agent.
+- **A default source list looked like an integration list until it could be
+  replaced without code.** The shared engine was already generic, but the
+  console could hold only the three URLs compiled into `sources.ts`. Repeated
+  `site` query parameters now replace that fixture list with validated runtime
+  providers. The parser accepts public HTTPS and loopback HTTP, deduplicates by
+  origin, rejects credentials and active schemes, and discards every supplied
+  field except display name and URL. A real Chrome test loads a renamed runtime
+  source and discovers its tools with no rebuild. An executable-source audit
+  rejects fixture vocabulary and imports from applications or their registry in
+  frames, session, policy and planner.
+- **The provider grant was reflected caller input.** Each test provider read an
+  `agent` query parameter and copied it into `exposedTo`. That made preview
+  deployments convenient, but it let the embedding page choose the origin the
+  provider authorized. The three providers now take the exact allowed origin
+  only from trusted build configuration, and a source audit prevents the query
+  override from returning.
+- **Escape support did not make a parameter screen visibly escapable.** The
+  contact prompt showed only its composer, so the wearer had to know a hardware
+  gesture that the frame never named. Every parameter and projection page now
+  reserves one physical row for Back, and every site submenu reserves one for
+  Back to sites. Those ids are consumed before argument coercion. The 600 by 600
+  visual test renders the contact prompt, transfer, destination confirmation,
+  intermediate progress and final result through the real lens component. All
+  five fit without overflow and every interactive target measures at least 88
+  pixels high.
 
 ---
 

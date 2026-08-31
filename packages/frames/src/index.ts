@@ -431,7 +431,11 @@ export function idleFrame(
   // Speaking never occupies a paginated slot. Having to page through actions
   // to reach the affordance the whole product is built around would be
   // absurd, so it costs one slot from the tool list and is always present.
-  const budget = canSpeak ? MAX_CHOICES - 1 : MAX_CHOICES;
+  // Once inside a site, the top-level composer gives way to a visible route
+  // back to the site list. Four rows cannot hold actions, a composer, and
+  // navigation honestly; speech still remains one press away at the top.
+  const offerComposer = canSpeak && !o.site;
+  const budget = MAX_CHOICES - (offerComposer ? 1 : 0) - (o.site ? 1 : 0);
 
   const origins = [...new Set(operable.map((t) => t.origin))];
   const grouped = !o.site && origins.length > 1 && operable.length > budget;
@@ -463,7 +467,8 @@ export function idleFrame(
   // and opening a text field in someone's eye every time they return to the
   // menu is not what anyone wants.
   const { choices } = paginate(all, page, budget);
-  if (canSpeak) choices.push({ id: "__compose", label: "Say what you want", meta: "tap" });
+  if (offerComposer) choices.push({ id: "__compose", label: "Say what you want", meta: "tap" });
+  if (o.site) choices.push({ id: "__home", label: "Back to sites", meta: "back" });
 
   return {
     kind: "idle",
@@ -483,7 +488,7 @@ export function idleFrame(
           ? canSpeak
             ? "Browse actions, or say what you want"
             : "Each site contains its actions"
-          : canSpeak
+          : offerComposer
             ? "Tap to speak, or choose an action"
             : "Choose an action"))
       : // What reached us, never what the site chose.
@@ -520,16 +525,23 @@ export function paramFrame(
   const asked = param.description?.trim() || `${humanizeParam(param.name)}?`;
   const title = asked.length > 40 ? `${asked.slice(0, 37)}...` : asked;
 
+  // Parameter collection is a task the wearer may abandon, so every shape
+  // gets a visible exit. Reserve one of the four physical rows for it on every
+  // page. `__cancel` is handled before argument coercion, which keeps this
+  // navigation id from ever becoming a value sent to a site.
+  const withBack = (all: Choice[]): Choice[] => [
+    ...paginate(all, page, MAX_CHOICES - 1).choices,
+    { id: "__cancel", label: "Back", meta: "cancel" },
+  ];
+
   if (candidates.length > 0) {
-    const { choices } = paginate(candidates, page);
-    return { kind: "choose", source, title, choices, note: label(tool) };
+    return { kind: "choose", source, title, choices: withBack(candidates), note: label(tool) };
   }
 
   if (param.kind === "enum") {
     const values = (param.schema["enum"] as unknown[]) ?? [];
     const all: Choice[] = values.map((v) => ({ id: String(v), label: String(v) }));
-    const { choices } = paginate(all, page);
-    return { kind: "choose", source, title, choices, note: label(tool) };
+    return { kind: "choose", source, title, choices: withBack(all), note: label(tool) };
   }
 
   if (param.kind === "boolean") {
@@ -538,10 +550,10 @@ export function paramFrame(
       source,
       title,
       note: label(tool),
-      choices: [
+      choices: withBack([
         { id: "true", label: "Yes" },
         { id: "false", label: "No" },
-      ],
+      ]),
     };
   }
 
@@ -573,6 +585,7 @@ export function paramFrame(
     choices: [
       { id: "__compose", label: "Enter a value", meta: "tap" },
       { id: "__submit", label: "Done", meta: "enter" },
+      { id: "__cancel", label: "Back", meta: "cancel" },
     ],
   };
 }
@@ -600,7 +613,10 @@ export function projectionFrame(
     label: p.label,
     meta: p.preview,
   }));
-  const { choices } = paginate(all, page);
+  const choices = [
+    ...paginate(all, page, MAX_CHOICES - 1).choices,
+    { id: "__cancel", label: "Back", meta: "cancel" },
+  ];
   return {
     kind: "choose",
     source,

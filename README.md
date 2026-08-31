@@ -119,8 +119,10 @@ Three things worth pointing at:
 
 ## Try it, without glasses
 
-You need **Chrome 149+** with `chrome://flags/#enable-webmcp-testing`, or **the
-ChatGPT desktop app's built-in browser**, which has it on already.
+You need **Chrome 149+** with `chrome://flags/#enable-webmcp-testing`. The
+ChatGPT desktop app's built-in browser may expose WebMCP for its top-level
+document, but cross-origin partner iframes are runtime-dependent, so Chrome is
+the proof path for this demo.
 
 ```bash
 pnpm install && pnpm dev
@@ -156,6 +158,30 @@ Add `?source=market` to the URL to hold a single site instead. Nothing on the
 page offers that, because a control for using less of the product is not one
 anybody wants; it is there for tests and for a slow connection.
 
+### Audit it with a site Dusky has never seen
+
+The three sites above are default demo fixtures, not integrations. A judge can
+replace them at runtime by adding one or more `site` parameters, with no source
+edit and no rebuild:
+
+```text
+http://localhost:7803/demo?start=1&site=https%3A%2F%2Ftools.example%2Fwebmcp
+```
+
+Each value may also be a URL-encoded JSON object such as
+`{"name":"Example","url":"https://tools.example/webmcp"}`. Repeating `site`
+holds several origins at once. The parser accepts public HTTPS URLs and local
+loopback HTTP, removes duplicate origins, rejects embedded credentials and
+active URL schemes, and discards every supplied field except display name and
+URL.
+
+The provider must expose its tools to the exact Dusky console origin through
+WebMCP. That authorization is enforced by the browser and cannot be replaced by
+automatic crawling. Once authorized, Dusky learns actions only from
+`getTools({fromOrigins})`. Shared packages never receive the runtime registry
+and automated tests reject fixture vocabulary or application imports in their
+executable source.
+
 ## What is in here
 
 | Path | What it is |
@@ -174,14 +200,14 @@ anybody wants; it is there for tests and for a slow connection.
 
 ## Measured
 
-- 324 unit and deterministic tests cover the current tree before the final
-  verification pass.
+- 333 unit and deterministic tests cover the current tree.
 - Shortlist recall is 18/21 over thirteen tools at the shipped six slots. Eight
   slots remains 18/21; the full registry is 21/21.
 - All expected end actions survive for 6/6 compound requests at six slots.
 - Exact compatible result projections survive for 3/3 handoff fixtures.
-- The browser suite holds eleven actions from three origins and drives the full
-  reservation-to-message path through real WebMCP.
+- The 34-test browser suite holds eleven actions from three origins, replaces
+  the fixture registry from a runtime URL, verifies five critical 600 by 600
+  frames, and drives the full reservation-to-message path through real WebMCP.
 
 The production suite passes 10/10 against all six live surfaces. It verifies
 the three deployed origins, eleven tools, WebSocket relay, deployed tool

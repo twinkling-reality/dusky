@@ -301,6 +301,16 @@
   height: var(--dusky-live);
 }
 
+/* More providers stay full-height and move sideways instead of collapsing
+   into several unusably short iframe rows. The glasses menu remains one
+   combined registry; this is only how the console previews the held pages. */
+.sites[data-many] {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
+  overflow-x: auto;
+}
+
 .site {
   margin: 0;
   min-width: 0;
@@ -315,6 +325,12 @@
   .sites {
     grid-template-columns: 1fr;
     height: auto;
+  }
+
+  .sites[data-many] {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow-x: visible;
   }
 
   .site {

@@ -19,6 +19,72 @@ describe("which sites a window holds", () => {
     expect(held.map((s) => s.id)).toEqual(["reservations"]);
   });
 
+  it("holds a never-seen HTTPS source supplied at runtime", () => {
+    const held = sitesFromQuery("site=https%3A%2F%2Ftools.example%2Fwebmcp");
+    expect(held).toEqual([
+      {
+        id: "runtime:https://tools.example",
+        name: "tools.example",
+        url: "https://tools.example/webmcp",
+        blurb: "Runtime WebMCP source supplied in this console URL.",
+      },
+    ]);
+  });
+
+  it("accepts named runtime sources without learning their tools", () => {
+    const supplied = JSON.stringify({
+      name: "  New\nProvider  ",
+      url: "https://provider.example/actions",
+      tools: ["a_site_specific_action"],
+      policy: "always allow",
+    });
+    const held = sitesFromQuery(new URLSearchParams({ site: supplied }).toString());
+    expect(held).toEqual([
+      {
+        id: "runtime:https://provider.example",
+        name: "New Provider",
+        url: "https://provider.example/actions",
+        blurb: "Runtime WebMCP source supplied in this console URL.",
+      },
+    ]);
+    expect(Object.keys(held[0] ?? {}).sort()).toEqual(["blurb", "id", "name", "url"]);
+  });
+
+  it("holds several unrelated runtime origins and removes origin duplicates", () => {
+    const params = new URLSearchParams();
+    params.append("site", "https://one.example/tools");
+    params.append("site", "https://two.example/tools");
+    params.append("site", "https://one.example/another-page");
+    expect(sitesFromQuery(params.toString()).map(originOf)).toEqual([
+      "https://one.example",
+      "https://two.example",
+    ]);
+  });
+
+  it("permits loopback development but rejects unsafe runtime URLs", () => {
+    const local = sitesFromQuery("site=http%3A%2F%2Flocalhost%3A9000%2Fprovider");
+    expect(local.map(originOf)).toEqual(["http://localhost:9000"]);
+
+    for (const unsafe of [
+      "http://public.example/provider",
+      "https://user:secret@provider.example/",
+      "javascript:alert(1)",
+      "file:///tmp/provider.html",
+      "data:text/html,provider",
+      "{bad json",
+    ]) {
+      const query = new URLSearchParams({ site: unsafe }).toString();
+      expect(sitesFromQuery(query)).toEqual(SOURCES);
+    }
+  });
+
+  it("uses valid runtime sources even when another supplied entry is invalid", () => {
+    const params = new URLSearchParams();
+    params.append("site", "javascript:alert(1)");
+    params.append("site", "https://valid.example/provider");
+    expect(sitesFromQuery(params.toString()).map(originOf)).toEqual(["https://valid.example"]);
+  });
+
   /**
    * Falling back to everything rather than to nothing.
    *
