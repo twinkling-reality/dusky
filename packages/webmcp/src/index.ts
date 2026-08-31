@@ -31,7 +31,9 @@ interface ModelContextLike {
     input?: unknown,
     options?: { signal?: AbortSignal },
   ): Promise<string>;
-  ontoolchange: ((this: unknown, ev: Event) => unknown) | null;
+  addEventListener?: (type: string, listener: EventListener) => void;
+  removeEventListener?: (type: string, listener: EventListener) => void;
+  ontoolchange?: ((this: unknown, ev: Event) => unknown) | null;
 }
 
 function ctx(): ModelContextLike | null {
@@ -109,11 +111,24 @@ function toDescriptor(t: RegisteredToolLike): ToolDescriptor {
   };
 }
 
+/** Stable enough to notice a registry change without retaining live handles. */
+function registrySignature(raw: RegisteredToolLike[], origins: readonly string[]): string {
+  return JSON.stringify(
+    raw
+      .filter((tool) => origins.includes(tool.origin))
+      .map(toDescriptor)
+      .sort((a, b) => `${a.origin}\u0000${a.name}`.localeCompare(`${b.origin}\u0000${b.name}`)),
+  );
+}
+
 /* ----------------------------------------------------------------- client */
 
 export class WebMcpBridge {
   /** Keeps the live handles that executeTool needs, keyed by origin + name. */
   private live = new Map<string, RegisteredToolLike>();
+
+  /** Last registry returned by discovery, also the eventless-browser baseline. */
+  private knownRegistry: string | null = null;
 
   /**
    * Which argument shape this browser actually accepts.
@@ -153,6 +168,7 @@ export class WebMcpBridge {
     const mc = ctx();
     if (!mc) throw new Error(ENABLE_HINT);
     const raw = await mc.getTools({ fromOrigins: this.origins });
+    this.knownRegistry = registrySignature(raw, this.origins);
     this.live.clear();
     const out: ToolDescriptor[] = [];
     for (const t of raw) {
@@ -174,10 +190,57 @@ export class WebMcpBridge {
   onToolsChanged(cb: () => void): () => void {
     const mc = ctx();
     if (!mc) return () => {};
-    const handler = () => cb();
-    mc.ontoolchange = handler;
+    const handler: EventListener = () => cb();
+
+    // The current specification makes ModelContext an EventTarget. Prefer it
+    // when the browser implements it, including on non-extensible host objects.
+    if (mc.addEventListener && mc.removeEventListener) {
+      mc.addEventListener("toolchange", handler);
+      return () => mc.removeEventListener?.("toolchange", handler);
+    }
+
+    // Chrome 151 exposes the event handler attribute but not EventTarget.
+    if ("ontoolchange" in mc) {
+      const previous = mc.ontoolchange ?? null;
+      mc.ontoolchange = handler;
+      return () => {
+        if (mc.ontoolchange === handler) mc.ontoolchange = previous;
+      };
+    }
+
+    /*
+     * The Codex in-app browser's WebMCP bridge, measured 2026-08-30, exposes a
+     * non-extensible object with discovery and execution but no toolchange
+     * event surface. Assignment crashes the whole React tree, while doing
+     * nothing loses tools that register after the first discovery. Only that
+     * incomplete implementation gets this compatibility poll. A descriptor
+     * signature prevents unchanged scans from resetting the wearer's frame.
+     */
+    let disposed = false;
+    let scanning = false;
+    const scan = async () => {
+      if (disposed || scanning) return;
+      scanning = true;
+      try {
+        const raw = await mc.getTools({ fromOrigins: this.origins });
+        const next = registrySignature(raw, this.origins);
+        if (this.knownRegistry === null) this.knownRegistry = next;
+        else if (next !== this.knownRegistry) {
+          this.knownRegistry = next;
+          cb();
+        }
+      } catch {
+        // Discovery itself owns error reporting. A background compatibility
+        // check must never crash the page or replace that result.
+      } finally {
+        scanning = false;
+      }
+    };
+    void scan();
+    const timer = setInterval(() => void scan(), 500);
     return () => {
-      if (mc.ontoolchange === handler) mc.ontoolchange = null;
+      disposed = true;
+      clearInterval(timer);
     };
   }
 
