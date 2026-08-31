@@ -201,8 +201,10 @@ export function App() {
     return () => lifetime.abort();
   }, [note]);
 
+  const consoleSurface = new URLSearchParams(window.location.search).get("surface") === "console";
+
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-surface={consoleSurface ? "console" : undefined}>
       <p className={styles.banner}>Test environment &middot; no table is actually held</p>
 
       <header className={styles.head}>

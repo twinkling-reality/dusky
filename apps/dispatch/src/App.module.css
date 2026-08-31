@@ -199,3 +199,13 @@
     bottom: -120px;
   }
 }
+
+/* The console node supplies the provider name and the single fixture
+   disclosure. Direct visits keep the full masthead and warning above. */
+.page[data-surface="console"] {
+  padding-top: 16px;
+}
+.page[data-surface="console"] .banner,
+.page[data-surface="console"] .head {
+  display: none;
+}

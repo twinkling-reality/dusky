@@ -182,8 +182,10 @@ export function App() {
     return () => lifetime.abort();
   }, [note]);
 
+  const consoleSurface = new URLSearchParams(window.location.search).get("surface") === "console";
+
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-surface={consoleSurface ? "console" : undefined}>
       <p className={styles.banner}>Test environment &middot; nothing is actually delivered</p>
       <header className={styles.head}>
         <span className={styles.route} aria-hidden="true" />

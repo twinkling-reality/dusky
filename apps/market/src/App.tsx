@@ -138,8 +138,10 @@ export function App() {
 
   const total = cart.reduce((s, c) => s + c.price, 0);
 
+  const consoleSurface = new URLSearchParams(window.location.search).get("surface") === "console";
+
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-surface={consoleSurface ? "console" : undefined}>
       <p className={styles.banner}>Test environment &middot; not a real merchant</p>
 
       <header className={styles.head}>

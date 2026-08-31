@@ -29,8 +29,16 @@ export interface Source {
   /** What the wearer reads in the eyebrow of a frame about this site. */
   name: string;
   url: string;
+  /** Optional presentation URL for the console preview. It must keep the same origin as `url`. */
+  previewUrl?: string;
   /** One line about what makes this site different, for the console UI. */
   blurb: string;
+}
+
+function fixturePreview(urlText: string): string {
+  const url = new URL(urlText);
+  url.searchParams.set("surface", "console");
+  return url.toString();
 }
 
 export const SOURCES: readonly Source[] = [
@@ -38,18 +46,21 @@ export const SOURCES: readonly Source[] = [
     id: "market",
     name: "Verdant Market",
     url: MARKET_URL,
+    previewUrl: fixturePreview(MARKET_URL),
     blurb: "A shop. Four tools, every parameter a bare string, results about carts.",
   },
   {
     id: "reservations",
     name: "Amber & Oak",
     url: RESERVATIONS_URL,
+    previewUrl: fixturePreview(RESERVATIONS_URL),
     blurb: "A restaurant. Three tools, enums and a boolean, results about bookings.",
   },
   {
     id: "dispatch",
     name: "Northstar Dispatch",
     url: DISPATCH_URL,
+    previewUrl: fixturePreview(DISPATCH_URL),
     blurb: "A communications desk. Four tools, contact lookups, drafts, and sent messages.",
   },
 ];

@@ -146,3 +146,13 @@
   color: var(--dusky-ink-faint);
   max-width: 52ch;
 }
+
+/* The console node supplies the provider name and the single fixture
+   disclosure. Direct visits keep the full masthead and warning above. */
+.page[data-surface="console"] {
+  padding-top: var(--dusky-s5);
+}
+.page[data-surface="console"] .banner,
+.page[data-surface="console"] .head {
+  display: none;
+}
