@@ -1,532 +1,211 @@
-# Dusky
-
-A browser for a web made of tools instead of pages. Dusky turns a site's
-declared WebMCP tools into a gesture-driven interface for Meta Ray-Ban Display.
-
-Guidance for anyone, human or agent, working in this repository.
-
-Most of what follows was established by running code against real browsers and
-real SDKs rather than by reading documentation, and several points contradict
-the published documentation. Where they do, the runtime wins and the discrepancy
-is noted inline.
-
-## The shape of the system
-
-Three surfaces, and confusing them is the most common mistake:
-
-- **`apps/display`** runs ON the glasses. It renders one `DisplayFrame` and
-  sends one selection. It executes nothing and holds no state.
-- **`apps/console`** runs in a normal browser. It is the ONLY surface that can
-  touch WebMCP, because tools live inside the partner site's document in the
-  user's own session. It holds EVERY participating site at once, each in its own
-  `allow="tools"` iframe, and announces the list to the relay on connect.
-
-  Holding one site at a time was a single line, `[new URL(source.url).origin]`,
-  and nothing downstream ever agreed with it: `getTools({fromOrigins})` has
-  always taken a list, tool identity has always been `(origin, name)`, an
-  ambiguous name has always been refused, and `menuOrder` has always given a
-  mixed registry a total order. Removing the restriction needed no new
-  capability. It needed one new RULE, which is the same-origin resolver in
-  rule 6 below.
-
-  `?source=` still narrows a window to one site. Nothing on the page offers it:
-  a control for holding less of the web is a control for using less of the
-  product. It survives because end-to-end tests need to assert about one site's
-  tools without another's arriving mid-assertion.
-
-  Repeated `?site=` parameters replace the default fixture registry at runtime.
-  Each value is a validated HTTPS URL, or loopback HTTP for local development,
-  with an optional display name. A source record has only `id`, `name`, `url`
-  and `blurb`. It never carries tools, policy, adapters or result mappings.
-  Shared packages are tested to reject application imports, source-registry
-  imports and fixture vocabulary in executable code.
-
-  This is configuration, not discovery by crawling. A provider still has to
-  name the console's exact origin in `exposedTo`, and that grant must come from
-  trusted provider configuration. No query parameter may override it. A
-  provider that reflects an embedding page's requested origin has replaced a
-  browser authorization boundary with caller input.
-- **`apps/server`** owns the task state, so a console reload or a dropped socket
-  replays the current frame rather than restarting the task.
-
-The glasses hold attention and authority. The browser holds capability and
-session. Dusky moves intent, never credentials.
-
-**A transport must push on `onTransition`, not after the call returns.**
-`Session` reports every frame the wearer should see as it happens. Reading only
-the frame a call settles on is how the working frame ended up computed but
-never transmitted: the wearer sat on an unchanged screen for the whole of a
-model call and a tool invocation, which on a cursorless display is
-indistinguishable from a crash. `apps/server/src/hub.ts` is the reference
-implementation, and it is why the busy frames a planner introduces are visible
-at all.
-
-## Rules that are load-bearing
-
-1. **No per-site branching, ever.** If a frame depends on WHICH site registered
-   a tool, Dusky has become a hardcoded integration wearing a protocol costume.
-   Everything the wearer sees is derived from tool schemas in `packages/frames`.
-   This rule is easiest to break in the LAST frame, not the first. The result
-   summarizer once matched `added`, `cart_total` and `removed`, which are the
-   exact keys the first-party test market returns, so every other site on earth
-   fell through to truncated JSON while the menu still looked perfect.
-   `factsFromResult` replaced it and knows no site. Do not reintroduce a key
-   because it made the demo read nicely.
-
-   Three first-party sources exist to keep this honest, and all are held at the
-   same time. `apps/market` sells things, `apps/reservations` holds tables, and
-   `apps/dispatch` finds contacts and sends messages. Their result and tool
-   vocabularies do not overlap. The reservations source also declares a string
-   enum, an integer enum and a boolean, none of which the market has, so three
-   branches of `paramKind` are reachable at all. `e2e/reservations.spec.ts`
-   drives the schema variety and `e2e/transfer.spec.ts` drives a reservation
-   result into the communications source through real WebMCP.
-
-   Adding it needed no per-site branch, and it is worth stating what it DID
-   need, because the weaker claim is the one that survives someone reading the
-   log. `8254e30` added the whole service and touched no shared package. The
-   next two commits changed three: `coerce` in `packages/session` was sending
-   an integer enum a parsed copy of its label, `packages/webmcp` was passing
-   through the empty `title` Chrome returns for an absent one, and `idKeyOf`
-   in `packages/frames` was matching a list of nouns rather than a convention.
-   None of those was a per-site branch. All three were genericity bugs that a
-   single test source had kept unreachable, which is exactly the thing a
-   second source is for. The first two are written up in FIELD-NOTES.md under
-   "Building against WebMCP"; the third is not, and the commit is the only
-   record.
-2. **The model proposes, code disposes.** Whether a human must confirm is
-   decided in `packages/policy`, which has no model, no network and no DOM.
-   A `Planner` may only suggest; `Session` enforces. A proposal is checked
-   against the candidates actually offered, and its arguments against the
-   tool's own schema, in `packages/planner` AND again in `packages/session`.
-   There are tests asserting a planner cannot launder a consequential tool
-   through the resolver path, cannot name a tool it was not offered, and cannot
-   smuggle an undeclared argument into an invocation. See "The planner" below.
-3. **Success is asserted from a returned tool result, never from having called.**
-   This cuts both ways, and the second edge is the one that got missed for a
-   while: calling EVERY return a success is also asserting from having called.
-   A site answering `{"ok": false, "error": "out of stock"}` has returned a
-   result and that result is a failure. `outcomeFromResult` reads it. Only an
-   explicit negative flips the verdict, because inventing a failure from a
-   shape we do not recognise would be guessing in the other direction.
-4. **An annotation may lower ceremony, never raise it.** `readOnlyHint` is a
-   hint from a party that may be hostile, and Chrome passes only 1 of 4 WPT
-   annotation tests. Hard danger verbs override it; see `classifyDetailed`.
-
-   A hint is also not honoured when the tool contradicts itself. The soft
-   lexicons are consulted only AFTER the hint, so with a hint present they
-   protect nothing, and `place_order` claiming to be read-only ran with no
-   confirmation and qualified as a resolver, which is the path with nobody
-   watching. Letting soft signals override the hint is the wrong fix, because
-   `cart` is in `add_to_cart` and `review_cart` alike. Those lists mix two
-   kinds of word: `cart` and `booking` name a SUBJECT, `place` and `reserve`
-   name a MUTATION. Only the second kind contradicts a claim, and it is
-   matched against the FIRST word of the name as a whole word, because an
-   identifier is conventionally verb-first. That keeps a bookshop's
-   `search_books` a read while `book_table` is not.
-
-   Those verbs are looked for in the SCHEMA as well as in the name, title and
-   description. A tool could otherwise describe itself blandly, claim to be
-   read-only, and declare what it really does in its parameters:
-   `apply_changes`, "Applies pending changes.", with a `delete_everything`
-   boolean, classified as a read and ran with nobody in front of it. The schema
-   is the same kind of evidence as the annotation and was the only part not
-   being read.
-
-   Only the HARD lexicons consult it. A parameter is weaker evidence about what
-   a tool DOES than the tool's own name: a hard verb names an action and is
-   worth acting on wherever it appears, a soft one names a domain and needs the
-   tool's own naming behind it, or a search with a `remove_duplicates` flag
-   would stop for a human. Either way this can only raise ceremony, so the rule
-   above still holds.
-5. **Never auto-retry anything that is not read-only.** A timeout is "unknown",
-   not "did not happen".
-6. **A resolver must be same-origin as its target.** The one path where a
-   proposal runs with no human in front of it is `planResolver`, and the
-   wearer's own spoken words are what fill the lookup's arguments. Left
-   unconstrained, a lookup published by one business receives what somebody said
-   about another one, silently, on the path that never reaches a confirmation
-   frame. It is also the baitable path: ranking scores tools on text their own
-   site wrote, so a site wanting other people's requests need only publish a
-   read-only tool that scores well against everything.
-
-   Enforced in `packages/planner`, which filters the candidate list before a
-   model sees it, and again in `packages/session`, which re-checks the answer,
-   because a `Planner` is a port and another implementation reaches the machine
-   without passing through that package. Two checks, one rule.
-
-   This rule had nothing to forbid while a session held one site: every
-   read-only tool was already same-origin with every target, which is why it
-   was never written down. It is the rule that makes holding every site at once
-   safe rather than merely possible.
-
-   The cost is real and is the right cost. A genuinely cross-site lookup, "add
-   what my recipe app lists to my cart", becomes a question for the wearer
-   instead of something a model does quietly. Bridging two businesses is a
-   decision a person should make.
-
-7. **One origin may not take the whole shortlist.** `rank` scores lexically, so
-   when an intent matches nothing every score is zero and "rank order" is
-   alphabetical order. Measured: six tools named `aaa_*` through `aaf_*` at one
-   origin took all six shortlist slots from a shop, whose tools never reached
-   the model. That was a site starving itself while Dusky held one site; holding
-   all of them it is one origin denying every other origin access to the model
-   for the price of renaming its tools. `fairFill` shares the unmatched
-   remainder round-robin across origins. Real lexical matches keep their slots
-   outright, so nothing can lose a place it earned.
-
-   It also made ranking better, which was not the point and is worth stating as
-   a measurement rather than a claim: recall over the eval corpus went from
-   13/19 to 14/19 at the shipped shortlist size, which is exactly what doubling
-   the shortlist to eight used to buy, for no tokens.
-
-   The ranker now also reduces a small set of ordinary ACTION synonyms to the
-   same concept on both sides of the match: `find/search`, `tell/send/message`,
-   `book/reserve/hold`. No business nouns belong in that list. Measured after
-   the change, single-action recall is 16/19 at six and joint coverage over four
-   compound requests is 4/4, both with the same shortlist and token ceiling.
-   With the communications source and its new labelled requests included, the
-   current measurements are 18/21 single-action recall and 6/6 compound joint
-   coverage at six slots.
-
-8. **`packages/policy` must stay dependency-free.** If it ever imports the agent
-   or a transport, the deterministic guarantee is gone. This was prose with
-   nothing enforcing it until `index.test.ts` grew a test that reads the source
-   and the manifest: one type import from `@dusky/contracts`, no other
-   dependency, and no `Date.now`, `fetch`, `document` or `Math.random`. The
-   pull is real rather than theoretical, because the classifier reads a JSON
-   Schema by hand specifically to avoid importing the function in
-   `packages/frames` that already does it.
-
-   The edge in the other direction is fine and is now used: `packages/frames`
-   imports `classify` to order the wearer's menu. Policy is the deterministic
-   layer everything else may consult, which is only true while it consults
-   nothing.
-
-9. **A multi-step plan is accepted whole, bounded, and gated one step at a
-   time.** A planner may return up to four ordered end actions for one spoken
-   request. If any action names a tool it was not offered, names an ambiguous
-   tool, or cannot be driven on the display, the whole plan is refused. Running
-   the valid half would recreate the original bug in a more convincing form:
-   one half of a sentence succeeds while the other disappears.
-
-   A successful intermediate result stops on a visible next-step row. Crossing
-   into another business is therefore something the wearer sees and advances,
-   never a silent transition. The next tool is resolved against the browser's
-   live registry at that moment, its arguments are checked again against its
-   current schema, and its own policy gate runs independently. One approval can
-   never cover two calls.
-
-10. **Cross-origin result transfer is a separate, exact consent boundary.** A
-    successful intermediate step may retain only the output of
-    `shareableProjectionsFromResult`: at most 32,768 input characters, 128
-    visited nodes, depth 6, twelve projections, and 120 characters per complete
-    string. The raw result is not task state. Projections carry source origin,
-    source tool, step, type, and a stable JSON pointer or `#summary`; they never
-    carry markup or executable controls.
-
-    A compatible later parameter first shows projection choices. Same-origin
-    reuse follows the existing explicit parameter path. Cross-origin reuse
-    shows a distinct transfer frame naming the producing site, receiving site,
-    destination argument, and exact bounded value. Only `Share` or `Cancel` is
-    accepted while that frame is live, so stale choices and forged text cannot
-    fall through to the parameter collector. Approval is checked against the
-    live `(origin, name)` tool and its current schema immediately before the one
-    displayed scalar is applied. Any registry or schema change refuses it.
-
-    Sharing then returns to the destination tool's ordinary policy gate. It
-    never authorizes that action. Audit events record provenance, field, type,
-    destination, and decision without recording the value. Cancel, completion,
-    replacement, invalidation, or actor expiry drops the retained material.
-    `SessionActor` also treats a transfer frame as busy, so a new outside-agent
-    task cannot replace what the wearer is deciding about.
-
-## The planner, and why it cannot widen anything
-
-`packages/planner` implements the `Planner` port that `packages/session`
-defines. It is optional at runtime and off by default: set `DUSKY_PLANNER=on`
-to enable it. Without it Dusky is menu-driven and fully usable, which is why a
-model outage, a missing credential or a rate limit costs a wearer latency
-rather than a dead end. The round-trip test passes either way.
-
-The credential is read in `apps/server/src/planner.ts` and never leaves that
-process. The Display and the console are never handed one.
-
-**Three costs shape it.**
-
-- *Tokens.* A model never sees a tool registry. `rank.ts` scores tools against
-  the request with no model, and only the top few reach a prompt. `cards.ts`
-  compiles each tool into a few lines, cached by tool version, so a task that
-  takes many turns compiles each tool once.
-- *Latency.* One `pickTool` or `planResolver` has a total budget. Escalation
-  spends from that same budget rather than doubling it, and SDK retries are
-  turned off so a 2.5s timeout cannot become 7.5s underneath us.
-- *Being wrong.* A cheap model answers first. A stronger one is asked when the
-  first is unsure, names something that was not on offer, or reaches for a tool
-  the wearer would have to pay for. If the second tier will not stand behind an
-  answer, the planner returns nothing and the wearer gets the menu.
-
-Some requests need no model at all. When the winning tool takes no arguments
-and wins its ranking outright, the planner answers directly. It never fills an
-argument by lexical similarity, because a wrong argument is exactly what a
-model is there to avoid.
-
-**What is enforced in code rather than asked of the model.** Every one of these
-has a test, and they are the reason a misbehaving model, a hostile site or both
-together cannot widen what the machine will do.
-
-- A name the model returns must match a candidate it was actually offered.
-  Anything else is refused and recorded.
-- A name two origins both registered is refused as ambiguous, so a site cannot
-  hijack a familiar tool name by registering it too. The session enforces this
-  independently, and it had to learn the rule the hard way: it resolved a
-  gesture by name with `find`, which returns whichever tool the browser listed
-  first, so an origin registering `checkout` could have its own tool run when
-  the wearer picked somebody else's. A NAME IS NOT AN IDENTITY. Any origin may
-  register any name, so identity is `(origin, name)`, which is what `toolId` in
-  `packages/frames` builds and what a menu row now carries. A bare name still
-  resolves, because a model is only ever shown names, but only while it is
-  unique. Colliding rows are also labelled with their host, since two identical
-  rows give a wearer no way to choose.
-- A resolver must be read-only, checked in `packages/planner` AND again in
-  `packages/session`. The planner does not rely on the session's filter: a
-  guarantee that only holds while two files agree is not a guarantee. This is
-  the one path where a proposal runs with no human in front of it.
-- Arguments are filtered against the tool's own schema in both packages, so an
-  invented `force` or `confirm` cannot ride along into an invocation and bypass
-  the gate without anyone touching the gate. Values outside a declared enum are
-  dropped rather than passed through.
-
-  This was half true for a while, and the half that was missing is the
-  instructive one. `packages/planner` validated names AND values; the session
-  filtered names only. So the session's independent check was strictly weaker
-  than the planner's, and a `Planner` is a PORT: another implementation reaches
-  the session without passing through that package at all. `party_size: 9999`
-  went to a site declaring `enum: [1,2,3,4]`, and an object argument went with
-  it, invisible on the confirmation frame the wearer approved. The rule now has
-  ONE implementation, `valueForParam` in `packages/frames`, which both packages
-  call. Two checks, one rule; the thing to avoid is two rules.
-- A planner that throws lands the wearer on the menu. It is assistance, never
-  a dependency.
-
-**Tool text is untrusted input going into a prompt.** Everything on a card
-except `origin` was written by a third-party site. `safeText` strips control
-characters, collapses all whitespace to single spaces and strips quotes before
-delimiting, so a description cannot open a new line and impersonate a card
-field, forge a second card, or close its own delimiter. A hostile description
-can still argue with the model, which no escaping prevents. That is survivable
-because nothing the model says is trusted: `packages/policy` decides ceremony
-and never reads a description for that purpose, and a card states the ceremony
-policy assigned rather than the one the site claims.
-
-Ranking treats the same text as adversarial. Name evidence outweighs prose, and
-description evidence is capped, so keyword stuffing can win a shortlist slot on
-a request nothing else matches but can never outrank a genuine name match.
-
-`untrustedContentHint` is advisory, but no longer discarded. Tool output is
-always treated as untrusted whether or not a site admits it. When a site does
-set the hint, its card says so and a fast task plan cannot be accepted without
-the careful tier reviewing it. The hint raises scrutiny and can never lower a
-gate.
-
-**Verified by execution, and what was not.** `packages/planner/src/anthropic.ts`
-is the only file that knows a model provider exists. Its request shape was
-checked against `@anthropic-ai/sdk` 0.120.0 by running it against a stub that
-speaks the Messages API wire format, which is what
-`packages/planner/src/anthropic.test.ts` does on every CI run without needing a
-credential. That test found one thing worth knowing: `messages.parse()` THROWS
-when content does not satisfy the schema rather than returning a null
-`parsed_output`, whatever its return type suggests. An unreadable answer is
-treated as the model declining; a typed `APIError` is rethrown so the planner
-records a real failure and escalates.
-
-Live API behavior was first measured on 2026-08-29 through the deployed relay.
-The first cold planning request exhausted the shared seven-second budget: the
-fast tier timed out at 2.5 seconds, the careful tier used the remainder, and the
-session safely returned to the menu. Two immediate repeats produced the correct
-two-action task. On those runs the fast tier answered in 1.5 to 2.0 seconds but
-included a lookup as a third step; the careful tier corrected the plan to the
-two requested end actions at 4.8 to 5.9 seconds total. Same-origin resolver
-planning completed in 3.8 to 5.6 seconds. These are two successful samples and
-one cold failure, not a planner-accuracy measurement. The timeout behavior and
-tier correction are now measured rather than reasoned.
-
-Three deterministic measurements now need no model or credential.
-`eval.fixtures.ts` and `eval.test.ts` measure shortlist recall over twenty-one
-spoken requests against thirteen tools from four domains. At the shipped size
-of six the right tool is on the list 18 times out of 21; at eight it is still
-18; with every slot free it is 21. Six compound requests have 6/6 joint
-coverage at six slots, where a request counts only when every named end action
-reaches the model. Three result-to-argument fixtures have 3/3 handoff coverage,
-meaning an exact schema-compatible projection survives generic extraction for
-each one.
-
-The history matters because each move came from the eval rather than a hunch.
-The original full-registry result used to be 17/19 because `shortlist` returned
-only tools with a nonzero score, even when more cards fit. Recall at six moved
-from 13/19 to 14/19 when leftover slots started being shared between origins,
-then to 16/19 when ordinary action synonyms were canonicalized. Adding the
-communications source expanded the corpus rather than replacing it and yields
-the current 18/21 measurement.
-
-The next move was 14 to 16. Ordinary action synonyms are canonicalized on both
-sides, so "find me some oat milk" admits both `find_times` and
-`search_products`, and "tell Dana" admits `send_message`. The list contains
-only domain-neutral verbs. Adding `milk -> product` would be a per-site branch
-in different clothes.
-
-Read the 18 carefully. It is not planner accuracy, because a model is what
-happens next. It says only that the right tool is available to be chosen in
-eighteen cases, and that raising the shortlist to eight currently buys nothing
-on this small corpus.
-
-## Dusky as a provider
-
-Dusky consumes other sites' tools everywhere else. `apps/console/src/duskyTools.ts`
-is the other direction: four tools an agent in the same browser can call to
-drive a pair of glasses. Same protocol, both ends, one product. `e2e/provider.spec.ts`
-proves it through `document.modelContext.executeTool` with nothing mocked.
-
-The tools are `get_display_status`, `list_display_actions`,
-`send_task_to_display` and `cancel_active_task`. `exposedTo` is deliberately
-omitted, which is what makes them available to the browser's own agent, the
-ChatGPT desktop browser case.
-
-Two constraints are load-bearing and both are enforced in `SessionActor`,
-never in the console. The console is a transport; a rule enforced in the
-browser is enforced in the layer an attacker is already standing in.
-
-1. **No request carries a session identifier.** `AgentRequest` has no field for
-   one and no tool declares a parameter for one. The session is whichever one
-   this console page is paired to. A tool that accepted a session id would let
-   anyone reaching it drive any session whose pairing code they could guess,
-   and codes are six characters because a wearer reads them off a lens.
-2. **A task is refused while the wearer is mid-decision**, and the check runs
-   BEFORE the planner check, because not interrupting someone is an invariant
-   and must not depend on how a deployment is configured. Refusing during a
-   pending confirmation is the security case: otherwise an agent could swap
-   what is about to be approved while the wearer's attention is on the old
-   target. Cancelling, by contrast, is always allowed, because it can only ever
-   stop something from happening.
-
-An agent can ask. Only the wearer can approve. A task goes through the same
-`Session` a gesture does, so it meets `packages/policy` and the gate exactly
-as a gesture would, and `list_display_actions` tells an agent up front which
-actions will stop for a human.
-
-## Browser reality, verified 2026-08-25 against Chrome 151.0.7922.174
-
-These are in `packages/webmcp`, the only file allowed to know them:
-
-- The API is **`document.modelContext`**, not `navigator.modelContext`. It moved
-  to `Document` on 2026-05-27. Most training data and blog posts are stale.
-- **`executeTool` requires JSON-string arguments in Chrome**, despite the IDL
-  taking an object. The spec changed to objects on 2026-08-17 (#246) and Chrome
-  has not caught up. We try the spec shape first, then fall back. Delete the
-  fallback when Chrome stable accepts objects.
-- **`inputSchema` comes back as a string**, not an object. Parse defensively.
-- **AbortSignal cancellation does not work** (WPT `executeTool-abort` 0/5). We
-  pass the signal anyway, but `Session.execute` RACES against its own deadline.
-  Awaiting the invoke directly hangs forever against a site that ignores the
-  signal. This was a real bug; do not reintroduce it.
-- Cross-origin consumption is browser-enforced: the provider passes
-  `exposedTo: [origin]`, the consumer passes `getTools({fromOrigins})`, and the
-  iframe needs `allow="tools"`. An origin that was not named gets zero tools.
-- Chromium ships a CDP `WebMCP` domain (`invokeTool`, `toolsAdded`,
-  `toolInvoked`, `toolResponded`). That is the future server-side path.
-- Flag: `--enable-features=WebMCPTesting`, matching
-  `chrome://flags/#enable-webmcp-testing`.
-- Tool ordering from `getTools` is the browser's business. Never depend on it.
-  The wearer's menu did, until `menuOrder` in `packages/frames` gave it a total
-  order of its own: the ceremony `packages/policy` assigns, then the label,
-  then `toolId`. That is why the row a wearer lands on cannot cost them
-  anything, and why the same sites produce the same menu twice. The argument
-  for that order, and the three alternatives it turns down, are in the comment
-  above it rather than here.
-
-  A menu spanning several sites that will not fit four rows shows a row per
-  site instead, and that site's actions one press behind it. The local Chrome
-  suite verifies eleven actions from three origins remain reachable in one tab.
-  Grouping is navigation over a combined registry, never a partition of one:
-  the planner still ranks every site's tools together and one spoken request
-  can cross several businesses.
-- **`getTools({fromOrigins})` also returns THIS document's own registered tools**,
-  even when `fromOrigins` names only other origins. Verified 2026-08-26 against
-  151.0.7922.174, the day Dusky started registering tools of its own and
-  "Send task to display" appeared on the wearer's menu as though the shop had
-  offered it. `WebMcpBridge.discover` filters to the requested origins. Keep
-  the filter even after Chrome fixes this; accepting only what you asked for is
-  correct regardless.
-
-## Meta Ray-Ban Display reality
-
-- Web Apps are HTML/CSS/JS on a public HTTPS URL. Fixed **600x600**, no
-  scrolling, **88px** minimum interactive target, 16px body / 20-24px primary.
-- The display is an **additive waveguide**: black emits nothing and is
-  transparent against the room. `packages/tokens` keeps a separate `--emit-*`
-  palette for this. Never theme it, never invert it.
-- Input is Neural Band and temple captouch translated by the OS into
-  `ArrowUp/Down/Left/Right`, `Enter`, `Escape`. No mouse, no cursor, no raw
-  gestures.
-- Parameter and projection frames always reserve one of the four rows for a
-  visible Back control. A site submenu reserves one for Back to sites. The
-  navigation ids are handled before argument coercion, so they can never become
-  values sent to a provider.
-- **No camera, no microphone, no notifications.** Free text arrives through the
-  on-glasses composer (handwriting or dictation) on focus-then-tap, committing
-  via ordinary `input`/`change` events.
-- WebSocket, fetch, Service Worker and localStorage (5 MB) are supported.
-- Budget: under 3s load, under 500 KB JS gzipped, under 10 network requests.
-  The Display bundle is currently about 63 KB gzipped. Keep it that way.
-- The docs site 400s on plain curl. Use
-  `https://wearables.developer.meta.com/llms.txt?full=true`, but note its
-  capability index is STALE. The authoritative source is `AGENTS.md` in
-  `github.com/facebook/meta-wearables-webapp`.
-
-## React traps already hit here
-
-Each of these cost real debugging time. Do not undo the fixes.
-
-- **WebSocket disposal state must be local to the effect invocation**, not a
-  `useRef`. A shared ref is reset by the next mount, so the previous socket's
-  close handler sees "not disposed" and starts a reconnect nobody owns. Under
-  StrictMode this becomes a reconnect storm, and every reconnect pushed a new
-  frame that reset the wearer's focus to the top of the list.
-- **`registerTools` takes a caller-owned `signal` created synchronously.**
-  Registration is async; a disposer that only exists after the promise resolves
-  leaves a window where StrictMode's second pass collides with the first,
-  producing "Duplicate tool name" and then unregistering the survivors.
-- Composer input commits exactly once, on Enter or blur, never per keystroke.
-
-## Commands
+# Dusky contributor rules
+
+Dusky turns authorized WebMCP tools into a gesture-driven interface for Meta
+Ray-Ban Display.
+
+Do not guess about browser or device behavior. Inspect the implementation, run
+the relevant tests, and prefer measured runtime evidence when it conflicts with
+documentation.
+
+## Read the focused documents
+
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Trust model](./docs/TRUST-MODEL.md)
+- [Provider guide](./docs/PROVIDER-GUIDE.md)
+- [Genericity](./docs/GENERICITY.md)
+- [Verification](./docs/VERIFICATION.md)
+- [WebMCP and display runtime](./docs/WEBMCP-RUNTIME.md)
+- [Deployment](./DEPLOY.md)
+- [Field notes](./FIELD-NOTES.md)
+
+Keep detailed rationale in those documents. Keep this file focused on rules
+that must survive code changes.
+
+## Runtime boundaries
+
+- `apps/display` renders one frame and sends wearer input. It executes no tools and owns no task state.
+- `apps/console` loads provider pages, discovers WebMCP tools, and invokes live handles in those pages.
+- `apps/server` owns each paired task and pushes every visible frame to the Display.
+
+Browser-managed cookies and session state are not copied into tool descriptors.
+Tool arguments and raw result strings pass through the relay while a task runs.
+
+## Load-bearing rules
+
+### 1. No provider-specific behavior
+
+Shared behavior must not branch on a known provider, origin, brand, complete
+fixture tool name, or provider-specific result key.
+
+The source registry may contain display metadata and URLs. It must not contain
+tools, adapters, policy, argument mappings, or result parsers.
+
+When a provider reveals a generic bug, fix the generic rule and add a test.
+
+### 2. Identity is `(origin, name)`
+
+A tool name is not unique. Wearer choices, live handles, queued steps, and
+invocation targets must preserve both origin and name.
+
+A bare name may resolve only when it is unique among the candidates offered.
+
+### 3. The model proposes and code disposes
+
+A planner may suggest tools and arguments. It cannot authorize them.
+
+Validate planner output in `packages/planner` and independently in
+`packages/session`. The tool must have been offered and Display-operable, its
+identity must resolve, argument names must be declared, and values must pass
+the supported primitive conversion or enum check.
+
+Dusky does not implement full JSON Schema validation. Providers must validate
+their complete input before performing an action.
+
+Planner failure returns the wearer to deterministic menus and parameters.
+
+### 4. Success comes from the returned result
+
+Do not report success merely because invocation returned. An explicit negative
+result is failure. Unknown shapes are not automatically failure.
+
+Tool output is always untrusted and must remain bounded inert text.
+
+### 5. Annotations may lower ceremony, not authority
+
+`readOnlyHint` is a provider claim. Hard financial, destructive, schema, or
+leading mutation evidence can prevent it from lowering ceremony.
+
+Unknown tools default to write. Every non-read classification requires wearer
+confirmation.
+
+`packages/policy` remains deterministic and dependency-free. It has no model,
+network, DOM, clock, random source, or application dependency.
+
+### 6. Never retry a non-read action automatically
+
+A timeout means the outcome is unknown. Only reads may offer an automatic retry.
+
+A browser compatibility probe must use a temporary local read-only tool. Never
+use an ordinary provider action to discover the browser's argument shape.
+
+### 7. Automatic resolvers stay on the target origin
+
+A resolver must be read-only and same-origin with its target. Filter candidates
+before planning and validate the answer again in the session.
+
+Cross-origin reuse requires explicit transfer consent.
+
+### 8. Preserve origin fairness
+
+Alphabetical ties must not allow one origin to occupy every remaining planner
+slot. Keep positive matches in score order and fill unmatched capacity fairly
+across origins.
+
+Only domain-neutral action synonyms belong in the shared synonym list.
+
+### 9. Accept a bounded plan whole
+
+A task contains at most four ordered end actions. Validate every tool identity
+and Display-operability before starting. Reject the whole plan if any tool is
+unknown, ambiguous, unavailable, or cannot be driven on the Display.
+
+Drop undeclared or incompatible proposed arguments and collect any remaining
+required values through the ordinary Display flow.
+
+Resolve each step again when it begins. Each step receives its own parameter
+handling and policy gate. One approval never covers two invocations.
+
+Bind parameter handling and policy to the exact discovered declaration. Recheck
+that declaration in the session and again against the browser's live handle
+immediately before invocation. A matching `(origin, name)` is not enough when
+the declaration changed.
+
+### 10. Cross-origin transfer requires exact consent
+
+Retain only bounded projections with provenance. Do not retain the raw result as
+task state or return it to the planner.
+
+A transfer frame shows source, destination, destination argument, exact value,
+Share, and Cancel.
+
+Revalidate the destination identity, schema, argument, and value immediately
+before applying it. Transfer approval does not approve the destination action.
+
+Audit provenance and decisions, not transferred values or message bodies.
+
+### 11. Push every visible transition
+
+Transports push from `onTransition`, not only after a session method returns.
+Planning, working, confirmation, transfer, result, and error frames must reach
+the wearer when they happen.
+
+Reconnects replay an unchanged frame with the same frame identifier so focus
+does not reset.
+
+Reject choices, text, and cancellation whose frame identifier is no longer
+current. Replay the current frame without applying or acknowledging stale
+input.
+
+### 12. Outside agents cannot replace a wearer decision
+
+Agent requests contain no session identifier and apply only to the session
+paired with that console document.
+
+Refuse a new task while the wearer is deciding or an unfinished task is active.
+Cancellation remains allowed because it cannot authorize work. It clears
+pending and future state but cannot recall an invocation already sent.
+
+## Display constraints
+
+- Fixed 600 by 600 pixels with no scrolling
+- Interactive targets at least 88 pixels high
+- At most four rows
+- Visible Back on parameter and projection screens
+- Back to sites inside provider submenus
+- Navigation handled before argument coercion
+- Additive-display palette
+- No pointer, camera, microphone, notification, or raw-gesture assumptions
+- Composer commits once on Enter or blur
+
+## Browser and React traps
+
+Production WebMCP compatibility belongs in `packages/webmcp`.
+
+- Use `document.modelContext`.
+- Cross-origin discovery requires provider `exposedTo`, consumer `fromOrigins`, and iframe `allow="tools"`.
+- Filter discovery to requested origins.
+- Parse `inputSchema` defensively.
+- Do not depend on browser tool order.
+- Forward session cancellation to the paired browser invocation.
+- Keep a session deadline because browser cancellation may not stop execution.
+
+React-specific rules:
+
+- WebSocket effect disposal state belongs to that effect invocation, not a shared ref.
+- Create the caller-owned registration controller synchronously.
+- Do not rebuild stable origin arrays on every render when they are effect dependencies.
+
+## Verification
 
 ```bash
-pnpm dev         # all six surfaces
-pnpm test        # unit
-pnpm test:e2e    # round trip in real Chrome with the flag
+pnpm dev
+pnpm test
 pnpm typecheck
 pnpm lint
+pnpm build
+pnpm test:e2e
+pnpm exec playwright test e2e/roundtrip.spec.ts
 ```
 
-The planner is off unless `DUSKY_PLANNER=on` is set on the relay, alongside a
-credential the Anthropic SDK can resolve. Everything passes without one.
+`e2e/roundtrip.spec.ts` is the load-bearing local proof. It must drive a Display
+choice through the relay and console, invoke a real WebMCP tool in a provider
+document, observe the result, and render the next frame.
 
-`e2e/roundtrip.spec.ts` is the load-bearing test. If it passes, Dusky works. Run
-it before claiming anything works.
+Run production tests only after the intended commit is deployed:
 
-## Why Web Apps and not the native toolkit
+```bash
+pnpm test:prod
+```
 
-Meta exposes Ray-Ban Display to third parties two ways, and Dusky deliberately
-takes the second.
-
-The **Device Access Toolkit** is a native iOS or Android SDK: a companion phone
-app renders a fixed component tree to the glasses over Bluetooth. Its input
-model is the constraint that rules it out here. The display runtime consumes
-directional input to move focus and the app is told only what was activated, so
-it never sees a direction and cannot bind a gesture to a specific action.
-
-**Web Apps** are ordinary HTML, CSS and JavaScript on a public HTTPS URL. They
-receive real `ArrowUp`/`ArrowDown`/`ArrowLeft`/`ArrowRight`, `Enter` and
-`Escape`, they run unmodified in a desktop browser, and they need no app review
-to distribute. That is why `apps/display` is a web page rather than a Swift
-target, and why anyone can exercise the full product without owning hardware.
+Record results with date, commit, and environment in
+[Verification](./docs/VERIFICATION.md).

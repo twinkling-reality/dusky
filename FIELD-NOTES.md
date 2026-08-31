@@ -1,11 +1,16 @@
 # Field notes
 
-Things that were only discovered by putting Dusky on a real pair of Meta
-Ray-Ban Display glasses, deploying it to real hosts, and running it against a
-real model. Every entry is something that looked fine on a desk.
+This is Dusky's chronological lab notebook.
 
-Kept because the failures are more informative than the successes, and because
-anyone building for this hardware will hit several of them.
+It records failures found on real glasses, real hosts, real browsers, and real
+model calls. The failures explain why several current rules exist.
+
+This file is not the source of truth for the current architecture, guarantees,
+or verification status. Read [Architecture](./docs/ARCHITECTURE.md),
+[Trust model](./docs/TRUST-MODEL.md), [Verification](./docs/VERIFICATION.md),
+and [WebMCP runtime](./docs/WEBMCP-RUNTIME.md) first.
+
+The entries below remain in discovery order.
 
 ---
 
@@ -28,6 +33,18 @@ than a relay holding a handful of live sessions needs.
 
 The code also moved into the frame's largest and brightest slot. The one thing
 a human has to transcribe was in the least legible element on the panel.
+
+### A frame identifier must reject old input
+
+The relay assigned stable frame identifiers so a reconnect would not reset
+focus, but it accepted every incoming `frameId` without comparing it with the
+current one. A delayed Enter, text commit, or Escape could therefore reach a
+newer screen.
+
+`SessionActor` now checks the identifier before acknowledging or forwarding an
+input. A mismatch replays the current frame under its existing id and applies
+nothing. The `Session` still owns state-level guards such as one approval per
+invocation; transport staleness and state authorization are separate rules.
 
 ### You cannot de-emphasise by dimming on an additive display
 
@@ -187,6 +204,22 @@ Do not push while recording.
 ---
 
 ## Building against WebMCP
+
+### Never discover the browser argument shape with a provider action
+
+Chrome 151 requires JSON-string arguments while the current WebMCP shape uses
+objects. The original bridge tried the object form on the first provider tool,
+caught an error containing `Failed to parse input`, and called that same tool
+again with a string.
+
+The error text is not authority. A provider can perform a side effect and then
+throw the same text, so the fallback could turn one approved action into two
+invocations.
+
+The bridge now registers a temporary local read-only probe, settles the browser
+shape against that harmless tool, removes it, and invokes every provider tool
+once. A regression test makes the provider throw the browser parse-error text
+after its simulated side effect and asserts there is no second call.
 
 ### `getTools({fromOrigins})` also returns your own tools
 
@@ -485,10 +518,11 @@ Worth listing separately: these were all live in a passing test suite.
   parses only within 32,768 characters, visits at most 128 nodes through depth
   6, keeps no more than twelve projections, and excludes any complete string
   longer than 120 characters. A projection has a stable location and type, but
-  no executable interpretation. The audit records that location and the two
-  origins without copying the value. Three deterministic handoff fixtures are
-  3/3, and hostile, oversized, deeply nested, stale-schema, cancellation, and
-  audit-leak cases are tests rather than prose.
+  no executable interpretation. The audit records bounded structural location
+  metadata and the two origins without copying the value or a provider-written
+  JSON key. Three deterministic handoff fixtures are 3/3, and hostile,
+  oversized, deeply nested, stale-schema, cancellation, and audit-leak cases
+  are tests rather than prose.
 
 - **`workingFrame` was computed but never transmitted.** The session set it and
   the transport only read the frame a call settled on, so the wearer stared at

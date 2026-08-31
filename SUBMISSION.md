@@ -1,164 +1,152 @@
-# Dusky submission
+# Dusky submission record
 
-## One-line pitch
+This file preserves the hackathon description and recording plan. It is not the
+primary developer guide or a current deployment claim.
 
-Dusky turns every WebMCP action available in your browser into one safe,
-gesture-driven interface on Meta Ray-Ban Display.
+## One-line description
 
-## Text description
+Dusky turns authorized website actions into simple Meta Ray-Ban Display
+screens, with confirmation before any action it does not classify as read-only.
 
-Dusky is a browser for a web made of tools instead of pages. Participating
-sites publish what they can do through WebMCP. Dusky discovers those actions in
-the user's own browser sessions, compiles each tool schema into a sequence of
-600x600 frames, and lets a wearer operate them with the six inputs available on
-Meta Ray-Ban Display.
+## Project description
 
-One spoken request can cross businesses that have never integrated with each
-other. "Reserve a table for four, then send the reservation details to Dana"
-becomes an ordered task spanning a restaurant and a communications desk.
-Neither site knows the other exists, and Dusky's shared packages contain no
-branch for either one. The browser already holds both sessions, so WebMCP
-supplies the missing common action layer.
+Meta Ray-Ban Display has a 600 by 600 screen, no cursor, no scrolling, four
+directional inputs, Enter, and Escape. A normal website does not fit that
+interaction model.
 
-The planner can propose up to four end actions, but it cannot authorize any of
-them. Dusky validates the entire plan against the tools the browser actually
-offered and refuses the whole plan if any step is invalid. Each future step is
-looked up again in the live registry before it starts. Each consequential step
-then reaches an independent policy gate and waits for a gesture from the
-wearer. A successful intermediate result shows the next action and its place in
-the task, so moving from one business to another is visible and deliberate.
+Dusky starts from the actions a provider declares through WebMCP. It uses the
+supported parts of each tool schema to build the screens needed to use it:
+provider menus, allowed values, text entry, confirmation, progress, transfer
+consent, and results.
 
-When the message needs information from the reservation result, Dusky keeps
-only bounded primitive projections and a generic summary with source
-provenance. It never gives the raw result back to the model. Dana is resolved
-through the communications site's own read-only contact lookup. The wearer
-chooses a projection, then sees a dedicated transfer frame naming both sites,
-the message-body argument, and the exact value. Share fills only that argument.
-Send message then reaches its separate action confirmation. One approval cannot
-stand in for the other.
+Tools execute inside their provider pages in the user's desktop browser. The
+provider must explicitly authorize the Dusky console origin before the browser
+exposes its tools.
 
-Dusky uses WebMCP in both directions. It consumes partner sites' tools to build
-the glasses interface, and it provides four tools of its own so an agent in the
-same browser can inspect the display, list available actions, send a task to the
-wearer, or cancel one. An agent may ask. Only the wearer can approve.
+The browser holds live provider handles and browser-managed session state. The
+relay holds task state and deterministic policy. Tool arguments and raw result
+strings pass through the relay.
 
-The demo includes three unrelated WebMCP sites with eleven tools and different
-vocabularies, schemas, parameter types, and result shapes. The same generic
-frame compiler handles all three. The deterministic shortlist reaches the
-expected tool in 18 of 21 single-action requests at the shipped six-card limit,
-keeps every expected action for 6 of 6 compound requests, and preserves an
-exact compatible projection for 3 of 3 result-handoff fixtures. The repository
-has 333 unit and deterministic tests plus 34 Playwright tests in real Chrome
-with WebMCP enabled.
+With the optional planner, one request can become a bounded plan of up to four
+actions. The planner can propose but cannot authorize. Dusky validates the plan
+against the tools the browser offered and rechecks each step against the live
+registry and schema before it begins.
 
-The three providers are default fixtures, not a closed integration list. A
-judge can supply one or more never-seen HTTPS provider URLs in the demo query
-string without editing or rebuilding Dusky. The console passes only those
-origins to WebMCP. Automated source audits reject fixture brands, fixture tool
-names, fixture result keys, application imports, and source-registry imports in
-the executable frame, session, policy, and planner packages.
+Cross-provider information transfer is a separate decision. Dusky retains only
+bounded primitive projections and a generic summary from an intermediate
+result. Before one value fills another provider's argument, the Display shows
+the source, destination, field, and exact value. Sharing does not approve the
+destination action.
 
-Live three-source demo, verified by the 10-test production suite on 2026-08-29:
-https://dusky-console.vercel.app
+The demo contains three first-party fixture providers with eleven tools across
+shopping, reservations, and communications. A fourth test-only provider is
+absent from the default registry. A real-Chrome test supplies its URL at
+runtime, discovers its tool, builds an enum screen, invokes it, and renders its
+unfamiliar result fields without a provider adapter.
 
-Source: https://github.com/twinkling-reality/dusky
+This is evidence for the providers and schemas tested. It is not a claim of
+compatibility with arbitrary websites or every possible WebMCP schema.
 
-Video: add the public YouTube URL here
+See [Verification](./docs/VERIFICATION.md) for dated local counts and the
+separate production status. This record does not claim that its current text is
+deployed.
+
+The deterministic evaluation reports 18 of 21 shortlist recall, 6 of 6
+compound coverage, and 3 of 3 compatible result handoffs. Recall means the
+expected tool reached the shortlist. It is not model accuracy.
+
+Source: <https://github.com/twinkling-reality/dusky>
 
 ## Demo script, target 2:40
 
-### 0:00 to 0:15, start on the real glasses
+### 0:00 to 0:15
 
-Show the live Display recording, not a recreated panel.
+Show the real Display recording.
 
-Narration:
+> This is Dusky on Meta Ray-Ban Display. It converts supported WebMCP tool
+> schemas into a 600 by 600 interface and confirms tools it classifies as
+> non-read on the glasses.
 
-> This is Dusky running on Meta Ray-Ban Display. It turns the actions websites
-> publish through WebMCP into one interface I can drive with gestures.
+### 0:15 to 0:35
 
-### 0:15 to 0:35, reveal the browser
+Reveal the console, the three fixture providers, the Display panel, and the
+protocol log.
 
-Cut to the Dusky demo workspace. Keep the glasses panel, Verdant Market, Amber
-& Oak, Northstar Dispatch, and the live protocol log visible together.
+> Each provider explicitly exposes its own WebMCP tools to the console. The
+> browser holds the provider sessions. Dusky builds the Display interaction from
+> the schemas the browser returns.
 
-Narration:
+Point at `getTools({fromOrigins})`, the combined action registry, and the
+provider labels.
 
-> The shop, restaurant, and communications desk are separate sites in my
-> browser. Each exposes its own tools to Dusky. There is no connector between
-> them and no shared behavior written for any of their vocabularies.
+### 0:35 to 1:40
 
-Point briefly at the action list and the site labels. Let the log show
-`getTools({fromOrigins})`.
-
-### 0:35 to 1:45, the headline request
-
-Send or dictate:
+Submit:
 
 > Reserve a table for four, then send the reservation details to Dana.
 
-Show the following sequence without skipping the decision frames:
+This live model route can time out, decline, or fill parameters differently.
+Record the following sequence only when it actually occurs, and do not edit
+around a missing decision:
 
-1. Dusky asks for any restaurant value the planner could not honestly infer.
-2. The reservation reaches its confirmation frame. Say that nothing has run.
-3. Confirm on the glasses. Show Amber & Oak update from its own returned result.
-4. The result frame shows `Next: Send message` and `2/2`.
-5. Advance. Northstar Dispatch uses its same-origin contact lookup to offer Dana
-   rather than inventing an id.
-6. Choose the generic reservation summary. Stop on the transfer frame and read
-   Amber & Oak, Northstar Dispatch, Body, and the exact preview aloud. The
-   outbox is still empty.
-7. Choose Share. Stop again on the Send message confirmation. The information
-   has been approved for the message body, but no message has been sent.
-8. Confirm and show the Northstar outbox update, then the final result with one
-   provenance-bearing line for each completed site.
+1. answer any missing reservation parameter;
+2. stop on the reservation confirmation;
+3. confirm and show the reservations page update;
+4. stop on the visible next-step frame;
+5. choose Dana from the communications provider's lookup;
+6. choose the reservation projection;
+7. stop on the transfer frame and read source, destination, field, and value;
+8. choose Share;
+9. stop on the separate message confirmation;
+10. confirm and show the outbox and final result.
 
-Narration over the transition:
+> Sharing the reservation value did not send the message. The transfer and the
+> destination action were two separate wearer decisions.
 
-> One sentence became two actions at two businesses. Sharing the reservation
-> information did not authorize sending the message. Dusky showed the exact
-> handoff, checked the live schema again, and applied the action gate again.
+### 1:40 to 1:58
 
-### 1:45 to 2:10, show schema derivation
+Show a reservation schema beside generated enum, numeric, boolean, and composer
+screens. Show the visible Back row.
 
-Point at one restaurant schema with its string enum, integer enum, and boolean,
-then at the generated choices on the panel.
+> These controls come from JSON Schema. No reservation-specific Display screen
+> exists in Dusky.
 
-Narration:
+### 1:58 to 2:18
 
-> These controls are compiled from the tool schema. A string enum becomes
-> choices, an integer enum stays numeric, a boolean becomes yes or no, and free
-> text opens the glasses composer. The restaurant exists to prove this is not a
-> shop-shaped integration.
+Show Canopy Lab supplied through a runtime `site` value. Choose `garden` and
+show the returned shade and condition fields.
 
-### 2:10 to 2:28, WebMCP in the other direction
+> Canopy Lab is absent from the default registry. The browser test supplies its
+> URL at runtime and completes the same WebMCP-to-Display path without a provider
+> adapter. That proves this provider path, not universal compatibility.
+
+### 2:18 to 2:30
 
 Show the browser agent calling `list_display_actions` or
 `send_task_to_display`.
 
-Narration:
+> Dusky also exposes WebMCP tools. An agent in this browser can request a task,
+> while the session and confirmation rules remain in control.
 
-> Dusky also publishes WebMCP tools of its own. An agent in this browser can ask
-> the glasses to take on a task, but it cannot name another session and it
-> cannot approve for the wearer.
+### 2:30 to 2:40
 
-### 2:28 to 2:40, close on the product thesis
+Return to the final Display frame and updated fixture pages.
 
-Return to the glasses result and the two updated sites, with all three sources
-still held in the browser.
-
-Narration:
-
-> The browser holds capability and session. The glasses hold attention and
-> authority. Dusky moves intent between them, never credentials.
+> WebMCP supplies provider capabilities. Dusky turns them into a Display
+> interaction with the wearer in the visible decision path.
 
 ## Recording preflight
 
-- Push only after receiving explicit approval to commit.
-- Wait for all five Vercel surfaces and the Render relay to finish deploying.
-- Run `pnpm test:prod` and require all ten tests to pass against the live URLs.
-- Open all three demo sites and confirm all eleven actions are present.
-- Confirm the glasses can open a WebSocket to the relay before rehearsing.
-- Clear the demo cart, reservations, drafts, and outbox before every take.
-- Record through Meta AI app, Devices, Record Display.
-- Keep the final edit under three minutes and include narration audio.
-- Upload publicly to YouTube, then replace the video placeholder above.
+- Run `pnpm test`, `pnpm typecheck`, `pnpm lint`, and `pnpm build`.
+- Require all local Playwright tests to pass.
+- Describe the planner configuration accurately.
+- Do not skip either action confirmation or the transfer frame.
+- Confirm Back and Back to sites remain visible.
+- Confirm Canopy Lab is absent from the default registry.
+- Describe all bundled providers as fixtures.
+- Do not claim compatibility with arbitrary websites.
+- Clear fixture state before each take.
+- If recording a deployment, run `pnpm test:prod` after deploying the intended commit.
+- Verify focus, Enter, Escape, composer, and reconnect behavior on physical glasses.
+- Record through the Meta AI app.
+- Keep the final edit under three minutes and include narration.

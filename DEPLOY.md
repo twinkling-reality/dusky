@@ -1,224 +1,225 @@
-# Deploying Dusky, and getting it onto the glasses
+# Deploy Dusky
 
-## Deployment target as of 2026-08-29
+Dusky has five static web surfaces and one WebSocket relay. The Display runs on
+Meta Ray-Ban Display. Provider tools run inside provider pages in the console's
+desktop browser.
 
-The console holds every partner site at once, so all five static surfaces have
-to be up for the demo to be what it claims. `e2e/production.spec.ts` checks
-each of them, which is why it exists: `dusky-reservations` once answered
-DEPLOYMENT_NOT_FOUND with the rest of the suite green, because a claim nothing
-asserts is a claim nothing can catch.
+## Choose deployment origins first
 
-All six surfaces were deployed from `f7d9656` on 2026-08-29. The production
-suite passed 10/10 against the stable URLs below, including three-origin WebMCP
-discovery, a deployed tool invocation, browser-agent control, and a live
-two-step planner result.
+Every surface needs a stable public origin before the build-time variables can
+be set. A self-hosted deployment needs values for:
 
-| Surface | URL |
-| --- | --- |
-| Display, for the glasses | https://dusky-display.vercel.app |
-| Website and demo | https://dusky-console.vercel.app |
-| Verdant Market | https://dusky-market.vercel.app |
-| Amber & Oak | https://dusky-reservations.vercel.app |
-| Northstar Dispatch | https://dusky-dispatch.vercel.app |
-| Relay | https://dusky-relay.onrender.com |
+| Surface | Project root | Example origin |
+| --- | --- | --- |
+| Display | `apps/display` | `https://display.example` |
+| Console | `apps/console` | `https://console.example` |
+| Market fixture | `apps/market` | `https://market.example` |
+| Reservations fixture | `apps/reservations` | `https://reservations.example` |
+| Communications fixture | `apps/dispatch` | `https://dispatch.example` |
+| Relay | `apps/server` | `https://relay.example` |
 
-Two deployment facts remain deliberately manual:
+The five static surfaces can run on any public CDN. The relay needs persistent
+WebSocket support. Deployment protection or a login page prevents the glasses
+or provider frames from loading.
 
-- `DUSKY_PLANNER=on` and `ANTHROPIC_API_KEY` are configured on the relay. The
-  first cold live request exhausted the seven-second planning budget and fell
-  back to the menu. Two immediate repeats produced the intended two-step task.
-  This is measured live behavior, not a guarantee that every model call will
-  answer inside the budget.
-- Viewing the console needs WebMCP in the browser: the ChatGPT desktop app's
-  built-in browser, or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`.
-  The console says so plainly when the API is missing.
+## Static hosting
 
+Create one Vercel project for each static root:
 
-Six surfaces. Five are static and belong on any CDN. One holds WebSockets and
-does not.
-
-| Surface | What it is | Where it runs | Host |
-| --- | --- | --- | --- |
-| `apps/display` | The 600x600 app the wearer sees | On the glasses | Vercel |
-| `apps/console` | The website: front door at `/`, demo at `/demo` | A desktop browser | Vercel |
-| `apps/market` | Verdant Market, a test service | A desktop browser | Vercel |
-| `apps/reservations` | Amber & Oak, a second test service | A desktop browser | Vercel |
-| `apps/dispatch` | Northstar Dispatch, a communications test service | A desktop browser | Vercel |
-| `apps/server` | The session relay | A server | Render, Railway or Fly |
-
-**Only the Display runs on the glasses.** Tools execute inside the partner
-site's document in the console's browser, which is why Dusky never holds a
-partner's credentials. A real test therefore needs the Display on the glasses
-AND the console open on a computer, in Chrome with the WebMCP flag or in the
-ChatGPT desktop browser. Glasses alone cannot do anything, and that separation
-is the architecture rather than a limitation.
-
-## Choose all six names before deploying anything
-
-The console needs each partner site's URL, and each partner site needs the
-console's origin. That looks circular and is not, because a Vercel project's URL
-is derived from its name. Pick the names first and every value below is known
-before the first deploy.
-
-```
-dusky-display.vercel.app
-dusky-console.vercel.app
-dusky-market.vercel.app
-dusky-reservations.vercel.app
-dusky-dispatch.vercel.app
-dusky-relay.onrender.com
+```text
+apps/display
+apps/console
+apps/market
+apps/reservations
+apps/dispatch
 ```
 
-## 1. The relay
+For each project:
 
-`render.yaml` in this repository describes the service. Point Render at the
-repo and it reads it. Railway and Fly work from the same two commands:
+- set **Root Directory** to that app path;
+- enable **Include source files outside of the Root Directory**;
+- use `pnpm build` as the build command;
+- use `dist` as the output directory;
+- keep the framework set to Vite;
+- make every surface public if it is intended to work on the glasses or inside
+  the console.
+
+`apps/console/vercel.json` supplies the SPA rewrite for `/demo`. Another host
+must provide an equivalent fallback from application routes to `index.html`.
+
+## Relay hosting
+
+`render.yaml` defines the current Render service.
+
+Build:
 
 ```bash
-corepack enable && pnpm install --prod --frozen-lockfile
+pnpm --version && pnpm install --prod --frozen-lockfile
+```
+
+Start:
+
+```bash
 pnpm --filter @dusky/app-server start
 ```
 
-`tsx` is a runtime dependency of `@dusky/app-server` rather than a dev tool,
-which is what lets `--prod` work. Verified by running a production-only install
-in a clean copy and hitting `/health`.
+Health endpoint:
 
-Check it before going further:
-
-```bash
-curl https://dusky-relay.onrender.com/health
+```text
+/health
 ```
 
-That must return `{"ok":true,"sessions":0}`.
+A healthy relay returns an object containing:
 
-**A free tier that sleeps will ruin a demo.** Render's free web services spin
-down when idle and cold-start on the next request, which a judge or a wearer
-experiences as Dusky being broken. Use a paid instance for anything anyone else
-will touch.
+```json
+{"ok":true}
+```
 
-## 2. The five static surfaces
+The checked-in configuration mounts audit storage at `/var/data`. If the disk
+is removed, remove `DUSKY_AUDIT_DIR` so the deployment is explicitly
+memory-only. Avoid a relay plan that sleeps before a public demonstration.
 
-Each is a separate Vercel project from the same repository.
+Read [Security](./SECURITY.md) before exposing a relay to the public internet.
+The current relay uses short pairing codes rather than accounts and does not
+implement WebSocket Origin checks or request rate limiting.
 
-- **Root Directory**: `apps/display`, `apps/console`, `apps/market`,
-  `apps/reservations`, or `apps/dispatch`
-- **Enable "Include source files outside of the Root Directory"**. The workspace
-  packages live in `packages/`, so the build fails without it.
-- Build command `pnpm build`, output `dist`. Vite is detected automatically.
+## Environment
 
-**The console needs an SPA rewrite, and it has to be somewhere Vercel reads.**
-`/demo` is a client-side route, so the host must serve `index.html` for every
-path or a link straight to the demo returns a 404. Vercel reads `vercel.json`
-from the project's **Root Directory**, which for this project is `apps/console`,
-so the rewrite lives in `apps/console/vercel.json`.
+Vite reads `VITE_*` variables at build time. Changing one requires rebuilding
+and redeploying that surface.
 
-Note the discrepancy: the files in `vercel/` use repo-root-relative paths
-(`apps/console/dist`), which only makes sense if the Root Directory is the
-repository root. Nothing in this repository reads them, so they are reference
-copies rather than configuration. If a project's Root Directory really is the
-repo root, the rewrite has to move to a `vercel.json` there instead.
+Replace every example hostname below with the origins chosen for the same
+deployment.
 
-Either way `pnpm test:prod` checks that both `/` and `/demo` return the app,
-so a misplaced rewrite fails loudly rather than waiting for a judge to find it.
+### Display
 
-**Turn deployment protection off for every public demo surface.** Vercel's
-authentication sits in front of the page, and the glasses cannot log in. A
-protected partner iframe also cannot expose tools to the console, so protecting
-only one source produces a plausible but incomplete action list.
+| Variable | Self-hosted example |
+| --- | --- |
+| `VITE_RELAY_URL` | `wss://relay.example/display` |
 
-## 3. Environment
+### Console
 
-| Surface | Variable | Value |
+| Variable | Self-hosted example |
+| --- | --- |
+| `VITE_RELAY_URL` | `wss://relay.example/console` |
+| `VITE_DISPLAY_URL` | `https://display.example` |
+| `VITE_MARKET_URL` | `https://market.example` |
+| `VITE_RESERVATIONS_URL` | `https://reservations.example` |
+| `VITE_DISPATCH_URL` | `https://dispatch.example` |
+
+### Provider fixtures
+
+Set this on market, reservations, and communications:
+
+| Variable | Self-hosted example |
+| --- | --- |
+| `VITE_DUSKY_ORIGIN` | `https://console.example` |
+
+### Relay
+
+| Variable | Required | Value |
 | --- | --- | --- |
-| relay | `DUSKY_PLANNER` | `on` to enable spoken requests, omit for menu-only |
-| relay | `ANTHROPIC_API_KEY` | required only when the planner is on |
-| relay | `DUSKY_AUDIT_DIR` | a directory that outlives the container, or unset for memory only |
-| display | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/display` |
-| console | `VITE_RELAY_URL` | `wss://dusky-relay.onrender.com/console` |
-| console | `VITE_MARKET_URL` | `https://dusky-market.vercel.app` |
-| console | `VITE_RESERVATIONS_URL` | `https://dusky-reservations.vercel.app` |
-| console | `VITE_DISPATCH_URL` | `https://dusky-dispatch.vercel.app` |
-| console | `VITE_DISPLAY_URL` | `https://dusky-display.vercel.app` |
-| market | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
-| reservations | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
-| dispatch | `VITE_DUSKY_ORIGIN` | `https://dusky-console.vercel.app` |
+| `DUSKY_AUDIT_DIR` | With persistent audit storage | A persistent directory such as `/var/data/audit` |
+| `DUSKY_PLANNER` | No | `on` to enable interpreted and multi-step requests |
+| `ANTHROPIC_API_KEY` | When using the current Anthropic planner | Store as a host secret |
 
-The `VITE_*` values are read at BUILD time by Vite, so changing one means
-redeploying that surface, not restarting it.
+The planner is optional. Without it, Dusky remains menu-driven. Enabling the
+current planner sends the wearer's request and a bounded shortlist of
+provider-authored tool metadata to Anthropic. See [Security](./SECURITY.md) for
+the exact data boundary.
 
-`DUSKY_SOURCE` used to be here and is gone. It named ONE partner site for a
-whole process, which was already a lie the moment a second site existed and is
-unanswerable now that a console holds every site at once: no business name is
-true above a menu containing another business's actions. A wearer reads the
-name of whichever site a frame is about, sent by the console, which is the
-surface that actually has them loaded. A session holding exactly one site still
-reads that site's own name, derived from the tools that arrived rather than
-from anything configured.
+## Exact-origin authorization
 
-Trails on the audit disk are kept for a week and then expired, swept hourly and
-once at boot. That bounds a directory whose filenames are pairing codes, which
-anyone reaching the relay can invent. `/diagnostics/:id` answers "no trail for
-this code" once a trail has aged out, which is deliberately a statement about
-what is held rather than about what once happened.
+`VITE_DUSKY_ORIGIN` becomes each fixture provider's WebMCP `exposedTo` grant.
+It must exactly match that deployment's console origin.
 
-### The two failures worth knowing in advance
+For the self-hosted example:
 
-**`VITE_DUSKY_ORIGIN` must be the console's exact origin.** It becomes each
-partner site's `exposedTo` grant, and the browser compares it to the console's real
-origin character by character. A trailing slash, a path, `http` instead of
-`https`, or a preview URL instead of the production one, and Dusky discovers
-zero tools. That failure looks identical to "WebMCP is broken", so check it
-first whenever the console shows an empty tool list. No query parameter can
-override this grant. Letting an embedding page choose its own authorization
-origin would turn `exposedTo` into reflected input instead of a provider
-decision. Check every site: the console holds them all at once, so one site's
-grant being wrong shows up as a short list rather than an empty one.
+```text
+https://console.example
+```
 
-**`wss://`, never `ws://`.** An HTTPS page cannot open an insecure WebSocket;
-the browser blocks it as mixed content and the Display sits on "no connection".
+Do not add a trailing slash, path, query, different scheme, or unrelated
+preview origin. One wrong grant may appear as an incomplete action list when
+other providers still work. Runtime `site` values cannot override this
+authorization.
 
-## 4. Onto the glasses
+## Secure WebSockets
 
-Verified against `github.com/facebook/meta-wearables-webapp`, which is the
-authoritative source. There is no developer mode, no registration, no
-allowlisting and no review.
+HTTPS pages must use `wss://` URLs with the correct relay path:
 
-In the **Meta AI app** on your phone:
+```text
+wss://relay.example/display
+wss://relay.example/console
+```
+
+The browser blocks `ws://` from an HTTPS page as mixed content.
+
+## Official deployment example
+
+The repository's public demo currently uses these stable origins:
+
+| Surface | Origin |
+| --- | --- |
+| Display | <https://dusky-display.vercel.app> |
+| Console | <https://dusky-console.vercel.app> |
+| Market fixture | <https://dusky-market.vercel.app> |
+| Reservations fixture | <https://dusky-reservations.vercel.app> |
+| Communications fixture | <https://dusky-dispatch.vercel.app> |
+| Relay | <https://dusky-relay.onrender.com> |
+
+These values are examples for the official deployment. Do not copy them into a
+self-hosted deployment unless the intention is to connect to the official
+services.
+
+## Install on the glasses
+
+In the Meta AI app, open:
 
 **Devices → Display Glasses settings → App connections → Web apps → Add a web app**
 
-Enter a name and `https://dusky-display.vercel.app`. That is the whole install.
+Add the Display URL for the deployment. For the official example:
 
-A QR code is optional. It encodes exactly the same two values and simply
-automates typing them:
+```text
+https://dusky-display.vercel.app
+```
+
+An optional QR code can be generated with:
 
 ```bash
-node scripts/glasses-qr.mjs --url https://dusky-display.vercel.app
+node scripts/glasses-qr.mjs --url https://display.example
 ```
 
-That prints a QR in the terminal for your phone camera to read directly, and
-refuses a URL the glasses could never reach. Add `--out dusky-qr.png` for a
-file. The link it encodes is:
+After opening Dusky, read the six-letter code, open that deployment's console
+demo, enter the code, and keep the console open while using the glasses.
 
-```
-fb-viewapp://web_app_deep_link?appName=<name>&appUrl=<url-encoded-url>
-```
+## Release verification
 
-This is a different path from the Device Access Toolkit, where a native phone
-app renders to the glasses over Bluetooth. Here nothing is installed and
-nothing is built for the phone: the glasses fetch a URL. See "Why Web Apps and
-not the native toolkit" in `AGENTS.md`.
+Before claiming a production release works:
 
-## 5. What to check on real hardware
+1. Record `git rev-parse HEAD`.
+2. Run `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `pnpm test:e2e`.
+3. Deploy every affected surface.
+4. Verify each environment variable on the correct project.
+5. Wait for deployments and the relay restart.
+6. Check the relay health endpoint.
+7. Run a production browser suite against the exact deployed origins.
+8. Require every test in that suite to pass.
+9. Record the commit, date, environment, command, and complete result.
 
-None of this has met glasses yet, so treat every line as a hypothesis:
+`pnpm test:prod` currently targets the six official origins hardcoded in
+`e2e/production.spec.ts`. It does not verify a self-hosted deployment. Point an
+equivalent suite at the self-hosted origins before making a self-hosted
+production claim.
 
-- Arrow keys and Enter arrive as `useDpad` expects, and Escape goes back.
-- The WebSocket survives the display sleeping and dimming. The reconnect logic
-  in `useRelay` exists and has never been tested against a real radio.
-- The composer opens on focus-then-tap and commits exactly once, by handwriting
-  and by dictation.
-- The Display loads inside Meta's budget. The bundle is 63 KB gzipped, well
-  under the 500 KB ceiling, but load time over the glasses' own link is unknown.
+The official production suite also expects the official planner profile to be
+enabled and usable. It checks browser-agent status and sends a live two-step
+request. A menu-only deployment is supported by the application but cannot pass
+that unchanged official suite.
 
-Report what fails rather than what works.
+## Historical production evidence
+
+Commit `f7d9656` passed the then-current ten production tests against the
+official deployment on 2026-08-29. That result applies only to that commit and
+deployment state. A current production claim requires a new complete run after
+the intended commit is deployed.
