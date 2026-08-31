@@ -175,10 +175,16 @@ test("the deployed console holds all three deployed sites at once", async ({ pag
   await expect(actions.getByText("Send message")).toBeVisible();
   await expect(actions.locator("li")).toHaveCount(11);
 
-  // Every row says whose it is, which is the one thing a mixed list needs.
-  await expect(actions.getByText("Verdant Market")).toHaveCount(4);
-  await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
-  await expect(actions.getByText("Northstar Dispatch")).toHaveCount(4);
+  // Each provider owns one adjacent action group in the topology.
+  await expect(
+    page.getByRole("article", { name: "Verdant Market actions" }).locator("li"),
+  ).toHaveCount(4);
+  await expect(
+    page.getByRole("article", { name: "Amber & Oak actions" }).locator("li"),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("article", { name: "Northstar Dispatch actions" }).locator("li"),
+  ).toHaveCount(4);
 });
 
 /**

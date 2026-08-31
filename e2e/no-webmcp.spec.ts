@@ -85,5 +85,5 @@ test("the embedded panel says the same thing, on the path a judge actually takes
   await expect(actions.getByText(/exposedTo/)).toHaveCount(0);
   // What it says instead, once per site: it could not read. True of a browser
   // that never reached any of them, and true whatever those sites published.
-  await expect(actions.getByText(/Could not read what/)).toHaveCount(3);
+  await expect(actions.getByText(/Could not read this page’s actions/)).toHaveCount(3);
 });

@@ -52,7 +52,8 @@ test("console discovers the partner site's tools cross-origin", async ({ page })
   const tools = discovered(page);
   await expect(tools.getByText("Search catalog")).toBeVisible();
   await expect(tools.getByText("Add to cart")).toBeVisible();
-  await expect(page.locator("text=getTools({fromOrigins})")).toBeVisible();
+  await page.getByRole("button", { name: "Technical log" }).click();
+  await expect(page.getByText("11 tools available").first()).toBeVisible();
 });
 
 test("a genuinely new runtime provider works without a rebuild or adapter", async ({ browser }) => {
@@ -108,9 +109,9 @@ test("a genuinely new runtime provider works without a rebuild or adapter", asyn
 test("policy classifies discovered tools without any site-specific rule", async ({ page }) => {
   await pairConsole(page);
   const row = discovered(page).locator("li", { hasText: "Add to cart" }).first();
-  await expect(row.locator("text=gated")).toBeVisible();
+  await expect(row.getByText("wearer confirms", { exact: true })).toBeVisible();
   const readRow = discovered(page).locator("li", { hasText: "Search catalog" }).first();
-  await expect(readRow.locator("text=read")).toBeVisible();
+  await expect(readRow.getByText("runs directly", { exact: true })).toBeVisible();
 });
 
 test("a gesture on the Display runs a real tool and changes the site", async ({ browser }) => {

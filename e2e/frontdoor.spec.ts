@@ -37,8 +37,8 @@ test("the front door offers both ways in as controls, and asks once", async ({ p
 
   /*
    * The same question used to be asked twice: a button and a floating
-   * underlined sentence here, and the whole question again on the start card
-   * behind /demo, which `?start=1` exists to skip.
+   * underlined sentence here, then an equal-choice screen behind /demo.
+   * The two routes now stay distinct all the way through the handoff.
    */
   const actions = page.locator("main").getByRole("link");
   await expect(actions.filter({ hasText: "Open Dusky" })).toHaveCount(1);
@@ -54,8 +54,11 @@ test("the front door offers both ways in as controls, and asks once", async ({ p
   // And the second one lands on the card that explains pairing.
   await actions.filter({ hasText: "I have glasses" }).click();
   await expect(page).toHaveURL(/\/demo$/);
-  await expect(page.getByLabel(/send it to your Ray-Ban Display/i)).toBeVisible();
-  await expect(page.getByText("The six letters on the lens.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect your display." })).toBeVisible();
+  await expect(page.getByLabel("Six-letter pairing code")).toBeVisible();
+  await expect(page.locator("#pair-instruction")).toHaveText(
+    "Enter the six-letter code shown on your lens.",
+  );
 });
 
 test("the requirements are one press away, and stated whether or not this browser meets them", async ({
@@ -172,7 +175,8 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   ).toHaveText("none sent");
   await expectReachableIn(lens, /Book table/);
   await expectReachableIn(lens, /Send message/);
-  await expect(page.getByText("getTools({fromOrigins})")).toBeVisible();
+  await page.getByRole("button", { name: "Technical log" }).click();
+  await expect(page.getByText("11 tools available").first()).toBeVisible();
 
   // The thing a judge must not have to discover by closing the tab. A footnote
   // at the end now, rather than a briefing sitting above the product.
@@ -180,7 +184,7 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
 
   // No pair code on this page. It is a thing a wearer reads off a lens and
   // types in, and in this mode the page minted it, opened the Display and
-  // paired itself. It lives on the start card, where somebody who actually
+  // paired itself. It lives on the pairing page, where somebody who actually
   // has glasses arrives.
   await expect(page.getByText("Pair code")).toHaveCount(0);
 
@@ -191,6 +195,7 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   const banner = page.getByRole("banner");
   await expect(banner.getByRole("link", { name: "Home" })).toBeVisible();
   await expect(banner.getByText(/^[A-Z]{6}$/)).toHaveCount(0);
+  await expect(banner.getByRole("button", { name: /Technical log/ })).toHaveCount(0);
 
   // One screen. A page whose whole job is "look, it works" cannot ask anybody
   // to scroll to find out whether it did.
@@ -220,13 +225,13 @@ test("the demo says what you are looking at, when asked", async ({ page }) => {
   // Every box on the page is named, including the one holding the sites. That
   // box used to be labelled with the single site's name; no business name is
   // true above a box containing another business, so it is labelled plainly.
-  await expect(what.getByText("Glasses", { exact: true })).toBeVisible();
-  await expect(what.getByText("Sites", { exact: true })).toBeVisible();
-  await expect(what.getByText("Declared actions", { exact: true })).toBeVisible();
-  await expect(what.getByText("Activity", { exact: true })).toBeVisible();
+  await expect(what.getByText("Display preview", { exact: true })).toBeVisible();
+  await expect(what.getByText("Provider pages", { exact: true })).toBeVisible();
+  await expect(what.getByText("Available actions", { exact: true })).toBeVisible();
+  await expect(what.getByText("Runtime activity", { exact: true })).toBeVisible();
 
   // And the line that says what to do, which is the point of the whole panel.
-  await expect(what.getByText(/Press a row on the glasses/)).toBeVisible();
+  await expect(what.getByText(/Choose an action on the Display/)).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("region", { name: "What is this" })).toHaveCount(0);
@@ -237,30 +242,239 @@ test("somebody who owns glasses can reach the pairing form from a running sessio
 }) => {
   /*
    * The front door's one button mints a session and embeds the panel, and the
-   * pairing form lives on the start card that button skips. So a visitor who
+   * pairing form lives on the page that button skips. So a visitor who
    * actually owns a pair had no route to it at all.
    */
   await page.goto(`${SITE}/demo?start=1`);
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
 
-  await page.getByRole("button", { name: "Pair glasses" }).click();
+  await page.getByRole("button", { name: "Use Ray-Ban Display" }).click();
 
-  await expect(page.getByRole("heading", { name: /Where do you want the screen/ })).toBeVisible();
-  await expect(page.getByLabel(/send it to your Ray-Ban Display/i)).toBeVisible();
-  await expect(page.getByText("The six letters on the lens.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect your display." })).toBeVisible();
+  await expect(page.getByLabel("Six-letter pairing code")).toBeVisible();
+  await expect(page.locator("#pair-instruction")).toHaveText(
+    "Enter the six-letter code shown on your lens.",
+  );
 
   // The session left the URL too, so a reload does not drop straight back into
   // the embedded panel it was just backed out of.
   await expect(page).not.toHaveURL(/session=/);
 });
 
-test("the start card still works for somebody who arrives at /demo directly", async ({ page }) => {
-  // `?start=1` is what the front door links to. The card behind it is the only
+test("the pairing page exposes the browser demo in the shared navigation", async ({ page }) => {
+  // `?start=1` is what the front door links to. The page behind it is the only
   // way to pair real glasses, so it cannot quietly rot.
   await page.goto(`${SITE}/demo`);
-  await page.getByRole("button", { name: /Run it in this browser/ }).click();
+  await expect(page.getByText("No glasses available?")).toHaveCount(0);
+  const navigationGaps = await page
+    .getByRole("banner")
+    .getByRole("navigation")
+    .evaluate((nav) => {
+      const items = [...nav.children].map((item) => item.getBoundingClientRect());
+      return items.slice(1).map((item, index) => item.left - items[index].right);
+    });
+  expect(navigationGaps).toHaveLength(2);
+  expect(Math.abs(navigationGaps[0] - navigationGaps[1])).toBeLessThan(0.5);
+  await page.getByRole("banner").getByRole("button", { name: "Open browser demo" }).click();
   await expect(page).toHaveURL(/session=[A-Z]{6}/);
   await expectReachableIn(page.frameLocator('iframe[title="Dusky on the glasses"]'), /Add to cart/);
+});
+
+test("the pairing code is the connection between this browser and the display", async ({
+  page,
+}) => {
+  await page.goto(`${SITE}/demo`);
+
+  const graph = page.getByTestId("pairing-graph");
+  await expect(graph).toBeVisible();
+  await expect(graph.locator('[data-side="browser"]')).toContainText("This tab");
+  await expect(graph.locator('[data-side="display"]')).toContainText("Waiting for code");
+  const connections = graph.locator("canvas");
+  await expect(connections).toHaveAttribute("data-measured-edges", "2");
+  await expect(connections).toHaveAttribute("data-orientation", "horizontal");
+  await expect(page.getByText(/Choices|Confirmations|Results/)).toHaveCount(0);
+
+  await page.getByLabel("Six-letter pairing code").fill("DUSKYA");
+  await expect(graph).toHaveAttribute("data-ready", "");
+  await expect(graph.locator('[data-side="display"]')).toContainText("Code ready");
+  await expect(page.getByRole("button", { name: "Connect display" })).toBeEnabled();
+});
+
+test("the pairing page and topology canvas do not widen a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+
+  await page.goto(`${SITE}/demo`);
+  await expect(page.getByRole("heading", { name: "Connect your display." })).toBeVisible();
+  await expect(page.getByTestId("pairing-graph").locator("canvas")).toHaveAttribute(
+    "data-orientation",
+    "vertical",
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(
+    0,
+  );
+
+  await page.goto(`${SITE}/demo?start=1`);
+  await expect(page.getByRole("heading", { name: "Display preview" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(
+    0,
+  );
+});
+
+test("the shared motion system sequences entry and respects reduced motion", async ({ page }) => {
+  await page.goto(SITE);
+  const animatedEntry = await page.evaluate(() => ({
+    rule: getComputedStyle(document.querySelector("#root") as Element, "::after").animationName,
+    hero: getComputedStyle(document.querySelector("[data-motion-item]") as Element).animationName,
+  }));
+  expect(animatedEntry.rule).toBe("dusky-rule-draw");
+  expect(animatedEntry.hero).toBe("dusky-item-enter");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  const reducedEntry = await page.evaluate(() => ({
+    rule: getComputedStyle(document.querySelector("#root") as Element, "::after").animationName,
+    hero: getComputedStyle(document.querySelector("[data-motion-item]") as Element).animationName,
+  }));
+  expect(reducedEntry.rule).toBe("none");
+  expect(reducedEntry.hero).toBe("none");
+
+  await page.goto(`${SITE}/demo?start=1`);
+  await expect(page.locator("canvas[data-reduced-motion]")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
+});
+
+test("the topology meets the page rails and keeps provider rows distinct", async ({ page }) => {
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`${SITE}/demo?start=1`);
+    await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
+
+    const geometry = await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLElement>('[data-testid="topology-canvas"]');
+      if (!canvas) throw new Error("Topology canvas is missing");
+      const canvasBox = canvas.getBoundingClientRect();
+      const style = getComputedStyle(canvas);
+      const frame = document.querySelector<HTMLElement>("#root");
+      if (!frame) throw new Error("Shared page frame is missing");
+      const frameBox = frame.getBoundingClientRect();
+      const frameStyle = getComputedStyle(frame);
+      const rail = frameBox.left + Number.parseFloat(frameStyle.borderLeftWidth);
+      const route = document.querySelector<HTMLElement>('[data-motion-route="workspace"]');
+      if (!route) throw new Error("Workspace route is missing");
+      const pairs = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-topology-focus^="provider:"]'),
+      );
+      const boxes = pairs.map((pair) => {
+        const pairBox = pair.getBoundingClientRect();
+        const providerBox = pair.querySelector("figure")?.getBoundingClientRect();
+        const actionBox = pair.querySelector("article")?.getBoundingClientRect();
+        const actionList = pair.querySelector<HTMLElement>("article ul");
+        return {
+          top: pairBox.top,
+          bottom: pairBox.bottom,
+          height: pairBox.height,
+          childBottom: Math.max(providerBox?.bottom ?? 0, actionBox?.bottom ?? 0),
+          actionHeight: actionBox?.height ?? 0,
+          listClientHeight: actionList?.clientHeight ?? 0,
+          listScrollHeight: actionList?.scrollHeight ?? 0,
+        };
+      });
+      return {
+        rail,
+        canvasLeft: canvasBox.left,
+        canvasRight: canvasBox.right,
+        borderWidth: style.borderTopWidth,
+        radius: style.borderTopLeftRadius,
+        frameBorderLeft: frameStyle.borderLeftWidth,
+        frameBorderRight: frameStyle.borderRightWidth,
+        sharedRuleHeight: getComputedStyle(frame, "::after").height,
+        routeBorderTop: getComputedStyle(route).borderTopWidth,
+        bodyRule: getComputedStyle(document.body, "::after").content,
+        boxes,
+      };
+    });
+
+    expect(Math.abs(geometry.canvasLeft - geometry.rail)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.canvasRight - (viewport.width - geometry.rail))).toBeLessThanOrEqual(
+      1,
+    );
+    expect(geometry.borderWidth).toBe("0px");
+    expect(geometry.radius).toBe("0px");
+    expect(geometry.frameBorderLeft).toBe("1px");
+    expect(geometry.frameBorderRight).toBe("1px");
+    expect(geometry.sharedRuleHeight).toBe("1px");
+    expect(geometry.routeBorderTop).toBe("0px");
+    expect(geometry.bodyRule).toBe("none");
+    geometry.boxes.forEach((box) => {
+      expect(box.childBottom).toBeLessThanOrEqual(box.bottom + 1);
+      expect(box.actionHeight).toBeLessThanOrEqual(box.height + 1);
+    });
+    expect(geometry.boxes[1]?.actionHeight).toBeLessThan((geometry.boxes[1]?.height ?? 0) - 4);
+    expect(geometry.boxes[1]?.listScrollHeight).toBeLessThanOrEqual(
+      (geometry.boxes[1]?.listClientHeight ?? 0) + 1,
+    );
+    for (let index = 1; index < geometry.boxes.length; index += 1) {
+      expect(geometry.boxes[index]?.top).toBeGreaterThanOrEqual(
+        (geometry.boxes[index - 1]?.bottom ?? 0) - 1,
+      );
+    }
+
+    const overflowSizing = await page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>('[data-node-id^="actions:"]');
+      const list = card?.querySelector<HTMLElement>("ul");
+      const row = list?.querySelector("li");
+      if (!card || !list || !row) throw new Error("Action card is not measurable");
+      for (let index = 0; index < 8; index += 1) list.append(row.cloneNode(true));
+      return {
+        cardHeight: card.getBoundingClientRect().height,
+        maxHeight: Number.parseFloat(getComputedStyle(card).maxHeight),
+        clientHeight: list.clientHeight,
+        scrollHeight: list.scrollHeight,
+      };
+    });
+    expect(overflowSizing.cardHeight).toBeLessThanOrEqual(overflowSizing.maxHeight + 1);
+    expect(overflowSizing.scrollHeight).toBeGreaterThan(overflowSizing.clientHeight);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${SITE}/demo?start=1`);
+  await expect(page.getByRole("button", { name: "Flow: left to right" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(
+    0,
+  );
+  const firstProviderTop = await page
+    .locator('[data-topology-focus^="provider:"]')
+    .first()
+    .evaluate((element) => element.getBoundingClientRect().top);
+  expect(firstProviderTop).toBeLessThan(844);
+
+  await page.getByRole("button", { name: "Flow: left to right" }).click();
+  await expect(page.getByRole("button", { name: "Flow: top to bottom" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(
+    0,
+  );
+});
+
+test("a lens code stays in glasses mode across a reload", async ({ page }) => {
+  await page.goto(`${SITE}/demo`);
+
+  const code = "DUSKYA";
+  await page.getByLabel("Six-letter pairing code").fill(code);
+  await page.getByRole("button", { name: "Connect display" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`session=${code}`));
+  await expect(page).toHaveURL(/mode=glasses/);
+  await expect(page.getByRole("heading", { name: "Ray-Ban Display" })).toBeVisible();
+  await expect(page.locator('iframe[title="Dusky on the glasses"]')).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Ray-Ban Display" })).toBeVisible();
+  await expect(page.locator('iframe[title="Dusky on the glasses"]')).toHaveCount(0);
 });
 
 test("a gesture in the embedded panel changes the partner site in the same tab", async ({
@@ -404,14 +618,110 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
   await expect(actions.getByText("Send message")).toBeVisible();
   await expect(actions.locator("li")).toHaveCount(11);
 
-  // And the rows say whose they are, which is the only new thing a wearer
-  // needs when a menu stops belonging to one place. Counted rather than looked
-  // for: EVERY row carries its site, so finding one proves nothing about the
-  // other six, and the shop's four plus the restaurant's three is the whole
-  // list accounted for.
-  await expect(actions.getByText("Verdant Market")).toHaveCount(4);
-  await expect(actions.getByText("Amber & Oak")).toHaveCount(3);
-  await expect(actions.getByText("Northstar Dispatch")).toHaveCount(4);
+  // Actions are grouped beside the provider that exposed them, rather than
+  // repeating the provider name on every row.
+  await expect(
+    page.getByRole("article", { name: "Verdant Market actions" }).locator("li"),
+  ).toHaveCount(4);
+  await expect(
+    page.getByRole("article", { name: "Amber & Oak actions" }).locator("li"),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("article", { name: "Northstar Dispatch actions" }).locator("li"),
+  ).toHaveCount(4);
+  await expect(
+    page
+      .getByRole("article", { name: "Verdant Market actions" })
+      .getByRole("heading", { name: "4 actions" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("article", { name: "Amber & Oak actions" })
+      .getByRole("heading", { name: "3 actions" }),
+  ).toBeVisible();
+  await expect(actions.getByRole("heading", { name: "Available actions" })).toHaveCount(0);
+
+  // One paired Display owns one shared Browser Runtime trunk. Runtime then
+  // fans out through three independent cubic edges, while each origin retains
+  // its own measured capability relationship.
+  await expect(page.locator('[data-runtime-end="display"]')).toHaveCount(1);
+  await expect(page.locator('[data-runtime-end="browser"]')).toHaveCount(1);
+  await expect(page.locator('[data-provider-end="runtime"]')).toHaveCount(1);
+  await expect(page.locator("[data-provider-origin]")).toHaveCount(3);
+  const connections = page.locator("canvas[data-runtime-edges]");
+  await expect(connections).toHaveAttribute("data-runtime-trunks", "1");
+  await expect(connections).toHaveAttribute("data-provider-buses", "0");
+  await expect(connections).toHaveAttribute("data-provider-branches", "3");
+  await expect(connections).toHaveAttribute("data-runtime-edges", "4");
+  await expect(connections).toHaveAttribute("data-action-edges", "3");
+  await expect(connections).toHaveAttribute("data-connected-origins", "3");
+  await expect(connections).toHaveAttribute("data-activity-edges", "1");
+
+  // A node drag only repositions that logical group. It no longer masquerades
+  // as a canvas pan and pull every other component along with it.
+  const displayNode = page.locator('[data-node-id="display"]');
+  const runtimeNode = page.locator('[data-node-id="runtime"]');
+  const providerNode = page.locator('[data-node-id^="provider:"]').first();
+  const actionNode = page.locator('[data-node-id^="actions:"]').first();
+  const displayBefore = await displayNode.boundingBox();
+  const runtimeBefore = await runtimeNode.boundingBox();
+  const providerBefore = await providerNode.boundingBox();
+  const actionBefore = await actionNode.boundingBox();
+  expect(displayBefore).not.toBeNull();
+  expect(runtimeBefore).not.toBeNull();
+  expect(providerBefore).not.toBeNull();
+  expect(actionBefore).not.toBeNull();
+  if (displayBefore && runtimeBefore && providerBefore && actionBefore) {
+    const actionHandleBox = await actionNode.getByRole("heading").boundingBox();
+    expect(actionHandleBox).not.toBeNull();
+    if (!actionHandleBox) throw new Error("Action card drag handle was not measurable");
+    await page.mouse.move(
+      actionHandleBox.x + actionHandleBox.width / 2,
+      actionHandleBox.y + actionHandleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      actionHandleBox.x + actionHandleBox.width / 2 + 54,
+      actionHandleBox.y + actionHandleBox.height / 2 + 24,
+      { steps: 5 },
+    );
+    await page.mouse.up();
+
+    const displayAfter = await displayNode.boundingBox();
+    const runtimeAfter = await runtimeNode.boundingBox();
+    const providerAfter = await providerNode.boundingBox();
+    const actionAfter = await actionNode.boundingBox();
+    expect(displayAfter?.x).toBeCloseTo(displayBefore.x, 0);
+    expect(displayAfter?.y).toBeCloseTo(displayBefore.y, 0);
+    expect(runtimeAfter?.x).toBeCloseTo(runtimeBefore.x, 0);
+    expect(runtimeAfter?.y).toBeCloseTo(runtimeBefore.y, 0);
+    expect(providerAfter?.x).toBeCloseTo(providerBefore.x, 0);
+    expect(providerAfter?.y).toBeCloseTo(providerBefore.y, 0);
+    expect(actionAfter?.x).toBeCloseTo(actionBefore.x + 54, 0);
+    expect(actionAfter?.y).toBeCloseTo(actionBefore.y + 24, 0);
+
+    await page.getByRole("button", { name: "Center" }).click();
+    await expect(actionNode).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  }
+
+  // Like the reference orchestration canvas, placement is deterministic but
+  // the viewer can change the reading direction and pan the open field.
+  const layout = page.getByRole("button", { name: "Flow: left to right" });
+  await layout.click();
+  await expect(page.getByRole("button", { name: "Flow: top to bottom" })).toBeVisible();
+  await page.getByRole("button", { name: "Flow: top to bottom" }).click();
+  await expect(layout).toBeVisible();
+
+  const canvas = page.getByTestId("topology-canvas");
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  if (canvasBox) {
+    await page.mouse.move(canvasBox.x + canvasBox.width * 0.52, canvasBox.y + 90);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + canvasBox.width * 0.58, canvasBox.y + 125, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.getByRole("button", { name: "Center" })).toBeVisible();
+  }
 
   // Same session, same panel, same code: both reachable from the one menu.
   await expectReachableIn(lens, /Add to cart/);

@@ -51,12 +51,12 @@ test("policy classifies a site it has never seen, from the schema alone", async 
 
   // readOnlyHint honored: looking up tables changes nothing.
   const find = page.getByTestId("actions").locator("li", { hasText: "Find a table" }).first();
-  await expect(find.locator("text=read")).toBeVisible();
+  await expect(find.getByText("runs directly", { exact: true })).toBeVisible();
 
   // Not read-only, and "booking" is a domain word the policy already knew.
   // No rule was added for this site.
   const book = page.getByTestId("actions").locator("li", { hasText: "book_table" }).first();
-  await expect(book.locator("text=gated")).toBeVisible();
+  await expect(book.getByText("wearer confirms", { exact: true })).toBeVisible();
 
   // Default deny: nothing in change_reservation matches any lexicon, so it is
   // treated as a state change rather than waved through.
@@ -64,7 +64,7 @@ test("policy classifies a site it has never seen, from the schema alone", async 
     .getByTestId("actions")
     .locator("li", { hasText: "change_reservation" })
     .first();
-  await expect(change.locator("text=gated")).toBeVisible();
+  await expect(change.getByText("wearer confirms", { exact: true })).toBeVisible();
 });
 
 test("an enum in the schema becomes buttons, with no code in between", async ({ browser }) => {

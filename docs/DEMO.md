@@ -58,7 +58,7 @@ Then:
 1. Open Dusky on the glasses.
 2. Read the six-letter pairing code.
 3. Open <https://dusky-console.vercel.app/demo> in a WebMCP-capable desktop browser.
-4. Enter the code under **Or send it to your Ray-Ban Display**.
+4. Enter the code under **Six-letter pairing code**.
 5. Keep the console open while using the glasses.
 
 The glasses render frames and send input. Provider tools execute in the
