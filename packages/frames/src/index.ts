@@ -468,13 +468,21 @@ export function idleFrame(
   return {
     kind: "idle",
     source,
-    title: operable.length ? "What do you want to do?" : "No actions available here",
+    // A grouped frame contains navigation, not actions. Asking what somebody
+    // wants to DO above rows named after sites makes those names read like
+    // verbs. Ask the action question only after the wearer enters a site and
+    // the rows beneath it are actions again.
+    title: operable.length
+      ? grouped
+        ? "Choose a site"
+        : "What do you want to do?"
+      : "No actions available here",
     note: operable.length
       ? (note ??
         (grouped
           ? canSpeak
-            ? "Tap to speak, or choose where"
-            : "Choose where"
+            ? "Browse actions, or say what you want"
+            : "Each site contains its actions"
           : canSpeak
             ? "Tap to speak, or choose an action"
             : "Choose an action"))

@@ -200,7 +200,7 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
 
   // The Display connects over wss:// to a relay on a different host entirely.
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
-  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
 
   await focusChoice(displayPage, /Add to cart/);
   await displayPage.keyboard.press("Enter");
@@ -250,7 +250,7 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
   await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
-  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
 
   const status = await consolePage.evaluate(async () => {
     const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
@@ -293,7 +293,7 @@ test("one spoken request becomes a two-step cross-site result-sharing task", asy
   await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
 
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
-  await expect(displayPage.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
+  await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
 
   const sent = await consolePage.evaluate(async () => {
     const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;

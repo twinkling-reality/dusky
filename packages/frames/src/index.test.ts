@@ -625,6 +625,8 @@ describe("the order of the wearer's menu", () => {
         "Verdant Market",
         "Say what you want",
       ]);
+      expect(f.title).toBe("Choose a site");
+      expect(f.note).toBe("Browse actions, or say what you want");
       // No pagination at all: three rows on a panel that holds four.
       expect(f.choices.some((c) => c.id === "__more")).toBe(false);
       // And each row says how much is behind it, so nothing is a mystery door.
@@ -677,6 +679,7 @@ describe("the order of the wearer's menu", () => {
       });
       if (f.kind !== "idle") throw new Error("unreachable");
       const labels = f.choices.map((c) => c.label);
+      expect(f.title).toBe("What do you want to do?");
       expect(labels).toContain("Book table");
       expect(labels).not.toContain("Add to cart");
     });
