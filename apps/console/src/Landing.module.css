@@ -144,7 +144,7 @@
   align-items: center;
   gap: var(--dusky-s2);
   height: 2rem;
-  padding: 0 0.85rem;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid transparent;
   background: none;
@@ -316,16 +316,7 @@
    * and the picture is not in one. Slow enough and the light is never seen
    * moving, only found to have moved.
    */
-  animation: stage-drift 18s ease-in-out infinite alternate;
-}
-
-@keyframes stage-drift {
-  from {
-    transform: translate3d(-2%, -1%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(2%, 2%, 0) scale(1.08);
-  }
+  animation: dusky-ambient-drift var(--dusky-motion-ambient) ease-in-out infinite alternate;
 }
 
 /*

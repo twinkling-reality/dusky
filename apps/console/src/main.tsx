@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import "@dusky/tokens/tokens.css";
 import "./console.css";
+import "./motion.css";
 import { Landing } from "./Landing.js";
 import { Workspace } from "./Workspace.js";
 

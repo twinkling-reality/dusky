@@ -123,6 +123,21 @@
      picture on a field of light and takes a picture's corner. */
   --dusky-radius-lg: 22px;
 
+  /*
+   * One motion grammar for every Dusky surface. Fast is feedback, standard is
+   * a component changing state, enter is a newly mounted element, and route is
+   * the hand-off between pages. The expressive curve settles without a bounce,
+   * so it stays appropriate for both the calm landing page and the denser
+   * browser control plane.
+   */
+  --dusky-motion-fast: 140ms;
   --dusky-motion: 180ms;
+  --dusky-motion-enter: 480ms;
+  --dusky-motion-route: 420ms;
+  --dusky-motion-line: 720ms;
+  --dusky-motion-stagger: 72ms;
+  --dusky-motion-ambient: 18s;
   --dusky-ease: cubic-bezier(0.2, 0, 0, 1);
+  --dusky-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --dusky-ease-route: cubic-bezier(0.32, 0.72, 0, 1);
 }

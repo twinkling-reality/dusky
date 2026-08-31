@@ -1,0 +1,190 @@
+/*
+ * Dusky motion system
+ *
+ * This file owns choreography. Component styles still own geometry and state;
+ * they opt into this shared timing language with data-motion-* attributes.
+ * Keeping entrance motion here makes route changes, hero sequences, and the
+ * control-plane reveal feel related without coupling their markup.
+ */
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dusky-motion-route);
+  animation-timing-function: var(--dusky-ease-route);
+}
+
+::view-transition-old(root) {
+  animation-name: dusky-route-old;
+}
+
+::view-transition-new(root) {
+  animation-name: dusky-route-new;
+}
+
+#root::after {
+  transform-origin: center;
+  animation: dusky-rule-draw var(--dusky-motion-line) var(--dusky-ease-enter) 90ms both;
+}
+
+[data-motion-shell="header"] {
+  opacity: 1;
+  translate: 0;
+  transition:
+    opacity var(--dusky-motion-enter) var(--dusky-ease-enter) 120ms,
+    translate var(--dusky-motion-enter) var(--dusky-ease-enter) 120ms;
+}
+
+@starting-style {
+  [data-motion-shell="header"] {
+    opacity: 0;
+    translate: 0 -0.6rem;
+  }
+}
+
+[data-motion-route] {
+  animation: dusky-route-enter var(--dusky-motion-route) var(--dusky-ease-route) both;
+}
+
+[data-motion-item] {
+  --dusky-motion-order: 0;
+  animation: dusky-item-enter var(--dusky-motion-enter) var(--dusky-ease-enter) both;
+  animation-delay: calc(150ms + var(--dusky-motion-order) * var(--dusky-motion-stagger));
+}
+
+[data-motion-kind="connections"] {
+  animation-name: dusky-connections-enter;
+  animation-duration: var(--dusky-motion-line);
+}
+
+[data-motion-kind="action"] {
+  animation-name: dusky-action-enter;
+  animation-duration: 360ms;
+}
+
+[data-motion-order="1"] {
+  --dusky-motion-order: 1;
+}
+
+[data-motion-order="2"] {
+  --dusky-motion-order: 2;
+}
+
+[data-motion-order="3"] {
+  --dusky-motion-order: 3;
+}
+
+[data-motion-order="4"] {
+  --dusky-motion-order: 4;
+}
+
+[data-motion-order="5"] {
+  --dusky-motion-order: 5;
+}
+
+[data-motion-order="6"] {
+  --dusky-motion-order: 6;
+}
+
+[data-motion-order="7"] {
+  --dusky-motion-order: 7;
+}
+
+[data-motion-order="8"] {
+  --dusky-motion-order: 8;
+}
+
+@keyframes dusky-rule-draw {
+  from {
+    opacity: 0;
+    scale: 0 1;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes dusky-route-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dusky-item-enter {
+  from {
+    opacity: 0;
+    scale: 0.988;
+    translate: 0 0.7rem;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0;
+  }
+}
+
+@keyframes dusky-action-enter {
+  from {
+    clip-path: inset(0 0 34% 0);
+    opacity: 0;
+    scale: 0.988;
+  }
+  to {
+    clip-path: inset(0);
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes dusky-connections-enter {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+}
+
+@keyframes dusky-route-old {
+  to {
+    opacity: 0;
+    translate: 0 -0.35rem;
+  }
+}
+
+@keyframes dusky-route-new {
+  from {
+    opacity: 0;
+    translate: 0 0.45rem;
+  }
+}
+
+@keyframes dusky-ambient-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 2%, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  #root::after,
+  [data-motion-shell],
+  [data-motion-route],
+  [data-motion-item] {
+    animation: none;
+    transition: none;
+  }
+}

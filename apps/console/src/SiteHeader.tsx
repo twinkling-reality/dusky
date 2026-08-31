@@ -11,8 +11,8 @@ import styles from "./SiteHeader.module.css";
  */
 export function SiteHeader({ children }: { children?: ReactNode }) {
   return (
-    <header className={styles.bar}>
-      <Link to="/" className={styles.wordmark}>
+    <header className={styles.bar} data-motion-shell="header">
+      <Link to="/" className={styles.wordmark} viewTransition>
         Dusky
       </Link>
       <nav className={styles.nav}>{children}</nav>

@@ -24,24 +24,7 @@ body {
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  /* Clear of the drawn margin, so nothing on any route can run into a rule.
-     Set here rather than per page because the rules are drawn on the body and
-     every route is inside them. */
-  padding-inline: calc(var(--dusky-frame-inset) + var(--dusky-s4));
-  /* The rules are absolute against this box, so it has to be a containing
-     block, and it has to reach the bottom of the window on a short page. */
-  position: relative;
   min-height: 100vh;
-  /*
-   * The bar's clearance lives HERE, as padding, not as a margin on the bar.
-   *
-   * A margin on the first child collapses out through the body, which moves the
-   * body's own box down by exactly that much: the rules are positioned against
-   * that box, so --dusky-rule-top measured 12px lower than the capsule it was
-   * supposed to cross the middle of. Padding does not collapse, so the two
-   * measurements share an origin.
-   */
-  padding-top: var(--dusky-s3);
 }
 a {
   color: var(--dusky-accent);
@@ -58,44 +41,31 @@ a:hover {
 }
 
 /**
- * The drawn margin.
+ * The page frame.
  *
- * Two vertical rules and a horizontal one, drawn on the body. Behind everything
- * at z-index -1, which puts them above the canvas background and below every
- * in-flow element without a single component having to opt in to a stacking
- * order.
- *
- * Absolute rather than fixed, so they are as long as the DOCUMENT. Fixed, they
- * were as long as the window: correct on screen, and cut off partway down every
- * full-page screenshot and every print, because a fixed element is painted once
- * in the first viewport and never again. A margin that only exists above the
- * fold is not a margin.
- *
- * The verticals run the full height and the horizontal crosses them, so the
- * three read as one drawing rather than as a lid with two legs hanging off it.
- * The horizontal runs edge to edge and the nav capsule is opaque, so it breaks
- * behind the capsule and picks up on the other side, crossing at the capsule's
- * exact vertical middle.
+ * The rules used to be decoration behind the body while route content used
+ * negative margins to reach them. A route background could therefore cover a
+ * vertical rule, and the demo added a second horizontal rule of its own. The
+ * root is now the actual containing block: every route lives inside its two
+ * border rails and there is one shared header rule.
  */
-body::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  bottom: 0;
-  left: var(--dusky-frame-inset);
-  right: var(--dusky-frame-inset);
+#root {
+  position: relative;
+  width: calc(100% - 2 * var(--dusky-frame-inset));
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: var(--dusky-s3) var(--dusky-s4) 0;
   border-left: 1px solid var(--dusky-hair-soft);
   border-right: 1px solid var(--dusky-hair-soft);
-  pointer-events: none;
 }
-body::after {
+
+#root::after {
   content: "";
   position: absolute;
-  z-index: -1;
+  z-index: 0;
   top: var(--dusky-rule-top);
-  left: 0;
-  right: 0;
+  left: calc(-1 * var(--dusky-frame-inset));
+  right: calc(-1 * var(--dusky-frame-inset));
   height: 1px;
   background: var(--dusky-hair-soft);
   pointer-events: none;

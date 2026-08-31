@@ -102,3 +102,34 @@
 .state[data-state="offline"] {
   color: var(--dusky-stop);
 }
+
+/*
+ * On a phone the active workspace has four real destinations in this row.
+ * Let them wrap inside the capsule instead of widening the document; the
+ * desktop height remains untouched, so the drawn top rule still crosses its
+ * intended midpoint there.
+ */
+@media (max-width: 560px) {
+  .bar {
+    align-items: flex-start;
+    gap: var(--dusky-s3);
+    height: auto;
+    min-height: 3.5rem;
+    padding: 0.65rem var(--dusky-s4);
+    border-radius: 22px;
+  }
+
+  .wordmark {
+    flex: none;
+    font-size: 1.16rem;
+    line-height: 2rem;
+  }
+
+  .nav {
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem var(--dusky-s3);
+    font-size: 0.86rem;
+  }
+}

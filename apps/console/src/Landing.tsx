@@ -34,28 +34,30 @@ export function Landing() {
         </a>
       </SiteHeader>
 
-      <main className={styles.page}>
+      <main className={styles.page} data-motion-route="landing">
         <section className={styles.hero}>
-          <h1 className={styles.claim}>Turn web actions into augmented reality.</h1>
-          <p className={styles.lede}>
+          <h1 className={styles.claim} data-motion-item="" data-motion-order="1">
+            Turn web actions into augmented reality.
+          </h1>
+          <p className={styles.lede} data-motion-item="" data-motion-order="2">
             Dusky uses WebMCP to turn website capabilities into dynamic, actionable interfaces for
             AR displays.
           </p>
 
-          <div className={styles.actions}>
-            <Link className={styles.primary} to="/demo?start=1">
+          <div className={styles.actions} data-motion-item="" data-motion-order="3">
+            <Link className={styles.primary} to="/demo?start=1" viewTransition>
               Open Dusky
               <span className={styles.arrow} aria-hidden="true">
                 &rarr;
               </span>
             </Link>
-            <Link className={styles.secondary} to="/demo">
+            <Link className={styles.secondary} to="/demo" viewTransition>
               I have glasses
             </Link>
           </div>
         </section>
 
-        <div className={styles.stage}>
+        <div className={styles.stage} data-motion-item="" data-motion-order="4">
           <img
             className={styles.shot}
             data-squircle=""
