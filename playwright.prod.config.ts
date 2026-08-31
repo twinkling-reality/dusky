@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 /**
  * The same round trip, against the deployed system.
  *
- * `playwright.config.ts` starts four local servers and proves the code works.
+ * `playwright.config.ts` starts seven local servers and proves the code works.
  * This one starts nothing and proves the DEPLOYMENT works, which is a
  * different claim: it exercises the real relay over `wss://`, the real
  * cross-origin `exposedTo` grant between two `.vercel.app` origins, and the

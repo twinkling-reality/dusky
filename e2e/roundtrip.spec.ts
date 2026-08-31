@@ -55,24 +55,54 @@ test("console discovers the partner site's tools cross-origin", async ({ page })
   await expect(page.locator("text=getTools({fromOrigins})")).toBeVisible();
 });
 
-test("runtime source configuration replaces the fixture registry without a rebuild", async ({
-  page,
-}) => {
+test("a genuinely new runtime provider works without a rebuild or adapter", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const consolePage = await ctx.newPage();
+  const displayPage = await ctx.newPage();
+  const code = freshCode();
   const source = JSON.stringify({
-    name: "Unfamiliar Provider",
-    url: "http://localhost:7801",
+    name: "Canopy Lab",
+    url: "http://localhost:7806",
   });
   const query = new URLSearchParams({
-    session: freshCode(),
+    session: code,
     mode: "glasses",
     site: source,
   });
-  await page.goto(`http://localhost:7803/demo?${query.toString()}`);
+  await consolePage.goto(`http://localhost:7803/demo?${query.toString()}`);
 
-  await expect(page.locator('iframe[title="Unfamiliar Provider"]')).toBeVisible();
-  await expect(discovered(page).getByText("Search catalog")).toBeVisible();
-  await expect(page.locator('iframe[title="Amber & Oak"]')).toHaveCount(0);
-  await expect(page.locator('iframe[title="Northstar Dispatch"]')).toHaveCount(0);
+  // This origin and its vocabulary appear nowhere in the fixture registry.
+  // The console has only its URL and the descriptors returned by WebMCP.
+  await expect(consolePage.locator('iframe[title="Canopy Lab"]')).toBeVisible();
+  await expect(discovered(consolePage).getByText("Estimate shade")).toBeVisible();
+  await expect(discovered(consolePage).getByText("Search catalog")).toHaveCount(0);
+  await expect(consolePage.locator('iframe[title="Amber & Oak"]')).toHaveCount(0);
+  await expect(consolePage.locator('iframe[title="Northstar Dispatch"]')).toHaveCount(0);
+
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
+  await focusChoice(displayPage, /Estimate shade/);
+  await displayPage.keyboard.press("Enter");
+
+  // The enum arrives from the unfamiliar provider's schema and becomes rows
+  // without a provider-specific frame or parser inside Dusky.
+  await expect(displayPage.getByRole("button", { name: /^garden$/i })).toBeVisible();
+  await expect(displayPage.getByRole("button", { name: /Back/ })).toBeVisible();
+  await focusChoice(displayPage, /^garden$/i);
+  await displayPage.keyboard.press("Enter");
+
+  // readOnlyHint means no confirmation. The provider's own document records
+  // the real invocation and the glasses render its unfamiliar result keys.
+  await expect(displayPage.getByRole("button", { name: /Confirm/ })).toHaveCount(0);
+  const survey = consolePage.frameLocator('iframe[title="Canopy Lab"]').getByTestId("last-survey");
+  await expect(survey).toHaveText("garden: 62% shade, healthy");
+  await expect(displayPage.getByText("Survey zone")).toBeVisible();
+  await expect(displayPage.getByText("garden", { exact: true })).toBeVisible();
+  await expect(displayPage.getByText("Shade percent")).toBeVisible();
+  await expect(displayPage.getByText("62", { exact: true })).toBeVisible();
+  await expect(displayPage.getByText("Canopy condition")).toBeVisible();
+  await expect(displayPage.getByText("Cart total")).toHaveCount(0);
+
+  await ctx.close();
 });
 
 test("policy classifies discovered tools without any site-specific rule", async ({ page }) => {

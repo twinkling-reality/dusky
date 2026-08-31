@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canopy Lab</title>
+    <style>
+      :root {
+        color: #17382f;
+        background: #eef5e9;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        min-height: 100vh;
+        padding: 28px;
+        box-sizing: border-box;
+      }
+
+      .eyebrow {
+        color: #527266;
+        font: 12px ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 10px;
+        font-size: 32px;
+      }
+
+      p {
+        max-width: 34rem;
+        line-height: 1.5;
+      }
+
+      .result {
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid #88a498;
+        border-radius: 12px;
+        background: #f9fcf6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Test-only runtime provider</p>
+      <h1>Canopy Lab</h1>
+      <p>
+        This provider is not in Dusky's source registry. The browser test supplies its URL at
+        runtime and verifies that its declared tool works without a provider adapter.
+      </p>
+      <p id="registration">Registering one WebMCP tool.</p>
+      <p class="result" data-testid="last-survey">No survey has run.</p>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
