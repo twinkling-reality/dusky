@@ -5,14 +5,20 @@ passing result supports only the layer it exercised.
 
 ## Local development snapshot
 
-On 2026-08-30, the local development snapshot passed:
+On 2026-08-31, the local development snapshot passed:
 
-- 371 of 371 unit and deterministic tests with `pnpm test`;
+- 393 of 393 unit and deterministic tests with `pnpm test`;
 - type checking with `pnpm typecheck`;
-- linting with `pnpm lint`;
+- linting with `pnpm lint` with no errors and five retained CSS specificity
+  warnings;
 - a complete build with `pnpm build`;
-- 34 of 34 local Playwright tests with `pnpm test:e2e`, including all 6
+- 42 of 42 local Playwright tests with `pnpm test:e2e`, including all 6
   load-bearing round-trip tests and the focused five-frame visual check.
+
+After the Playwright run, no test-port listener or Playwright, Chrome, Vite,
+relay watcher, or Turbo development descendant remained. See the
+[local test-process lifecycle](./WEBMCP-RUNTIME.md#local-test-process-lifecycle)
+for why cleanup is part of the local evidence.
 
 These checks ran before the changes had a release commit, so this is dated
 development evidence rather than an immutable release record. A production
