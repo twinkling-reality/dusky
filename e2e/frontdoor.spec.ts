@@ -1110,6 +1110,66 @@ test("a tool with no arguments is not named twice on the confirm frame", async (
   await expect(lens.getByText("Add to cart", { exact: true })).toHaveCount(1);
 });
 
+test("desktop graph zoom keeps the topology and its connections together", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${SITE}/demo?start=1`);
+  await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
+
+  const topology = page.getByTestId("topology-canvas");
+  const connections = page.locator("canvas[data-runtime-edges]");
+  const graphPlane = connections.locator("..");
+  await expect(topology).toHaveAttribute("data-zoom", "1.00");
+
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await expect(topology).toHaveAttribute("data-zoom", "0.90");
+  await expect(graphPlane).toHaveCSS("transform", /matrix\(0\.9, 0, 0, 0\.9,/);
+
+  const endpointInk = await connections.evaluate((canvas) => {
+    const context = canvas.getContext("2d");
+    const root = canvas.parentElement;
+    const endpoints = root?.querySelectorAll<HTMLElement>(
+      '[data-runtime-end="display"], [data-runtime-end="browser"]',
+    );
+    if (!context || !endpoints || endpoints.length !== 2) return [];
+    const canvasBox = canvas.getBoundingClientRect();
+    const ratioX = canvas.width / canvasBox.width;
+    const ratioY = canvas.height / canvasBox.height;
+    return Array.from(endpoints, (endpoint) => {
+      const box = endpoint.getBoundingClientRect();
+      const x = Math.round((box.left + box.width / 2 - canvasBox.left) * ratioX);
+      const y = Math.round((box.top + box.height / 2 - canvasBox.top) * ratioY);
+      const pixels = context.getImageData(Math.max(0, x - 7), Math.max(0, y - 7), 15, 15).data;
+      let ink = 0;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if ((pixels[index] ?? 0) > 0) ink += 1;
+      }
+      return ink;
+    });
+  });
+  expect(endpointInk).toHaveLength(2);
+  expect(endpointInk.every((ink) => ink > 0)).toBe(true);
+
+  await topology.dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: true,
+    deltaY: 80,
+  });
+  await expect(topology).toHaveAttribute("data-zoom", "0.85");
+
+  await page.getByRole("button", { name: /^Fit graph to window/ }).click();
+  await expect
+    .poll(async () => Number(await topology.getAttribute("data-zoom")))
+    .toBeGreaterThanOrEqual(0.5);
+  await expect
+    .poll(async () => Number(await topology.getAttribute("data-zoom")))
+    .toBeLessThanOrEqual(1);
+
+  await page.getByRole("button", { name: "Reset View" }).click();
+  await expect(topology).toHaveAttribute("data-zoom", "1.00");
+  await expect(graphPlane).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+});
+
 /**
  * What replaced "the same tab can be pointed at a completely different site".
  *
@@ -1240,7 +1300,7 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
     expect(actionAfter?.x).toBeCloseTo(actionBefore.x - 54, 0);
     expect(actionAfter?.y).toBeCloseTo(actionBefore.y + 24, 0);
 
-    await page.getByRole("button", { name: "Center" }).click();
+    await page.getByRole("button", { name: "Reset View" }).click();
     await expect(actionNode).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
 
     // Freeform placement is bounded by the visible topology surface. The
@@ -1441,7 +1501,7 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
     expect(expandedClippers).toEqual([]);
     await providerNode.getByRole("button", { name: "Hide Verdant Market page" }).click();
 
-    await page.getByRole("button", { name: "Center" }).click();
+    await page.getByRole("button", { name: "Reset View" }).click();
     await expect(providerNode).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   }
 
@@ -1461,7 +1521,7 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
     await page.mouse.down();
     await page.mouse.move(canvasBox.x + canvasBox.width * 0.58, canvasBox.y + 125, { steps: 4 });
     await page.mouse.up();
-    await expect(page.getByRole("button", { name: "Center" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reset View" })).toBeVisible();
   }
 
   // Same session, same panel, same code: both reachable from the one menu.

@@ -36,10 +36,18 @@ import styles from "./Workspace.module.css";
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/console";
 const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:7802";
 const NODE_BOUNDARY_GUTTER = 1;
+const MIN_CANVAS_ZOOM = 0.5;
+const MAX_CANVAS_ZOOM = 1.2;
+const CANVAS_ZOOM_STEP = 0.1;
 
 function clampMovement(value: number, minimum: number, maximum: number): number {
   if (minimum > maximum) return 0;
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function clampCanvasZoom(value: number): number {
+  const bounded = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, value));
+  return Math.round(bounded * 100) / 100;
 }
 
 function visualBoundaryOf(element: HTMLElement) {
@@ -177,6 +185,22 @@ function CenterIcon() {
     <svg viewBox="0 0 20 20" aria-hidden="true">
       <circle cx="10" cy="10" r="4.25" />
       <path d="M10 2.75v2M10 15.25v2M2.75 10h2M15.25 10h2" />
+    </svg>
+  );
+}
+
+function ZoomOutIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M4.25 10h11.5" />
+    </svg>
+  );
+}
+
+function ZoomInIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M4.25 10h11.5M10 4.25v11.5" />
     </svg>
   );
 }
@@ -441,9 +465,12 @@ export function Workspace() {
     () => window.matchMedia("(min-width: 1180px)").matches,
   );
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [canvasZoom, setCanvasZoom] = useState(1);
   const [canvasPanning, setCanvasPanning] = useState(false);
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const topologyCanvas = useRef<HTMLDivElement | null>(null);
+  const graphPlane = useRef<HTMLDivElement | null>(null);
   const inspectButtons = useRef(new Map<string, HTMLButtonElement>());
   const canvasDrag = useRef<{
     pointerId: number;
@@ -467,6 +494,7 @@ export function Workspace() {
     maxOffsetX: number;
     minOffsetY: number;
     maxOffsetY: number;
+    zoom: number;
   } | null>(null);
   const [params, setParams] = useSearchParams();
   /*
@@ -502,6 +530,7 @@ export function Workspace() {
       canvasDrag.current = null;
       nodeDrag.current = null;
       setCanvasPan({ x: 0, y: 0 });
+      setCanvasZoom(1);
       setNodeOffsets({});
       setCanvasPanning(false);
       setDraggingNode(null);
@@ -548,6 +577,20 @@ export function Workspace() {
   const [mode, setMode] = useState<PairMode>(
     params.get("mode") === "glasses" ? "glasses" : "embedded",
   );
+
+  useEffect(() => {
+    const canvas = topologyCanvas.current;
+    if (!session || !wideTopology || !canvas) return;
+    const zoomFromWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const direction = event.deltaY < 0 ? 1 : -1;
+      setCanvasZoom((current) => clampCanvasZoom(current + (direction * CANVAS_ZOOM_STEP) / 2));
+    };
+    canvas.addEventListener("wheel", zoomFromWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", zoomFromWheel);
+  }, [session, wideTopology]);
+
   const [typed, setTyped] = useState("");
   const pairProblem = codeProblem(typed);
   const pairReady = isCode(typed);
@@ -795,10 +838,12 @@ export function Workspace() {
       y: event.clientY,
       offsetX: offset.x,
       offsetY: offset.y,
-      minOffsetX: offset.x + canvasBox.left + NODE_BOUNDARY_GUTTER - nodeBox.left,
-      maxOffsetX: offset.x + canvasBox.right - NODE_BOUNDARY_GUTTER - nodeBox.right,
-      minOffsetY: offset.y + canvasBox.top + NODE_BOUNDARY_GUTTER - nodeBox.top,
-      maxOffsetY: offset.y + canvasBox.bottom - NODE_BOUNDARY_GUTTER - nodeBox.bottom,
+      minOffsetX: offset.x + (canvasBox.left + NODE_BOUNDARY_GUTTER - nodeBox.left) / canvasZoom,
+      maxOffsetX: offset.x + (canvasBox.right - NODE_BOUNDARY_GUTTER - nodeBox.right) / canvasZoom,
+      minOffsetY: offset.y + (canvasBox.top + NODE_BOUNDARY_GUTTER - nodeBox.top) / canvasZoom,
+      maxOffsetY:
+        offset.y + (canvasBox.bottom - NODE_BOUNDARY_GUTTER - nodeBox.bottom) / canvasZoom,
+      zoom: canvasZoom,
     };
     event.preventDefault();
     event.stopPropagation();
@@ -812,8 +857,16 @@ export function Workspace() {
     setNodeOffsets((current) => ({
       ...current,
       [id]: {
-        x: clampMovement(drag.offsetX + event.clientX - drag.x, drag.minOffsetX, drag.maxOffsetX),
-        y: clampMovement(drag.offsetY + event.clientY - drag.y, drag.minOffsetY, drag.maxOffsetY),
+        x: clampMovement(
+          drag.offsetX + (event.clientX - drag.x) / drag.zoom,
+          drag.minOffsetX,
+          drag.maxOffsetX,
+        ),
+        y: clampMovement(
+          drag.offsetY + (event.clientY - drag.y) / drag.zoom,
+          drag.minOffsetY,
+          drag.maxOffsetY,
+        ),
       },
     }));
   };
@@ -842,7 +895,30 @@ export function Workspace() {
 
   const centerTopology = () => {
     setCanvasPan({ x: 0, y: 0 });
+    setCanvasZoom(1);
     setNodeOffsets({});
+  };
+
+  const changeCanvasZoom = (delta: number) => {
+    setCanvasZoom((current) => clampCanvasZoom(current + delta));
+  };
+
+  const fitTopology = () => {
+    if (!wideTopology) return;
+    const canvasBox = topologyCanvas.current?.getBoundingClientRect();
+    const plane = graphPlane.current;
+    if (!canvasBox || !plane || plane.offsetWidth === 0 || plane.offsetHeight === 0) return;
+
+    const naturalWidth = plane.offsetWidth;
+    const naturalHeight = plane.offsetHeight;
+    const visibleTop = Math.max(0, canvasBox.top);
+    const availableWidth = Math.max(320, Math.min(canvasBox.width, window.innerWidth) - 32);
+    const availableHeight = Math.max(320, window.innerHeight - visibleTop - 72);
+    const fitted = Math.min(1, availableWidth / naturalWidth, availableHeight / naturalHeight);
+    const roundedDown = Math.floor(fitted * 20) / 20;
+
+    setCanvasPan({ x: 0, y: 0 });
+    setCanvasZoom(clampCanvasZoom(roundedDown));
   };
 
   const changeCanvasLayout = () => {
@@ -1056,9 +1132,11 @@ export function Workspace() {
           </section>
         ) : (
           <div
+            ref={topologyCanvas}
             className={styles.topologyCanvas}
             data-testid="topology-canvas"
             data-layout={effectiveCanvasLayout}
+            data-zoom={canvasZoom.toFixed(2)}
             data-panning={canvasPanning ? "" : undefined}
             data-node-dragging={draggingNode ? "" : undefined}
             data-inspecting={openOrigins.length > 0 ? "" : undefined}
@@ -1089,11 +1167,13 @@ export function Workspace() {
             </div>
 
             <div
+              ref={graphPlane}
               className={`${styles.graphPlane} ${runtimeMotion.surface}`}
               style={
                 {
                   "--canvas-pan-x": `${canvasPan.x}px`,
                   "--canvas-pan-y": `${canvasPan.y}px`,
+                  "--canvas-zoom": canvasZoom,
                 } as CSSProperties
               }
             >
@@ -1561,17 +1641,55 @@ export function Workspace() {
             <span className={styles.commandLabel}>Page View</span>
             <strong className={styles.commandValue}>{allWebsitesOpen ? "Shown" : "Hidden"}</strong>
           </button>
-          {(canvasPan.x !== 0 || canvasPan.y !== 0 || hasMovedNodes) && (
+          {wideTopology && (
+            <fieldset className={styles.zoomControls} aria-label="Graph zoom">
+              <button
+                type="button"
+                className={styles.zoomStep}
+                aria-label="Zoom out"
+                data-tooltip="Zoom out"
+                onClick={() => changeCanvasZoom(-CANVAS_ZOOM_STEP)}
+                disabled={canvasZoom <= MIN_CANVAS_ZOOM}
+              >
+                <span className={styles.commandIcon} aria-hidden="true">
+                  <ZoomOutIcon />
+                </span>
+              </button>
+              <button
+                type="button"
+                className={styles.zoomReadout}
+                aria-label={`Fit graph to window, current zoom ${Math.round(canvasZoom * 100)} percent`}
+                data-tooltip="Fit graph to window"
+                onClick={fitTopology}
+              >
+                <span className={styles.commandLabel}>Zoom</span>
+                <strong className={styles.commandValue}>{Math.round(canvasZoom * 100)}%</strong>
+              </button>
+              <button
+                type="button"
+                className={styles.zoomStep}
+                aria-label="Zoom in"
+                data-tooltip="Zoom in"
+                onClick={() => changeCanvasZoom(CANVAS_ZOOM_STEP)}
+                disabled={canvasZoom >= MAX_CANVAS_ZOOM}
+              >
+                <span className={styles.commandIcon} aria-hidden="true">
+                  <ZoomInIcon />
+                </span>
+              </button>
+            </fieldset>
+          )}
+          {(canvasPan.x !== 0 || canvasPan.y !== 0 || canvasZoom !== 1 || hasMovedNodes) && (
             <button
               type="button"
-              aria-label="Center"
-              data-tooltip="Center the graph"
+              aria-label="Reset View"
+              data-tooltip="Reset graph position and zoom"
               onClick={centerTopology}
             >
               <span className={styles.commandIcon} aria-hidden="true">
                 <CenterIcon />
               </span>
-              <span className={styles.commandLabel}>Reset view</span>
+              <span className={styles.commandLabel}>Reset View</span>
             </button>
           )}
         </div>
