@@ -79,7 +79,7 @@ const FLAG = "chrome://flags/#enable-webmcp-testing";
 /** Stated before anything is probed, so the list never appears out of nowhere. */
 const PENDING: Requirement[] = [
   { id: "api", subject: "WebMCP", status: "checking", state: "checking" },
-  { id: "works", subject: "Tool registration", status: "checking", state: "checking" },
+  { id: "works", subject: "Page tool registration", status: "checking", state: "checking" },
   { id: "relay", subject: "Relay", status: "checking", state: "checking" },
 ];
 
@@ -132,8 +132,7 @@ export function useRequirements(): Probe {
       state: present ? "ok" : "bad",
       fix: (
         <>
-          Turn on <code>{FLAG}</code> and restart Chrome. The ChatGPT desktop browser has it on
-          already.
+          Use Chrome, turn on <code>{FLAG}</code>, and restart the browser.
         </>
       ),
     });
@@ -170,7 +169,7 @@ export function useRequirements(): Probe {
         const seen = (await mc.getTools()).some((t) => t.name === probe);
         out.push({
           id: "works",
-          subject: "Tool registration",
+          subject: "Page tool registration",
           status: seen ? "working" : "not working",
           state: seen ? "ok" : "bad",
           fix: <>Restart Chrome. The flag is set but does not take effect until you do.</>,
@@ -178,7 +177,7 @@ export function useRequirements(): Probe {
       } catch (err) {
         out.push({
           id: "works",
-          subject: "Tool registration",
+          subject: "Page tool registration",
           status: "failing",
           state: "bad",
           detail: err instanceof Error ? err.message : String(err),
@@ -191,7 +190,7 @@ export function useRequirements(): Probe {
       // Nothing to probe against. Saying so beats inventing either answer.
       out.push({
         id: "works",
-        subject: "Tool registration",
+        subject: "Page tool registration",
         status: "not tested",
         state: "unknown",
         fix: <>Nothing to test against until WebMCP is on.</>,
@@ -483,6 +482,10 @@ export function RequirementsPanel({ probe, onClose }: { probe: Probe; onClose: (
           </li>
         ))}
       </ul>
+      <p className={styles.scope}>
+        Use Chrome with WebMCP Testing enabled for the full provider path. An in-app browser can
+        pass these page-level checks and still return no website actions.
+      </p>
     </section>
   );
 }

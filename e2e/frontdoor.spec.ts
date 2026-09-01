@@ -57,8 +57,14 @@ test("the front door offers both ways in as controls, and asks once", async ({ p
   await expect(page.getByRole("heading", { name: "Connect your display." })).toBeVisible();
   await expect(page.getByLabel("Six-letter pairing code")).toBeVisible();
   await expect(page.locator("#pair-instruction")).toHaveText(
-    "Enter the six-letter code shown on your lens.",
+    "Open Dusky on your Display, then enter the six-letter code shown there.",
   );
+  const firstTime = page.getByTestId("first-time-setup");
+  await expect(firstTime).toBeVisible();
+  await expect(firstTime).toContainText("First time?");
+  await expect(firstTime).toContainText("https://dusky-display.vercel.app");
+  await expect(firstTime).toContainText("App connections → Web apps");
+  await expect(firstTime).toContainText("Requirements for Chrome setup");
 });
 
 test("the requirements are one press away, and stated whether or not this browser meets them", async ({
@@ -81,7 +87,7 @@ test("the requirements are one press away, and stated whether or not this browse
   // only appears once it is unmet is a requirement nobody read in time. Each
   // is a subject and this browser's answer, with no sentence between them.
   await expect(panel.getByText("WebMCP", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Tool registration", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Page tool registration", { exact: true })).toBeVisible();
   await expect(panel.getByText("Relay", { exact: true })).toBeVisible();
   await expect(panel.getByText("enabled", { exact: true })).toBeVisible();
   await expect(panel.getByText("connected", { exact: true })).toBeVisible();
@@ -89,6 +95,9 @@ test("the requirements are one press away, and stated whether or not this browse
   // And they are probed, not decorative: Chrome with the flag is exactly what
   // this suite runs, so all three have to come back met.
   await expect(panel.getByText("3/3", { exact: true })).toBeVisible();
+  await expect(panel).toContainText(
+    "Use Chrome with WebMCP Testing enabled for the full provider path.",
+  );
 
   // It closes the way everything closes.
   await button.focus();
@@ -111,12 +120,20 @@ test("a browser that cannot run Dusky is told which part is missing, with nothin
   await expect(button).toHaveAttribute("data-state", "bad");
   await expect(page.getByRole("region", { name: "Requirements" })).toHaveCount(0);
 
+  const visibleFailure = page.getByText("Dusky cannot run here yet: WebMCP not enabled.", {
+    exact: true,
+  });
+  await expect(visibleFailure).toBeVisible();
+  await page.getByRole("button", { name: "See the fix" }).click();
+  await expect(page.getByRole("region", { name: "Requirements" })).toBeVisible();
+
+  await button.click();
   await button.click();
   const panel = page.getByRole("region", { name: "Requirements" });
 
   // One instruction, under the line that failed, and no paragraph above it
   // explaining why the requirement exists.
-  await expect(panel.getByText(/^Turn on/)).toBeVisible();
+  await expect(panel.getByText(/^Use Chrome, turn on/)).toBeVisible();
   await expect(panel.getByText("chrome://flags/#enable-webmcp-testing")).toBeVisible();
 
   // Untestable is not failed. With no API there is nothing to register against,
@@ -134,6 +151,10 @@ test("the front door carries the product, not a demonstration of it", async ({ p
   await expect(page.getByLabel("Tool definition")).toHaveCount(0);
   await expect(page.locator("div[data-kind]")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Method" })).toHaveCount(0);
+  // The real YouTube embed is enabled only by a deployed build-time URL. Until
+  // one exists, the product image remains the stage and no placeholder player
+  // or invented destination is rendered.
+  await expect(page.locator("[data-demo-video]")).toHaveCount(0);
 
   // A page arguing that six keys are enough cannot need a mouse at its door.
   const open = page.getByRole("link", { name: /Open Dusky/ });
@@ -159,8 +180,9 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   await expect(page).toHaveURL(/session=[A-Z]{6}/);
   await expect(page).not.toHaveURL(/start=/);
 
-  // Everything in one tab: the glasses view, every partner site, and a
-  // user-facing action history. All three pages are visible by default.
+  // Everything in one tab: the glasses view, every mounted partner site, and a
+  // user-facing action history. Provider inspectors begin collapsed so the
+  // first paint stays focused on the Display and the action topology.
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
   await expectReachableIn(lens, /Add to cart/);
   await expect(page.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart")).toHaveText(
@@ -177,11 +199,12 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   ).toHaveText("none sent");
   await expectReachableIn(lens, /Book table/);
   await expectReachableIn(lens, /Send message/);
-  await expect(page.getByRole("region", { name: "Technical log" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Execution log" })).toBeVisible();
   const runtime = page.locator("[data-runtime-status]");
   await expect(runtime.getByText("11 actions", { exact: true })).toBeVisible();
-  await expect(runtime.getByText("across 3 websites", { exact: true })).toBeVisible();
-  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(3);
+  await expect(runtime.getByText("from 3 websites", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show all website pages" })).toBeVisible();
 
   // The thing a judge must not have to discover by closing the tab. A footnote
   // at the end now, rather than a briefing sitting above the product.
@@ -200,7 +223,7 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   const banner = page.getByRole("banner");
   await expect(banner.getByRole("link", { name: "Home" })).toBeVisible();
   await expect(banner.getByText(/^[A-Z]{6}$/)).toHaveCount(0);
-  await expect(banner.getByRole("region", { name: "Technical log" })).toHaveCount(0);
+  await expect(banner.getByRole("region", { name: "Execution log" })).toHaveCount(0);
 
   // All three live pages may make the document taller, but nothing may widen
   // the viewport or disappear behind a horizontal scroll area.
@@ -211,21 +234,23 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("browser runtime and technical log are distinct, legible components", async ({ page }) => {
+test("browser runtime and execution log are distinct, legible components", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${SITE}/demo?start=1`);
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
 
-  const activity = page.getByRole("region", { name: "Technical log" });
+  const activity = page.getByRole("region", { name: "Execution log" });
   await expect(activity).toBeVisible();
-  await expect(activity.getByRole("heading", { name: "Technical log" })).toBeVisible();
+  await expect(activity.getByRole("heading", { name: "Execution log" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Browser runtime" })).toBeVisible();
   await expect(page.getByText("Ready", { exact: true })).toBeVisible();
-  await expect(activity.getByText("No actions in this session.", { exact: true })).toBeVisible();
+  await expect(
+    activity.getByText("No website actions have run yet.", { exact: true }),
+  ).toBeVisible();
   await expect(activity).not.toContainText(
     /registry|discovery|tools changed|provider origins|localhost/i,
   );
-  await expect(page.getByRole("button", { name: /technical log/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /execution log/i })).toHaveCount(0);
 
   await expect(page.getByRole("group", { name: "Action approval key" })).toHaveCount(0);
   const actionCards = page.locator('[data-node-id^="actions:"]');
@@ -425,8 +450,8 @@ test("runtime evidence remains readable in the phone topology flow", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${SITE}/demo?start=1`);
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
-  await expect(page.getByRole("region", { name: "Technical log" })).toContainText(
-    "No actions in this session.",
+  await expect(page.getByRole("region", { name: "Execution log" })).toContainText(
+    "No website actions have run yet.",
   );
 
   const geometry = await page.evaluate(() => {
@@ -523,26 +548,35 @@ test("the demo says what you are looking at, when asked", async ({ page }) => {
   // better here, except that the count IS the claim on this page: the list is
   // one list, not one list per business.
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
+  await expect(
+    page.getByText(
+      "These sample websites supply the actions beside them. Open a page only when you want to inspect it; hidden pages stay connected.",
+      { exact: true },
+    ),
+  ).toBeVisible();
 
-  // Shut by default. This page carried a paragraph about the security model
-  // above the fold and a caption under every heading, all of it cut because a
-  // stranger did not need any of it. Cutting it left four labelled boxes and no
-  // way to find out what they are.
+  // Shut by default. The explanation is available to a cold visitor without
+  // turning the canvas into a permanent onboarding page.
   await expect(page.getByRole("region", { name: "What is this" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "What is this?" }).click();
   const what = page.getByRole("region", { name: "What is this" });
 
-  // Every box on the page is named, including the one holding the sites. That
-  // box used to be labelled with the single site's name; no business name is
-  // true above a box containing another business, so it is labelled plainly.
-  await expect(what.getByText("Display preview", { exact: true })).toBeVisible();
-  await expect(what.getByText("Connected websites", { exact: true })).toBeVisible();
-  await expect(what.getByText("Available actions", { exact: true })).toBeVisible();
-  await expect(what.getByText("Technical log", { exact: true })).toBeVisible();
-
-  // And the line that says what to do, which is the point of the whole panel.
-  await expect(what.getByText(/Choose an action on the Display/)).toBeVisible();
+  // Explain the stable product loop, not a glossary whose order drifts every
+  // time the topology moves.
+  await expect(what).toContainText(
+    "Dusky turns authorized WebMCP actions into interfaces for AR displays",
+  );
+  await expect(what).toContainText("The 600 × 600 Ray-Ban Display is the first proof case");
+  await expect(what).toContainText("No site-specific adapters are required");
+  await expect(what).toContainText("send a task from a browser agent");
+  await expect(what).toContainText(
+    "Any action that can change a website waits for wearer approval",
+  );
+  await expect(what).toContainText("Hidden website previews stay connected");
+  await expect(what).toContainText("The execution log records only website actions that run");
+  await expect(what.getByText("Connected websites", { exact: true })).toHaveCount(0);
+  await expect(what.getByText("Available actions", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "What is this?" }).focus();
   await page.keyboard.press("Escape");
@@ -565,7 +599,7 @@ test("somebody who owns glasses can reach the pairing form from a running sessio
   await expect(page.getByRole("heading", { name: "Connect your display." })).toBeVisible();
   await expect(page.getByLabel("Six-letter pairing code")).toBeVisible();
   await expect(page.locator("#pair-instruction")).toHaveText(
-    "Enter the six-letter code shown on your lens.",
+    "Open Dusky on your Display, then enter the six-letter code shown there.",
   );
 
   // The session left the URL too, so a reload does not drop straight back into
@@ -683,6 +717,7 @@ test("the shared motion system sequences entry and respects reduced motion", asy
     "data-reduced-motion",
     "true",
   );
+  await page.getByRole("button", { name: "Show Verdant Market page" }).click();
   await page.getByRole("button", { name: "Hide Verdant Market page" }).click();
   await page.getByRole("button", { name: "Show Verdant Market page" }).click();
   const inspectionMotion = await page.evaluate(() => ({
@@ -844,19 +879,25 @@ test("website pages stay mounted, open independently, and fit every responsive l
   const originalFrame = await verdantFrame.elementHandle();
   expect(originalFrame).not.toBeNull();
   await expect(frames).toHaveCount(3);
-  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(3);
-  await expect(page.getByRole("button", { name: "Hide all website pages" })).toBeVisible();
+  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show all website pages" })).toBeVisible();
   await expect(page.getByText("live page", { exact: true })).toHaveCount(0);
   await expect(page.getByText("website", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Hide all website pages" }).click();
-  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(0);
+  // Collapsed means hidden, never unmounted: discovery and invocation still
+  // require these exact live documents.
   await expect(frames).toHaveCount(3);
   for (const frame of await frames.all()) {
     await expect(frame).toHaveAttribute("tabindex", "-1");
     await expect(frame).toHaveAttribute("aria-hidden", "true");
     await expect(frame).toHaveCSS("pointer-events", "none");
   }
+
+  await page.getByRole("button", { name: "Show all website pages" }).click();
+  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Hide all website pages" })).toBeVisible();
+  await page.getByRole("button", { name: "Hide all website pages" }).click();
+  await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(0);
 
   await page.getByRole("button", { name: "Show Verdant Market page" }).click();
   await page.getByRole("button", { name: "Show Amber & Oak page" }).click();
@@ -875,7 +916,7 @@ test("website pages stay mounted, open independently, and fit every responsive l
 
   for (const width of [390, 841, 900, 1024, 1100, 1200, 1279, 1320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    const expectedLayout = width >= 1320 ? "horizontal" : "vertical";
+    const expectedLayout = width >= 1180 ? "horizontal" : "vertical";
     await expect(page.getByTestId("topology-canvas")).toHaveAttribute(
       "data-layout",
       expectedLayout,
@@ -962,6 +1003,15 @@ test("a gesture in the embedded panel changes the partner site in the same tab",
   page,
 }) => {
   await page.goto(`${SITE}/demo?start=1`);
+
+  // Provider documents stay mounted for WebMCP but their visual inspectors
+  // now begin closed. Opt into this one because the assertion below is about
+  // watching the provider page change, not merely proving the invocation.
+  await expect(page.locator('iframe[title="Verdant Market"]')).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await page.getByRole("button", { name: "Show Verdant Market page" }).click();
 
   const lens = page.frameLocator('iframe[title="Dusky on the glasses"]');
   const cart = page.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
@@ -1138,6 +1188,14 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
   await expect(connections).toHaveAttribute("data-action-edges", "3");
   await expect(connections).toHaveAttribute("data-connected-origins", "3");
   await expect(connections).not.toHaveAttribute("data-activity-edges");
+  await expect(connections).toHaveAttribute("data-activity-visual-state", "idle", {
+    timeout: 3_000,
+  });
+  await expect(connections).toHaveAttribute("data-activity-animating", "false");
+  await expect(connections).toHaveAttribute("data-activity-residual", "false");
+  await expect(actions.locator("[data-topology-tool-origin][data-topology-tool-name]")).toHaveCount(
+    11,
+  );
 
   // A node drag only repositions that logical group. It no longer masquerades
   // as a canvas pan and pull every other component along with it.
@@ -1363,6 +1421,7 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
     expect(movedProvider.fieldOverflow).toBe("visible");
     expect(Object.values(movedProvider.endpointInk).every((ink) => ink > 0)).toBe(true);
 
+    await providerNode.getByRole("button", { name: "Show Verdant Market page" }).click();
     await providerNode.getByRole("button", { name: "Hide Verdant Market page" }).click();
     await providerNode.getByRole("button", { name: "Show Verdant Market page" }).click();
     await expect(providerNode).toHaveAttribute("data-inspected", "");

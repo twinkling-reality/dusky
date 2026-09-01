@@ -6,6 +6,7 @@ import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 
 const REPO = "https://github.com/twinkling-reality/dusky";
+const DEMO_VIDEO_EMBED_URL = import.meta.env["VITE_DEMO_VIDEO_EMBED_URL"]?.trim() || null;
 
 const STAGE_ALT =
   "Dusky running: on the left the glasses view, headed Verdant Market, confirm, reading Add to " +
@@ -44,7 +45,16 @@ export function Landing() {
             AR displays.
           </p>
 
-          <div className={styles.actions} data-motion-item="" data-motion-order="3">
+          {probe.verdict === "bad" && (
+            <p className={styles.readiness} role="alert" data-motion-item="" data-motion-order="3">
+              <strong>Dusky cannot run here yet: {probe.headline}.</strong>
+              <button type="button" onClick={() => setReqOpen(true)} aria-controls="requirements">
+                See the fix
+              </button>
+            </p>
+          )}
+
+          <div className={styles.actions} data-motion-item="" data-motion-order="4">
             <Link className={styles.primary} to="/demo?start=1" viewTransition>
               Open Dusky
               <span className={styles.arrow} aria-hidden="true">
@@ -57,15 +67,27 @@ export function Landing() {
           </div>
         </section>
 
-        <div className={styles.stage} data-motion-item="" data-motion-order="4">
-          <img
-            className={styles.shot}
-            data-squircle=""
-            src="/stage.png"
-            alt={STAGE_ALT}
-            width={2784}
-            height={864}
-          />
+        <div className={styles.stage} data-motion-item="" data-motion-order="5">
+          {DEMO_VIDEO_EMBED_URL ? (
+            <iframe
+              className={`${styles.shot} ${styles.video}`}
+              data-squircle=""
+              data-demo-video=""
+              src={DEMO_VIDEO_EMBED_URL}
+              title="Dusky product demo"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          ) : (
+            <img
+              className={styles.shot}
+              data-squircle=""
+              src="/stage.png"
+              alt={STAGE_ALT}
+              width={2784}
+              height={864}
+            />
+          )}
         </div>
       </main>
     </>

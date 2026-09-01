@@ -225,6 +225,18 @@
   overflow-wrap: anywhere;
 }
 
+/* The self-test proves this document can register a tool. It cannot prove the
+ * separate cross-origin path before provider frames are loaded, so name that
+ * boundary in the same compact panel as the verdict. */
+.scope {
+  margin: 0;
+  padding-top: var(--dusky-s3);
+  border-top: 1px solid var(--dusky-hair-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--dusky-ink-dim);
+}
+
 /* ---------------------------------------------------------------- marks */
 
 /*
