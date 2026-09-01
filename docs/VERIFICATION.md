@@ -2,12 +2,15 @@
 
 ## Public runtime provider verification on 2026-09-01
 
-Canopy Lab version 2 was published at
+Canopy Lab version 3 was published at
 <https://dusky-canopy-lab.glendonchin.chatgpt.site>. The public response was
 HTTP 200 with no `X-Frame-Options` or restrictive `frame-ancestors` header.
 
 Two real Chrome round trips passed with WebMCP enabled:
 
+- the product-facing flow pasted the public URL into **Add Website**, verified
+  the live page, added it automatically as a fourth Website, and showed twelve
+  actions across four branches;
 - the local console loaded the public HTTPS provider through the runtime
   `site` value, discovered **Estimate shade**, rendered its `zone` enum, invoked
   `garden`, observed `62% shade` in the provider document, and rendered the

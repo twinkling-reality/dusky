@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { clickChoiceIn } from "./drive.js";
 
 const CONSOLE = "http://localhost:7803";
+const ADD_WEBSITE_PROVIDER = process.env.DUSKY_RUNTIME_PROVIDER_URL ?? "http://localhost:7806";
+const ADD_WEBSITE_ORIGIN = new URL(ADD_WEBSITE_PROVIDER).origin;
 
 /**
  * The product-facing proof that provider configuration is not a source-code
@@ -74,7 +76,7 @@ test("sample and added WebMCP websites can be selected into the live graph", asy
   await expect(addPanel.getByText("1 / 2", { exact: true })).toBeVisible();
   await expect(addPanel.getByRole("heading", { name: "Connect a Supported Site" })).toBeVisible();
   await expect(addPanel).toContainText("Regular homepages, restaurant pages, and chat URLs");
-  await addPanel.getByLabel("Website URL").fill("http://localhost:7806");
+  await addPanel.getByLabel("Website URL").fill(ADD_WEBSITE_PROVIDER);
   await addPanel.getByRole("button", { name: "Verify Connection" }).click();
   await expect(addPanel.getByText("2 / 2", { exact: true })).toBeVisible();
   await expect(addPanel.getByRole("heading", { name: "Name This Website" })).toBeVisible();
@@ -90,13 +92,13 @@ test("sample and added WebMCP websites can be selected into the live graph", asy
     .toBeLessThan(0.5);
   await addPanel.getByRole("button", { name: "Back", exact: true }).click();
   await expect(addPanel.getByText("1 / 2", { exact: true })).toBeVisible();
-  await expect(addPanel.getByLabel("Website URL")).toHaveValue("http://localhost:7806");
+  await expect(addPanel.getByLabel("Website URL")).toHaveValue(ADD_WEBSITE_PROVIDER);
   await addPanel.getByRole("button", { name: "Verify Connection" }).click();
   await addPanel.getByLabel(/Display name/).fill("Canopy Lab");
   await addPanel.getByRole("button", { name: "Add Website", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Websites" })).toHaveCount(0);
   await expect(page.locator('[data-node-id^="provider:"]')).toHaveCount(4);
-  const canopy = page.locator('[data-node-id="provider:http://localhost:7806"]');
+  const canopy = page.locator(`[data-node-id="provider:${ADD_WEBSITE_ORIGIN}"]`);
   await expect(canopy).toContainText("Canopy Lab");
   await expect(page.getByText(/3 samples and 1 added website supply/)).toBeVisible();
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(12);
