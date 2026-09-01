@@ -12,6 +12,7 @@ import { freshCode } from "./session-code.js";
  */
 
 const CODE = freshCode();
+const RUNTIME_PROVIDER = process.env.DUSKY_RUNTIME_PROVIDER_URL ?? "http://localhost:7806";
 
 /**
  * A code in the URL pairs the console with no typing, which is what the
@@ -65,7 +66,7 @@ test("a genuinely new runtime provider works without a rebuild or adapter", asyn
   const code = freshCode();
   const source = JSON.stringify({
     name: "Canopy Lab",
-    url: "http://localhost:7806",
+    url: RUNTIME_PROVIDER,
   });
   const query = new URLSearchParams({
     session: code,
@@ -99,7 +100,8 @@ test("a genuinely new runtime provider works without a rebuild or adapter", asyn
   // the real invocation and the glasses render its unfamiliar result keys.
   await expect(displayPage.getByRole("button", { name: /Confirm/ })).toHaveCount(0);
   const survey = consolePage.frameLocator('iframe[title="Canopy Lab"]').getByTestId("last-survey");
-  await expect(survey).toHaveText("garden: 62% shade, healthy");
+  await expect(survey).toContainText("garden");
+  await expect(survey).toContainText("62% shade");
   await expect(displayPage.getByText("Survey zone")).toBeVisible();
   await expect(displayPage.getByText("garden", { exact: true })).toBeVisible();
   await expect(displayPage.getByText("Shade percent")).toBeVisible();

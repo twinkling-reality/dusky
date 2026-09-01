@@ -24,6 +24,7 @@ const CONSOLE = "https://dusky-console.vercel.app";
 const MARKET = "https://dusky-market.vercel.app";
 const RESERVATIONS = "https://dusky-reservations.vercel.app";
 const DISPATCH = "https://dusky-dispatch.vercel.app";
+const CANOPY = "https://dusky-canopy-lab.glendonchin.chatgpt.site";
 const RELAY = "https://dusky-relay.onrender.com";
 
 async function expectAgentTools(page: Page): Promise<void> {
@@ -52,7 +53,7 @@ test("every surface is public, with no login wall in front of the glasses", asyn
   // this loop catches both. It is the cheapest place either failure can be
   // found, and every surface belongs in it or the surface left out is the one
   // that breaks.
-  for (const url of [DISPLAY, CONSOLE, MARKET, RESERVATIONS, DISPATCH]) {
+  for (const url of [DISPLAY, CONSOLE, MARKET, RESERVATIONS, DISPATCH, CANOPY]) {
     const res = await request.get(url);
     expect(res.status(), `${url} should be reachable`).toBe(200);
     expect(await res.text(), `${url} should not be a Vercel login page`).not.toContain(
@@ -265,6 +266,36 @@ test("a gesture on the deployed Display changes the deployed market", async ({ b
   // And the result frame is read from what that site returned.
   await expect(displayPage.getByText("Cart total")).toBeVisible();
   await expect(displayPage.getByText("$4.29")).toBeVisible();
+
+  await ctx.close();
+});
+
+test("the public runtime provider connects and runs without a registry entry", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext();
+  const consolePage = await ctx.newPage();
+  const displayPage = await ctx.newPage();
+  const code = freshCode();
+  const source = JSON.stringify({ name: "Canopy Lab", url: CANOPY });
+  const query = new URLSearchParams({ session: code, mode: "glasses", site: source });
+
+  await consolePage.goto(`${CONSOLE}/demo?${query.toString()}`);
+  await expect(consolePage.locator('iframe[title="Canopy Lab"]')).toHaveCount(1);
+  await expect(consolePage.getByTestId("actions").getByText("Estimate shade")).toBeVisible();
+  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(1);
+
+  await displayPage.goto(`${DISPLAY}/?session=${code}`);
+  await focusChoice(displayPage, /Estimate shade/);
+  await displayPage.keyboard.press("Enter");
+  await expect(displayPage.getByRole("button", { name: /^garden$/i })).toBeVisible();
+  await focusChoice(displayPage, /^garden$/i);
+  await displayPage.keyboard.press("Enter");
+
+  const result = consolePage.frameLocator('iframe[title="Canopy Lab"]').getByTestId("last-survey");
+  await expect(result).toContainText("garden");
+  await expect(result).toContainText("62% shade");
+  await expect(displayPage.getByText("Canopy condition")).toBeVisible();
 
   await ctx.close();
 });
