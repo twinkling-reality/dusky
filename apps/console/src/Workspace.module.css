@@ -596,6 +596,35 @@
   color: var(--dusky-ink-dim);
 }
 
+/*
+ * First-run help stays in the pairing copy instead of becoming another card.
+ * Returning wearers can move straight to the code; new wearers get the one-time
+ * route at the exact point where they would otherwise have no code to enter.
+ */
+.startSetup {
+  max-width: 62ch;
+  margin: 0.7rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--dusky-ink-dim);
+}
+
+.startSetup strong {
+  font-weight: 550;
+  color: var(--dusky-ink);
+}
+
+.startSetupUrl {
+  font-family: var(--dusky-mono);
+  font-size: 0.92em;
+  color: var(--dusky-accent);
+  overflow-wrap: anywhere;
+}
+
+.startSetupPath {
+  color: var(--dusky-ink-dim);
+}
+
 .pairGraph {
   position: relative;
   z-index: 2;
@@ -2339,7 +2368,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 .what {
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s4);
+  gap: var(--dusky-s3);
   padding: var(--dusky-s4);
   border-radius: var(--dusky-box, 16px);
   background: color-mix(in srgb, var(--dusky-surface) 88%, transparent);
@@ -2351,33 +2380,33 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
     0 14px 34px rgb(20 22 19 / 12%);
 }
 
-.whatList {
-  margin: 0;
+.whatBody {
   display: flex;
   flex-direction: column;
-  gap: var(--dusky-s3);
+  gap: 0.55rem;
 }
-.whatList dt {
-  font-family: var(--dusky-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-dim);
-}
-.whatList dd {
-  margin: 0.15rem 0 0;
+
+.whatBody p {
+  margin: 0;
   font-size: 0.9rem;
-  line-height: 1.5;
+  line-height: 1.52;
   color: var(--dusky-ink);
 }
 
-/* The only line here that tells somebody to do something. */
-.whatDo {
+.whatBody .whatIntro {
+  font-size: 0.96rem;
+  font-weight: 450;
+  line-height: 1.46;
+  color: var(--dusky-ink-strong);
+}
+
+.whatNote {
   margin: 0;
   padding-top: var(--dusky-s3);
   border-top: 1px solid var(--dusky-hair-soft);
-  font-size: 0.94rem;
-  color: var(--dusky-ink-strong);
+  font-size: 0.78rem;
+  line-height: 1.48;
+  color: var(--dusky-ink-dim);
 }
 
 /* ------------------------------------------------- live topology canvas */
@@ -5443,4 +5472,273 @@ body
   justify-content: center;
   line-height: 1;
   text-align: center;
+}
+
+/* Dusky is a WebMCP provider as well as a consumer. The reverse path is one
+ * quiet fact, not an explainer nested inside an already-informational card. */
+.agentAccess {
+  width: 100%;
+  margin: 0;
+  padding-top: 0.62rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid var(--dusky-hair-soft);
+  font-family: var(--dusky-sans);
+  line-height: 1.25;
+  text-align: left;
+}
+
+.agentAccess strong {
+  font-size: 0.76rem;
+  font-weight: 520;
+  letter-spacing: -0.005em;
+  color: var(--dusky-ink-strong);
+}
+
+.agentAccess span {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 450;
+  color: var(--dusky-ink-dim);
+}
+
+.agentAccess[data-state="ready"] span {
+  color: var(--dusky-ok);
+}
+
+.agentAccess[data-state="failed"] span,
+.agentAccess[data-state="unavailable"] span {
+  color: var(--dusky-stop);
+}
+
+/* One compact glass squircle owns graph-wide controls. Each command has its
+ * own inset hover shape; the container never turns into a segmented toolbar. */
+.canvasControls {
+  position: fixed;
+  z-index: 70;
+  top: auto;
+  right: auto;
+  bottom: 0.75rem;
+  left: 50%;
+  width: auto;
+  max-width: calc(100vw - 1rem);
+  padding: 0.28rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.12rem;
+  align-items: stretch;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, white 58%, var(--dusky-hair));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dusky-surface) 72%, transparent);
+  box-shadow:
+    0 0.14rem 0.5rem -0.26rem color-mix(in srgb, var(--dusky-ink) 10%, transparent),
+    0 0 1.2rem -0.5rem color-mix(in srgb, var(--dusky-ink) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 68%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  backdrop-filter: blur(24px) saturate(125%);
+}
+
+.canvasControls button {
+  position: relative;
+  min-height: 2.35rem;
+  flex: none;
+  padding: 0 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  text-align: center;
+  color: var(--dusky-ink);
+  cursor: pointer;
+}
+
+.canvasControls button::after {
+  position: absolute;
+  z-index: 90;
+  bottom: calc(100% + 0.55rem);
+  left: 50%;
+  width: max-content;
+  max-width: 13rem;
+  padding: 0.36rem 0.48rem;
+  border: 1px solid color-mix(in srgb, white 12%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dusky-ink-strong) 94%, transparent);
+  box-shadow: 0 0.35rem 1rem color-mix(in srgb, var(--dusky-ink) 18%, transparent);
+  color: var(--dusky-surface);
+  content: attr(data-tooltip);
+  font-family: var(--dusky-sans);
+  font-size: 0.57rem;
+  font-weight: 520;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 0.18rem);
+  transition:
+    opacity 120ms ease,
+    transform 160ms var(--dusky-ease-enter);
+}
+
+.canvasControls button:hover::after,
+.canvasControls button:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 240ms;
+}
+
+.canvasControls .connectionsButton {
+  flex: none;
+}
+
+.canvasControls button > .commandLabel {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  overflow: visible;
+  clip: auto;
+  font-family: var(--dusky-sans);
+  font-size: 0.72rem;
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  white-space: nowrap;
+  color: var(--dusky-ink-strong);
+}
+
+.canvasControls .commandIcon {
+  width: 0.92rem;
+  height: 0.92rem;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--dusky-accent);
+}
+
+.canvasControls .commandIcon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.45;
+}
+
+.canvasControls button .commandValue {
+  min-width: 0;
+  height: auto;
+  padding: 0.22rem 0.34rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dusky-ink) 6%, transparent);
+  font-family: var(--dusky-mono);
+  font-size: 0.52rem;
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dusky-ink-dim);
+}
+
+.canvasControls button:hover,
+.canvasControls button:focus-visible,
+.canvasControls .connectionsButton[data-open] {
+  background: color-mix(in srgb, var(--dusky-surface) 80%, var(--dusky-accent-soft));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dusky-accent) 18%, var(--dusky-hair));
+  color: var(--dusky-ink-strong);
+}
+
+.canvasControls button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid color-mix(in srgb, var(--dusky-accent) 56%, transparent);
+  outline-offset: 1px;
+}
+
+.canvasControls button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 840px) {
+  .canvasControls {
+    top: auto;
+    right: auto;
+    bottom: 0.5rem;
+    width: auto;
+    max-width: calc(100vw - 0.75rem);
+    padding: 0.25rem;
+    gap: 0.08rem;
+    border-radius: 17px;
+  }
+
+  .canvasControls button {
+    min-height: 2.35rem;
+    padding: 0 0.44rem;
+    gap: 0.26rem;
+    border-radius: 11px;
+  }
+
+  .canvasControls button > .commandLabel {
+    font-size: 0.64rem;
+  }
+
+  .canvasControls button .commandValue {
+    padding-inline: 0.26rem;
+    font-size: 0.45rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .canvasControls button .commandValue {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .canvasControls button::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvasControls button::after {
+    transition: none;
+  }
+}
+
+/* The horizontal graph begins at 1180px, so its open-page composition must
+ * use a compact column budget until the full desktop grid fits at 1320px. */
+@media (min-width: 1180px) and (max-width: 1319px) {
+  .topologyCanvas[data-layout="horizontal"] .graphNodes {
+    margin-inline: 1.25rem;
+    grid-template-columns: 20rem minmax(13rem, 14rem) minmax(26rem, 1fr);
+    gap: 1rem;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .runtimePanel {
+    max-width: 14rem;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .providerActionPair {
+    grid-template-columns: minmax(10rem, 0.9fr) minmax(12rem, 1.1fr);
+    gap: 1.25rem;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .providerActionPair:has(.providerNode[data-inspected]) {
+    grid-template-columns: minmax(14rem, 1.2fr) minmax(9.5rem, 0.8fr);
+    gap: 1rem;
+  }
 }

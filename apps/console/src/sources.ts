@@ -37,6 +37,16 @@ export interface Source {
   blurb: string;
 }
 
+/**
+ * A browser tab keeps one live iframe per connected website.
+ *
+ * This is a product and resource boundary, not a protocol claim. A shared URL
+ * must not be able to make the console mount an unbounded number of foreign
+ * documents, and the topology stops being a usable control surface long before
+ * an arbitrary query string stops growing.
+ */
+export const MAX_CONNECTED_SITES = 8;
+
 function fixturePreview(urlText: string): string {
   const url = new URL(urlText);
   url.searchParams.set("surface", "console");
@@ -94,6 +104,16 @@ export function originOf(source: Source): string {
  */
 export function sitesFromQuery(search: string): readonly Source[] {
   const params = new URLSearchParams(search);
+
+  /*
+   * The product-facing connection list can mix bundled samples with websites
+   * added by URL. It is separate from the legacy `site` proof parameter below:
+   * that parameter deliberately REPLACES the fixtures so the genericity test
+   * can prove an unfamiliar provider without any bundled provider present.
+   */
+  const configured = connectionSites(params.getAll("connection"));
+  if (configured.length > 0) return configured;
+
   const runtime = runtimeSites(params.getAll("site"));
   if (runtime.length > 0) return runtime;
 
@@ -101,6 +121,47 @@ export function sitesFromQuery(search: string): readonly Source[] {
   if (!id) return SOURCES;
   const only = SOURCES.find((s) => s.id === id);
   return only ? [only] : SOURCES;
+}
+
+/**
+ * Encode the exact visible connection set into a shareable console URL.
+ *
+ * Sample ids retain their authored preview URLs and labels. Added websites
+ * carry only their safe display name and URL; their tools still come entirely
+ * from the live WebMCP declaration.
+ */
+export function connectionValues(sites: readonly Source[]): string[] {
+  return sites.slice(0, MAX_CONNECTED_SITES).map((site) => {
+    const sample = SOURCES.find(
+      (candidate) => candidate.id === site.id && originOf(candidate) === originOf(site),
+    );
+    if (site.sample === true && sample) return `sample:${site.id}`;
+    return JSON.stringify({ name: site.name, url: site.url });
+  });
+}
+
+/** Build the same inert source record used by query-driven runtime providers. */
+export function addedSource(url: string, name = ""): Source | null {
+  return runtimeSite(JSON.stringify({ name, url }));
+}
+
+function connectionSites(values: readonly string[]): readonly Source[] {
+  const sites: Source[] = [];
+  const origins = new Set<string>();
+
+  for (const value of values) {
+    if (sites.length >= MAX_CONNECTED_SITES) break;
+    const parsed = value.startsWith("sample:")
+      ? (SOURCES.find((source) => source.id === value.slice("sample:".length)) ?? null)
+      : runtimeSite(value);
+    if (!parsed) continue;
+    const origin = originOf(parsed);
+    if (origins.has(origin)) continue;
+    origins.add(origin);
+    sites.push(parsed);
+  }
+
+  return sites;
 }
 
 /**
@@ -121,6 +182,7 @@ function runtimeSites(values: readonly string[]): readonly Source[] {
   const origins = new Set<string>();
 
   for (const value of values) {
+    if (sites.length >= MAX_CONNECTED_SITES) break;
     const parsed = runtimeSite(value);
     if (!parsed) continue;
     const origin = originOf(parsed);

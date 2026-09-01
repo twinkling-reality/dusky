@@ -1,0 +1,256 @@
+/*
+ * Causal Light Trace
+ *
+ * Runtime motion is intentionally isolated from Workspace.module.css. That
+ * stylesheet owns the topology's layout history; this module owns only live
+ * evidence. Every treatment below is driven by an explicit runtime state, so
+ * an idle graph stays still and a provider branch never lights speculatively.
+ */
+
+.surface {
+  --runtime-signal: #1c6b68;
+  --runtime-signal-core: #e5fffb;
+  --runtime-approval: #86601d;
+  --runtime-failure: #a8443a;
+  --runtime-wire: #b8c1bc;
+}
+
+.node {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.node[data-runtime-node-state="active"] {
+  border-color: color-mix(in srgb, var(--runtime-signal) 62%, var(--dusky-hair));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--runtime-signal) 10%, transparent),
+    0 12px 28px rgb(20 22 19 / 7%);
+}
+
+.node[data-runtime-node-state="approval"] {
+  border-color: color-mix(in srgb, var(--runtime-approval) 62%, var(--dusky-hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--runtime-approval) 9%, transparent);
+}
+
+.node[data-runtime-node-state="failed"] {
+  border-color: color-mix(in srgb, var(--runtime-failure) 64%, var(--dusky-hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--runtime-failure) 9%, transparent);
+}
+
+.actionRow {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition: background-color 180ms ease;
+}
+
+.actionRow > * {
+  position: relative;
+  z-index: 1;
+}
+
+.actionRow[data-action-state="approval"] {
+  background: color-mix(in srgb, var(--runtime-approval) 7%, transparent);
+}
+
+.actionRow[data-action-state="running"],
+.actionRow[data-action-state="returned"],
+.actionRow[data-action-state="succeeded"] {
+  background: color-mix(in srgb, var(--runtime-signal) 6%, transparent);
+}
+
+.actionRow[data-action-state="preparing"] {
+  background: color-mix(in srgb, var(--runtime-signal) 4%, transparent);
+}
+
+.actionRow[data-action-state="failed"] {
+  background: color-mix(in srgb, var(--runtime-failure) 6%, transparent);
+}
+
+.actionRow[data-action-state="unknown"] {
+  background: color-mix(in srgb, var(--runtime-approval) 6%, transparent);
+}
+
+.actionGleam {
+  position: absolute;
+  z-index: 0;
+  inset: 0 auto 0 -46%;
+  width: 44%;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    transparent 0%,
+    color-mix(in srgb, var(--runtime-signal-core) 58%, transparent) 48%,
+    transparent 100%
+  );
+  transform: skewX(-14deg);
+  animation: row-gleam 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes row-gleam {
+  from {
+    translate: 0 0;
+    opacity: 0;
+  }
+
+  24% {
+    opacity: 0.72;
+  }
+
+  to {
+    translate: 340% 0;
+    opacity: 0;
+  }
+}
+
+.actionState {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: var(--dusky-ink-dim);
+}
+
+.actionState::before,
+.eventGlyph::before {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: none;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+  content: "";
+}
+
+.actionRow[data-action-state="approval"] .actionState,
+.actionRow[data-action-state="unknown"] .actionState {
+  color: var(--runtime-approval);
+}
+
+.actionRow[data-action-state="running"] .actionState,
+.actionRow[data-action-state="returned"] .actionState,
+.actionRow[data-action-state="succeeded"] .actionState {
+  color: var(--runtime-signal);
+}
+
+.actionRow[data-action-state="preparing"] .actionState {
+  color: color-mix(in srgb, var(--runtime-signal) 78%, var(--dusky-ink-dim));
+}
+
+.actionRow[data-action-state="preparing"] .actionState::before {
+  border-style: dashed;
+}
+
+.actionRow[data-action-state="running"] .actionState::before {
+  background: currentcolor;
+  animation: running-breath 1.6s ease-in-out 3;
+}
+
+.actionRow[data-action-state="succeeded"] .actionState::before {
+  border-radius: 2px;
+  background: currentcolor;
+}
+
+.actionRow[data-action-state="failed"] .actionState {
+  color: var(--runtime-failure);
+}
+
+.actionRow[data-action-state="failed"] .actionState::before {
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+@keyframes running-breath {
+  0%,
+  100% {
+    opacity: 0.48;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.eventRow {
+  opacity: 1;
+  animation: event-enter 160ms ease-out both;
+}
+
+@keyframes event-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eventStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  white-space: nowrap;
+}
+
+.eventGlyph {
+  display: inline-flex;
+  color: currentcolor;
+}
+
+.eventRow[data-status="running"] .eventStatus,
+.eventRow[data-status="returned"] .eventStatus,
+.eventRow[data-status="succeeded"] .eventStatus {
+  color: var(--runtime-signal);
+}
+
+.eventRow[data-status="failed"] .eventStatus {
+  color: var(--runtime-failure);
+}
+
+.eventRow[data-status="unknown"] .eventStatus {
+  color: var(--runtime-approval);
+}
+
+.eventRow[data-status="running"] .eventGlyph::before {
+  background: currentcolor;
+  animation: running-breath 1.6s ease-in-out 3;
+}
+
+.eventRow[data-status="returned"] .eventGlyph::before {
+  border-style: dashed;
+}
+
+.eventRow[data-status="succeeded"] .eventGlyph::before {
+  border-radius: 2px;
+  background: currentcolor;
+}
+
+.eventRow[data-status="failed"] .eventGlyph::before {
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node,
+  .actionRow {
+    transition: none;
+  }
+
+  .actionGleam {
+    display: none;
+    animation: none;
+  }
+
+  .actionRow[data-action-state="running"] .actionState::before,
+  .eventRow[data-status="running"] .eventGlyph::before,
+  .eventRow {
+    animation: none;
+  }
+}

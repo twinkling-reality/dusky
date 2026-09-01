@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { originOf, SOURCES, sitesFromQuery } from "./sources.js";
+import {
+  addedSource,
+  connectionValues,
+  MAX_CONNECTED_SITES,
+  originOf,
+  SOURCES,
+  sitesFromQuery,
+} from "./sources.js";
 
 /**
  * The one line that used to decide how much of the web Dusky could reach.
@@ -59,6 +66,38 @@ describe("which sites a window holds", () => {
       "https://one.example",
       "https://two.example",
     ]);
+  });
+
+  it("mixes selected samples with user-added websites in one connection set", () => {
+    const added = addedSource("https://canopy.example/webmcp", "Canopy Lab");
+    expect(added).not.toBeNull();
+    const values = connectionValues([SOURCES[0]!, SOURCES[2]!, added!]);
+    const params = new URLSearchParams();
+    for (const value of values) params.append("connection", value);
+
+    const held = sitesFromQuery(params.toString());
+    expect(held.map((site) => ({ id: site.id, name: site.name, sample: site.sample }))).toEqual([
+      { id: "market", name: "Verdant Market", sample: true },
+      { id: "dispatch", name: "Northstar Dispatch", sample: true },
+      { id: "runtime:https://canopy.example", name: "Canopy Lab", sample: undefined },
+    ]);
+  });
+
+  it("bounds the number of foreign documents one connection URL can mount", () => {
+    const params = new URLSearchParams();
+    for (let index = 0; index < MAX_CONNECTED_SITES + 4; index += 1) {
+      params.append("connection", `https://provider-${index}.example/tools`);
+    }
+    expect(sitesFromQuery(params.toString())).toHaveLength(MAX_CONNECTED_SITES);
+  });
+
+  it("uses the shared URL validation for websites added in the interface", () => {
+    expect(addedSource("https://provider.example/tools", "  Provider\nLab  ")).toMatchObject({
+      name: "Provider Lab",
+      url: "https://provider.example/tools",
+    });
+    expect(addedSource("http://provider.example/tools")).toBeNull();
+    expect(addedSource("https://user:secret@provider.example/tools")).toBeNull();
   });
 
   it("permits loopback development but rejects unsafe runtime URLs", () => {

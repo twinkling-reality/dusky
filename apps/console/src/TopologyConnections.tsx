@@ -19,7 +19,7 @@ export interface CubicSegment {
 
 export type PathCommand = { kind: "move"; point: Point } | { kind: "curve"; segment: CubicSegment };
 
-type EdgeKind = "display" | "provider" | "actions";
+type EdgeKind = "display" | "provider" | "actions" | "tool";
 
 interface MeasuredEdge {
   id: string;
@@ -36,16 +36,101 @@ interface PathSample {
   point: Point;
 }
 
+interface ActivityLeg {
+  samples: readonly PathSample[];
+  duration: number;
+  reverse: boolean;
+}
+
 interface TopologyConnectionsProps {
   origins: readonly string[];
   connectedOrigins: ReadonlySet<string>;
   runtimeConnected: boolean;
   viewKey: string;
+  activity?: TopologyActivityVisualState | null;
   className?: string;
+}
+
+/**
+ * The graph renders evidence; it does not infer product state.
+ *
+ * A caller advances `cueRevision` exactly when one new directional trace
+ * should travel. Updating a phase with the same revision updates the static
+ * route treatment without replaying motion. Exact tool identity remains the
+ * pair `(origin, toolName)` throughout.
+ */
+export interface TopologyActivityVisualState {
+  /** Both fields are required before a trace may enter any provider branch. */
+  origin?: string;
+  toolName?: string;
+  phase: "intent" | "awaiting-approval" | "invoking" | "returned" | "failed" | "unknown";
+  direction: "request" | "return";
+  cueRevision: number;
 }
 
 const SAMPLE_STEPS = 28;
 const EPSILON = 0.25;
+const TRACE_PIXELS_PER_MS = 0.9;
+const TRACE_MIN_MS = 160;
+const TRACE_MAX_MS = 520;
+const TRACE_ROUTE_MAX_MS = 720;
+const TRACE_RESIDUAL_MS = 900;
+
+function toolEdgeId(origin: string, toolName: string): string {
+  return `tool:${origin}::${toolName}`;
+}
+
+/** The ordered route is also the contract tested by the DOM wiring. */
+export function activityRouteIds(
+  activity: TopologyActivityVisualState | null | undefined,
+): readonly string[] {
+  if (!activity) return [];
+  const requestRoute =
+    activity.phase === "intent" ||
+    activity.phase === "awaiting-approval" ||
+    !activity.origin ||
+    !activity.toolName
+      ? ["display-runtime"]
+      : [
+          `provider:${activity.origin}`,
+          `actions:${activity.origin}`,
+          toolEdgeId(activity.origin, activity.toolName),
+        ];
+  return activity.direction === "return" ? requestRoute.reverse() : requestRoute;
+}
+
+/** Distance controls travel time, while clamps keep every cue brief and finite. */
+export function traceDurationMs(distanceInPixels: number): number {
+  return clamp(distanceInPixels / TRACE_PIXELS_PER_MS, TRACE_MIN_MS, TRACE_MAX_MS);
+}
+
+export interface TraceCueState {
+  state: "travel" | "residual" | "idle";
+  strength: number;
+}
+
+/**
+ * Motion ends, then the energized route dissolves back into the idle drawing.
+ * Reduced motion receives the same bounded evidence as a static color cue.
+ */
+export function traceCueState(
+  elapsedMs: number,
+  travelDurationMs: number,
+  reducedMotion: boolean,
+): TraceCueState {
+  if (elapsedMs < 0) return { state: "idle", strength: 0 };
+  if (reducedMotion) {
+    return elapsedMs <= TRACE_RESIDUAL_MS
+      ? { state: "residual", strength: 1 }
+      : { state: "idle", strength: 0 };
+  }
+  if (elapsedMs <= travelDurationMs) return { state: "travel", strength: 1 };
+  const residualElapsed = elapsedMs - travelDurationMs;
+  if (residualElapsed <= TRACE_RESIDUAL_MS) {
+    return { state: "residual", strength: 1 - residualElapsed / TRACE_RESIDUAL_MS };
+  }
+  return { state: "idle", strength: 0 };
+}
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
@@ -65,6 +150,25 @@ function centerOf(element: HTMLElement, canvas: DOMRect): Point {
 
 function anchorOf(element: HTMLElement, canvas: DOMRect, normal: Point): Anchor {
   return { point: centerOf(element, canvas), normal };
+}
+
+function leadingBoundaryAnchorOf(element: HTMLElement, canvas: DOMRect, vertical: boolean): Anchor {
+  const rect = element.getBoundingClientRect();
+  return vertical
+    ? {
+        point: {
+          x: rect.left - canvas.left + rect.width / 2,
+          y: rect.top - canvas.top,
+        },
+        normal: { x: 0, y: -1 },
+      }
+    : {
+        point: {
+          x: rect.left - canvas.left,
+          y: rect.top - canvas.top + rect.height / 2,
+        },
+        normal: { x: -1, y: 0 },
+      };
 }
 
 function line(from: Point, to: Point): CubicSegment {
@@ -241,6 +345,71 @@ function cssColor(style: CSSStyleDeclaration, property: string, fallback: string
   return style.getPropertyValue(property).trim() || fallback;
 }
 
+function colorForActivity(
+  phase: TopologyActivityVisualState["phase"],
+  accent: string,
+  warning: string,
+  failure: string,
+): string {
+  if (phase === "failed") return failure;
+  if (phase === "awaiting-approval" || phase === "unknown") return warning;
+  return accent;
+}
+
+function activityLegs(
+  routeIds: readonly string[],
+  edgesById: ReadonlyMap<string, MeasuredEdge>,
+  samplesById: ReadonlyMap<string, readonly PathSample[]>,
+  direction: TopologyActivityVisualState["direction"],
+): readonly ActivityLeg[] {
+  const reverse = direction === "return";
+  return routeIds.flatMap((id) => {
+    const edge = edgesById.get(id);
+    const samples = samplesById.get(id);
+    const last = samples?.[samples.length - 1];
+    if (!edge || !samples || !last || !edge.connected || last.distance <= 0) return [];
+    return [
+      {
+        samples,
+        duration: traceDurationMs(last.distance),
+        reverse,
+      },
+    ];
+  });
+}
+
+function positionOnLegs(
+  legs: readonly ActivityLeg[],
+  elapsedMs: number,
+): { sample: PathSample; reverse: boolean } | null {
+  const rawDuration = legs.reduce((sum, leg) => sum + leg.duration, 0);
+  if (rawDuration <= 0) return null;
+  const durationScale = Math.min(1, TRACE_ROUTE_MAX_MS / rawDuration);
+  const total = rawDuration * durationScale;
+  if (elapsedMs < 0 || elapsedMs > total) return null;
+  let travelled = 0;
+  for (const [index, leg] of legs.entries()) {
+    const duration = leg.duration * durationScale;
+    const isLast = index === legs.length - 1;
+    if (elapsedMs <= travelled + duration || isLast) {
+      const local = clamp((elapsedMs - travelled) / duration, 0, 1);
+      return {
+        sample: positionOn(leg.samples, leg.reverse ? 1 - local : local),
+        reverse: leg.reverse,
+      };
+    }
+    travelled += duration;
+  }
+  return null;
+}
+
+function routeDurationMs(legs: readonly ActivityLeg[]): number {
+  return Math.min(
+    TRACE_ROUTE_MAX_MS,
+    legs.reduce((sum, leg) => sum + leg.duration, 0),
+  );
+}
+
 function drawTransferSignal(
   context: CanvasRenderingContext2D,
   sample: PathSample,
@@ -310,10 +479,18 @@ export function TopologyConnections({
   connectedOrigins,
   runtimeConnected,
   viewKey,
+  activity = null,
   className,
 }: TopologyConnectionsProps) {
   const layer = useRef<HTMLCanvasElement | null>(null);
+  const lastCueRevision = useRef<number | null>(null);
+  const cue = useRef<{ revision: number; startedAt: number } | null>(null);
   const connectedKey = origins.filter((origin) => connectedOrigins.has(origin)).join("|");
+  const activityOrigin = activity?.origin;
+  const activityToolName = activity?.toolName;
+  const activityPhase = activity?.phase;
+  const activityDirection = activity?.direction;
+  const activityCueRevision = activity?.cueRevision;
 
   useLayoutEffect(() => {
     const canvas = layer.current;
@@ -321,14 +498,40 @@ export function TopologyConnections({
     const context = canvas?.getContext("2d");
     if (!canvas || !root || !context) return;
 
+    const visualActivity: TopologyActivityVisualState | null =
+      activityPhase && activityDirection && activityCueRevision !== undefined
+        ? {
+            phase: activityPhase,
+            direction: activityDirection,
+            cueRevision: activityCueRevision,
+            ...(activityOrigin ? { origin: activityOrigin } : {}),
+            ...(activityToolName ? { toolName: activityToolName } : {}),
+          }
+        : null;
     canvas.dataset.viewKey = `${connectedKey}:${viewKey}`;
+    if (visualActivity && lastCueRevision.current !== visualActivity.cueRevision) {
+      lastCueRevision.current = visualActivity.cueRevision;
+      cue.current = { revision: visualActivity.cueRevision, startedAt: performance.now() };
+    } else if (!visualActivity) {
+      cue.current = null;
+    }
     let frame = 0;
+    let reducedCueTimer: ReturnType<typeof setTimeout> | undefined;
     let edges: readonly MeasuredEdge[] = [];
+    let edgesById = new Map<string, MeasuredEdge>();
+    let samplesById = new Map<string, readonly PathSample[]>();
     let focus: string | null = null;
     let reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const palette = getComputedStyle(root);
     const accent = cssColor(palette, "--dusky-accent", "#1c6b68");
     const capability = cssColor(palette, "--topology-capability", "#587069");
+    const warning = cssColor(palette, "--dusky-warn", "#86601d");
+    const failure = cssColor(palette, "--dusky-stop", "#a8443a");
+    const routeIds = activityRouteIds(visualActivity);
+    const routeSet = new Set(routeIds);
+    const activityColor = visualActivity
+      ? colorForActivity(visualActivity.phase, accent, warning, failure)
+      : accent;
 
     const paint = (time: number) => {
       const bounds = canvas.getBoundingClientRect();
@@ -336,72 +539,85 @@ export function TopologyConnections({
       context.lineCap = "round";
       context.lineJoin = "round";
 
-      const sampled = new Map<string, readonly PathSample[]>();
+      const legs = visualActivity
+        ? activityLegs(routeIds, edgesById, samplesById, visualActivity.direction)
+        : [];
+      const cueState = cue.current;
+      const cueMatches =
+        visualActivity !== null &&
+        cueState?.revision === visualActivity.cueRevision &&
+        legs.length > 0;
+      const elapsed = cueMatches ? time - cueState.startedAt : 0;
+      const duration = routeDurationMs(legs);
+      const visual = cueMatches
+        ? traceCueState(elapsed, duration, reducedMotion)
+        : { state: "idle" as const, strength: 0 };
+      const routeVisible = visual.strength > 0;
+
       for (const edge of edges) {
         const related = focusMatches(edge, focus);
+        const onActivityRoute = routeVisible && routeSet.has(edge.id);
         const activeAlpha =
           edge.kind === "display"
             ? 0.78
             : edge.kind === "provider"
               ? 0.64
-              : edge.kind === "actions"
+              : edge.kind === "actions" || edge.kind === "tool"
                 ? 0.56
                 : 0.5;
-        context.globalAlpha = related ? (edge.connected ? activeAlpha : 0.24) : 0.08;
-        context.strokeStyle = edge.kind === "actions" ? capability : accent;
-        context.lineWidth = edge.kind === "display" ? 1.8 : edge.kind === "provider" ? 1.5 : 1.35;
+        const baseAlpha = related ? (edge.connected ? activeAlpha : 0.24) : 0.08;
+        context.save();
+        context.globalAlpha =
+          routeVisible && !onActivityRoute
+            ? baseAlpha + (Math.min(baseAlpha, related ? 0.16 : 0.08) - baseAlpha) * visual.strength
+            : baseAlpha;
+        context.strokeStyle = edge.kind === "actions" || edge.kind === "tool" ? capability : accent;
+        const baseWidth = edge.kind === "display" ? 1.8 : edge.kind === "provider" ? 1.5 : 1.35;
+        context.lineWidth = baseWidth;
         context.setLineDash([]);
         trace(context, edge.segments);
         context.stroke();
-        sampled.set(edge.id, samplesFor(edge.motionSegments ?? edge.segments));
+
+        if (onActivityRoute) {
+          context.globalAlpha = (edge.connected ? 0.9 : 0.3) * visual.strength;
+          context.strokeStyle = activityColor;
+          context.lineWidth = baseWidth + 0.8 * visual.strength;
+          context.shadowColor = activityColor;
+          context.shadowBlur = edge.connected ? 4 * visual.strength : 0;
+          trace(context, edge.segments);
+          context.stroke();
+        }
+        context.restore();
       }
 
       context.setLineDash([]);
-      if (!reducedMotion) {
-        for (const [index, edge] of edges.entries()) {
-          if (!edge.connected || !focusMatches(edge, focus)) continue;
-          const samples = sampled.get(edge.id) ?? [];
-          if (edge.kind === "display") {
-            const progress = ((time + 420) % 4200) / 4200;
-            drawTransferSignal(context, positionOn(samples, progress), accent, 13, 0.96);
-            drawTransferSignal(
-              context,
-              positionOn(samples, 1 - ((time + 1880) % 5200) / 5200),
-              accent,
-              9,
-              0.54,
-              true,
-            );
-          } else if (edge.kind === "provider") {
-            const duration = 5100 + index * 260;
-            const progress = ((time + index * 740) % duration) / duration;
-            drawTransferSignal(context, positionOn(samples, progress), accent, 9, 0.78);
-            drawTransferSignal(
-              context,
-              positionOn(samples, 1 - ((time + index * 910 + 1900) % 6700) / 6700),
-              accent,
-              6,
-              0.34,
-              true,
-            );
-          } else if (edge.kind === "actions") {
-            const duration = 5700 + index * 180;
-            const progress = ((time + index * 680) % duration) / duration;
-            drawTransferSignal(context, positionOn(samples, progress), capability, 7, 0.66);
-          }
+      const moving = visual.state === "travel";
+
+      if (moving) {
+        const position = positionOnLegs(legs, elapsed);
+        if (position) {
+          drawTransferSignal(context, position.sample, activityColor, 22, 0.98, position.reverse);
         }
       }
 
       context.globalAlpha = 1;
-      const liveMotion =
-        !reducedMotion &&
-        edges.some(
-          (edge) =>
-            edge.connected &&
-            (edge.kind === "display" || edge.kind === "provider" || edge.kind === "actions") &&
-            focusMatches(edge, focus),
+      canvas.dataset.activityAnimating = String(moving);
+      canvas.dataset.activityResidual = String(visual.state === "residual");
+      canvas.dataset.activityVisualState = visual.state;
+      if (visual.state === "travel" || (!reducedMotion && visual.state === "residual")) {
+        frame = requestAnimationFrame(paint);
+      } else if (reducedMotion && visual.state === "residual" && reducedCueTimer === undefined) {
+        reducedCueTimer = setTimeout(
+          () => {
+            reducedCueTimer = undefined;
+            cue.current = null;
+            paint(performance.now());
+          },
+          Math.max(0, TRACE_RESIDUAL_MS - elapsed),
         );
-      if (liveMotion) frame = requestAnimationFrame(paint);
+      } else if (cueMatches && visual.state === "idle") {
+        cue.current = null;
+      }
     };
 
     const measure = () => {
@@ -486,7 +702,41 @@ export function TopologyConnections({
         });
       }
 
+      if (visualActivity?.origin && visualActivity.toolName) {
+        const actions = actionPorts.find(
+          (port) =>
+            port.dataset.actionOrigin === visualActivity.origin &&
+            port.dataset.actionEnd === "actions",
+        );
+        const tool = Array.from(
+          root.querySelectorAll<HTMLElement>(
+            "[data-topology-tool-origin][data-topology-tool-name]",
+          ),
+        ).find(
+          (candidate) =>
+            candidate.dataset.topologyToolOrigin === visualActivity.origin &&
+            candidate.dataset.topologyToolName === visualActivity.toolName,
+        );
+        if (actions && tool) {
+          measured.push({
+            id: toolEdgeId(visualActivity.origin, visualActivity.toolName),
+            kind: "tool",
+            origin: visualActivity.origin,
+            connected: connectedOrigins.has(visualActivity.origin),
+            segments: bowedCurve(
+              anchorOf(actions, bounds, vertical ? { x: 0, y: 1 } : { x: 1, y: 0 }),
+              leadingBoundaryAnchorOf(tool, bounds, vertical),
+              0,
+            ),
+          });
+        }
+      }
+
       edges = measured;
+      edgesById = new Map(edges.map((edge) => [edge.id, edge]));
+      samplesById = new Map(
+        edges.map((edge) => [edge.id, samplesFor(edge.motionSegments ?? edge.segments)]),
+      );
       canvas.dataset.runtimeTrunks = String(edges.filter((edge) => edge.kind === "display").length);
       canvas.dataset.providerBuses = "0";
       canvas.dataset.providerBranches = String(
@@ -496,8 +746,15 @@ export function TopologyConnections({
         edges.filter((edge) => edge.kind === "display" || edge.kind === "provider").length,
       );
       canvas.dataset.actionEdges = String(edges.filter((edge) => edge.kind === "actions").length);
+      canvas.dataset.toolEdges = String(edges.filter((edge) => edge.kind === "tool").length);
       canvas.dataset.connectedOrigins = String(connectedOrigins.size);
       canvas.dataset.reducedMotion = String(reducedMotion);
+      canvas.dataset.activityRoute = routeIds.filter((id) => edgesById.has(id)).join("|");
+      canvas.dataset.activityTarget = edges.some((edge) => edge.kind === "tool")
+        ? "exact"
+        : visualActivity?.origin && visualActivity.toolName
+          ? "origin"
+          : "runtime";
       paint(performance.now());
     };
 
@@ -565,6 +822,7 @@ export function TopologyConnections({
 
     return () => {
       cancelAnimationFrame(frame);
+      if (reducedCueTimer !== undefined) clearTimeout(reducedCueTimer);
       observer.disconnect();
       transformObserver.disconnect();
       iframeListeners.forEach((remove) => {
@@ -577,7 +835,18 @@ export function TopologyConnections({
       root.removeEventListener("focusout", onFocusOut);
       window.removeEventListener("resize", schedule);
     };
-  }, [origins, connectedOrigins, connectedKey, runtimeConnected, viewKey]);
+  }, [
+    origins,
+    connectedOrigins,
+    connectedKey,
+    runtimeConnected,
+    viewKey,
+    activityOrigin,
+    activityToolName,
+    activityPhase,
+    activityDirection,
+    activityCueRevision,
+  ]);
 
   return (
     <canvas
@@ -586,6 +855,11 @@ export function TopologyConnections({
       data-motion-item=""
       data-motion-kind="connections"
       data-motion-order="1"
+      data-activity-phase={activityPhase}
+      data-activity-direction={activityDirection}
+      data-activity-origin={activityOrigin}
+      data-activity-tool-name={activityToolName}
+      data-activity-cue-revision={activityCueRevision}
     />
   );
 }

@@ -4,18 +4,21 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { Link, useSearchParams } from "react-router";
+import { ConnectionsPanel } from "./ConnectionsPanel.js";
 import { PairingConnections } from "./PairingConnections.js";
 import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
+import runtimeMotion from "./RuntimeMotion.module.css";
 import { SiteHeader } from "./SiteHeader.js";
 import header from "./SiteHeader.module.css";
 import { codeProblem, isCode, mintCode, type PairMode } from "./session.js";
-import { originOf, type Source, sitesFromQuery } from "./sources.js";
-import { TopologyConnections } from "./TopologyConnections.js";
+import { connectionValues, originOf, SOURCES, type Source, sitesFromQuery } from "./sources.js";
+import { type TopologyActivityVisualState, TopologyConnections } from "./TopologyConnections.js";
 import { type RuntimeAction, useConsoleLink } from "./useConsoleLink.js";
 import styles from "./Workspace.module.css";
 
@@ -55,32 +58,17 @@ function visualBoundaryOf(element: HTMLElement) {
 }
 
 /**
- * What you are looking at, on the same terms as the requirements dropdown.
+ * The product loop, on the same terms as the requirements dropdown.
  *
- * This page carried a paragraph about the security model above the fold and a
- * caption under every heading, and all of it was cut because none of it was
- * what a stranger needed. Cutting it left nothing at all: four labelled boxes
- * and no way to find out what any of them is.
+ * A cold visitor needs to understand where actions come from, where they run,
+ * and who approves them. They do not need a glossary of the current canvas
+ * arrangement: that went stale as soon as the runtime and log moved.
  *
- * A dropdown costs nothing to anybody who does not open it, which is what makes
- * it the right home for text that only some people need. The last line is the
- * one that matters: it says what to press.
+ * A dropdown costs nothing to anybody who does not open it, which makes it the
+ * right home for the small amount of context only some people need.
  */
-function WhatIsThis({
-  displayLabel,
-  displayCopy,
-  heading,
-  sites,
-  onClose,
-}: {
-  displayLabel: string;
-  displayCopy: string;
-  heading: string;
-  sites: readonly Source[];
-  onClose: () => void;
-}) {
+function WhatIsThis({ onClose }: { onClose: () => void }) {
   const box = useRef<HTMLElement | null>(null);
-  const sampleWebsites = sites.every((site) => site.sample === true);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -102,35 +90,19 @@ function WhatIsThis({
 
   return (
     <section id="what" ref={box} className={styles.what} data-squircle="" aria-label="What is this">
-      <dl className={styles.whatList}>
-        <div>
-          <dt>{displayLabel}</dt>
-          <dd>{displayCopy}</dd>
-        </div>
-        <div>
-          <dt>{heading}</dt>
-          <dd>
-            {sampleWebsites
-              ? "These sample websites show how unrelated pages can offer actions without custom integrations. Show or hide any page; the others stay visible."
-              : "Each card contains the website loaded in this browser. Show or hide any page; the others stay visible."}
-          </dd>
-        </div>
-        <div>
-          <dt>Available actions</dt>
-          <dd>
-            Things each provider page authorized Dusky to offer now. Dusky marks whether an action
-            needs approval on the Display before it runs.
-          </dd>
-        </div>
-        <div>
-          <dt>Technical log</dt>
-          <dd>
-            Actions run in this session, the website each came from, and their current status.
-          </dd>
-        </div>
-      </dl>
-      <p className={styles.whatDo}>
-        Choose an action on the Display. Its provider tool runs here, in the browser.
+      <div className={styles.whatBody}>
+        <p className={styles.whatIntro}>
+          Dusky turns authorized WebMCP actions into interfaces for AR displays. The 600 × 600
+          Ray-Ban Display is the first proof case. No site-specific adapters are required.
+        </p>
+        <p>
+          Choose on the Display, or send a task from a browser agent. The matching website runs each
+          action in this browser. Any action that can change a website waits for wearer approval.
+        </p>
+      </div>
+      <p className={styles.whatNote}>
+        Hidden website previews stay connected. The execution log records only website actions that
+        run.
       </p>
     </section>
   );
@@ -163,11 +135,161 @@ function ProviderInspectIcon({ state }: { state: ProviderInspectIconState }) {
   );
 }
 
+function WebsitesIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="3" y="3.5" width="14" height="13" rx="2" />
+      <path d="M3 7h14M6 5.25h.01M8.25 5.25h.01" />
+    </svg>
+  );
+}
+
+function OrientationIcon({ direction }: { direction: "horizontal" | "vertical" }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {direction === "horizontal" ? (
+        <>
+          <path d="M3.25 10h13.5" />
+          <path d="m6.25 7-3 3 3 3M13.75 7l3 3-3 3" />
+        </>
+      ) : (
+        <>
+          <path d="M10 3.25v13.5" />
+          <path d="m7 6.25 3-3 3 3M7 13.75l3 3 3-3" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function PageViewIcon({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="3.25" y="4.25" width="10.5" height="11.5" rx="1.5" />
+      <path d="M6.25 2.75h8.5a2 2 0 0 1 2 2v8.5" />
+      {open ? <path d="M6.25 8h4.5M6.25 11h3" /> : <path d="M6.25 10h4.5" />}
+    </svg>
+  );
+}
+
+function CenterIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <circle cx="10" cy="10" r="4.25" />
+      <path d="M10 2.75v2M10 15.25v2M2.75 10h2M15.25 10h2" />
+    </svg>
+  );
+}
+
 function actionLabel(tool: { name: string; title?: string }): string {
   const title = tool.title?.trim();
   if (title) return title;
   const words = tool.name.replace(/[_-]+/g, " ").trim();
   return words.length === 0 ? "Unnamed action" : words[0]?.toUpperCase() + words.slice(1);
+}
+
+function runtimeStatusLabel(action: RuntimeAction): string {
+  if (action.status === "running") return "Running";
+  if (action.status === "returned") return "Returned";
+  if (action.status === "succeeded") return "Succeeded";
+  if (action.status === "unknown") return "Outcome unknown";
+  return action.providerHit ? "Failed" : "Did not run";
+}
+
+function topologyActivityFor(
+  activity: ReturnType<typeof useConsoleLink>["activity"],
+): TopologyActivityVisualState | null {
+  const cue = activity.cue;
+  if (!cue || cue.direction === "none") return null;
+
+  if (cue.direction === "runtime-to-provider" && cue.tool) {
+    return {
+      origin: cue.tool.origin,
+      toolName: cue.tool.name,
+      phase: "invoking",
+      direction: "request",
+      cueRevision: cue.sequence,
+    };
+  }
+
+  if (cue.direction === "provider-to-runtime" && cue.tool) {
+    return {
+      origin: cue.tool.origin,
+      toolName: cue.tool.name,
+      phase: cue.kind === "invocation-failure" ? "failed" : "returned",
+      direction: "return",
+      cueRevision: cue.sequence,
+    };
+  }
+
+  // Display input and returned session frames own only the Display/runtime
+  // edge. Omitting tool identity prevents the renderer from inventing a
+  // provider path merely because the current frame happens to name one.
+  return {
+    phase:
+      activity.session.phase === "approval"
+        ? "awaiting-approval"
+        : activity.session.outcome === "failed"
+          ? "failed"
+          : activity.session.outcome === "unknown"
+            ? "unknown"
+            : "intent",
+    direction: cue.direction === "display-to-runtime" ? "request" : "return",
+    cueRevision: cue.sequence,
+  };
+}
+
+type ActionSurfaceState = "preparing" | "approval" | RuntimeAction["status"];
+
+interface ActionSurfaceActivity {
+  state: ActionSurfaceState;
+  label: string;
+  providerHit: boolean;
+}
+
+function selectedActionActivity(
+  activity: ReturnType<typeof useConsoleLink>["activity"],
+  origin: string,
+  name: string,
+): ActionSurfaceActivity | null {
+  if (activity.session.tool?.origin !== origin || activity.session.tool.name !== name) return null;
+  if (activity.session.phase === "approval") {
+    return { state: "approval", label: "Awaiting wearer approval", providerHit: false };
+  }
+  if (activity.session.phase === "parameters") {
+    return { state: "preparing", label: "Input on Display", providerHit: false };
+  }
+  if (activity.session.phase === "resolving") {
+    return { state: "preparing", label: "Resolving details", providerHit: false };
+  }
+  if (activity.session.phase === "invoking") {
+    return { state: "preparing", label: "Preparing to run", providerHit: false };
+  }
+  return null;
+}
+
+function actionSurfaceActivity(
+  selected: ActionSurfaceActivity | null,
+  latest: RuntimeAction | undefined,
+): ActionSurfaceActivity | null {
+  if (
+    selected?.state === "preparing" &&
+    selected.label === "Preparing to run" &&
+    latest?.status === "running"
+  ) {
+    return {
+      state: latest.status,
+      label: runtimeStatusLabel(latest),
+      providerHit: latest.providerHit,
+    };
+  }
+  if (selected) return selected;
+  if (!latest) return null;
+  return {
+    state: latest.status,
+    label: runtimeStatusLabel(latest),
+    providerHit: latest.providerHit,
+  };
 }
 
 function TechnicalLog({
@@ -189,17 +311,24 @@ function TechnicalLog({
       data-runtime-activity=""
       data-squircle=""
       data-empty={rows.length === 0 ? "" : undefined}
-      aria-label="Technical log"
+      aria-label="Execution log"
     >
       <header className={styles.technicalLogHead}>
-        <h2>Technical log</h2>
+        <h2>Execution log</h2>
         {rows.length > 0 && (
           <span>{`${rows.length} ${rows.length === 1 ? "action" : "actions"}`}</span>
         )}
       </header>
 
-      {rows.length === 0 && <p className={styles.technicalLogEmpty}>No actions in this session.</p>}
-      <ol className={styles.technicalLogEvents} aria-live="polite" aria-relevant="additions text">
+      {rows.length === 0 && (
+        <p className={styles.technicalLogEmpty}>No website actions have run yet.</p>
+      )}
+      <ol
+        className={styles.technicalLogEvents}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
         {rows.map((action) => {
           const tool = tools.find(
             (candidate) => candidate.origin === action.origin && candidate.name === action.toolName,
@@ -207,7 +336,9 @@ function TechnicalLog({
           return (
             <li
               key={action.id}
+              className={runtimeMotion.eventRow}
               data-status={action.status}
+              data-provider-hit={action.providerHit ? "true" : "false"}
               data-origin={action.origin}
               data-tool-name={action.toolName}
               aria-atomic="true"
@@ -216,14 +347,9 @@ function TechnicalLog({
                 <strong>{actionLabel(tool ?? { name: action.toolName })}</strong>
                 <span>{siteNames.get(action.origin) ?? "Connected website"}</span>
               </span>
-              <span className={styles.eventStatus}>
-                {action.status === "running"
-                  ? "Running"
-                  : action.status === "completed"
-                    ? "Returned"
-                    : action.status === "unknown"
-                      ? "Outcome unknown"
-                      : "Failed"}
+              <span className={`${styles.eventStatus} ${runtimeMotion.eventStatus}`}>
+                <span className={runtimeMotion.eventGlyph} aria-hidden="true" />
+                {runtimeStatusLabel(action)}
               </span>
             </li>
           );
@@ -233,13 +359,49 @@ function TechnicalLog({
   );
 }
 
+/**
+ * The reverse half of Dusky's WebMCP story, measured in this document.
+ *
+ * Provider actions flow into the browser runtime above. These controls flow
+ * back out to an agent in the same browser, so they belong in that runtime
+ * surface instead of in the provider action list the wearer sees.
+ */
+function AgentAccess({ state }: { state: "unavailable" | "registering" | "ready" | "failed" }) {
+  const status =
+    state === "ready" ? "Available" : state === "registering" ? "Starting" : "Unavailable";
+  const description =
+    state === "ready"
+      ? "Browser agent control available: check Display status, list website actions, send a task, or cancel."
+      : state === "registering"
+        ? "Browser agent control is starting."
+        : state === "unavailable"
+          ? "Browser agent control is unavailable because WebMCP is not enabled in this browser."
+          : "Browser agent control is unavailable because registration failed.";
+
+  return (
+    <p
+      className={styles.agentAccess}
+      data-agent-access=""
+      data-state={state}
+      role="status"
+      aria-label={description}
+      aria-live="polite"
+    >
+      <strong>Control from a browser agent</strong>
+      <span>{status}</span>
+    </p>
+  );
+}
+
 export function Workspace() {
   const probe = useRequirements();
   const [reqOpen, setReqOpen] = useState(false);
   const [whatOpen, setWhatOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const restoreConnectionsFocus = useRef(false);
   const [canvasLayout, setCanvasLayout] = useState<"horizontal" | "vertical">("horizontal");
   const [wideTopology, setWideTopology] = useState(
-    () => window.matchMedia("(min-width: 1320px)").matches,
+    () => window.matchMedia("(min-width: 1180px)").matches,
   );
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
   const [canvasPanning, setCanvasPanning] = useState(false);
@@ -285,12 +447,14 @@ export function Workspace() {
   const sites = useMemo(() => sitesFromQuery(params.toString()), [params]);
   const topologyOrigins = useMemo(() => sites.map(originOf), [sites]);
   const sampleWebsites = sites.every((site) => site.sample === true);
-  const [openOrigins, setOpenOrigins] = useState<string[]>(() => topologyOrigins);
+  const sampleWebsiteCount = sites.filter((site) => site.sample === true).length;
+  const addedWebsiteCount = sites.length - sampleWebsiteCount;
+  const [openOrigins, setOpenOrigins] = useState<string[]>([]);
   const allWebsitesOpen = topologyOrigins.every((origin) => openOrigins.includes(origin));
   const effectiveCanvasLayout = wideTopology ? canvasLayout : "vertical";
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1320px)");
+    const query = window.matchMedia("(min-width: 1180px)");
     /*
      * A freeform desktop placement is not valid geometry after the viewport
      * changes. Keeping those pixel offsets was how a node dragged on a wide
@@ -355,21 +519,27 @@ export function Workspace() {
   const pairRightProgress = Math.max(Math.min((typed.length - 3) / 3, 1), 0);
 
   const link = useConsoleLink(RELAY_URL, session ?? "", held, session !== null);
+  const topologyActivity = useMemo(() => topologyActivityFor(link.activity), [link.activity]);
+  const latestActionByTool = useMemo(() => {
+    const index = new Map<string, RuntimeAction>();
+    for (const action of link.recentActions) {
+      index.set(`${action.origin}\u0000${action.toolName}`, action);
+    }
+    return index;
+  }, [link.recentActions]);
+  const cueTool = link.activity.cue?.tool ?? null;
+  const providerCueOrigin =
+    topologyActivity?.origin && topologyActivity.toolName ? topologyActivity.origin : null;
+  const displayCueActive = topologyActivity !== null && providerCueOrigin === null;
+  const displayCueState = displayCueActive
+    ? topologyActivity?.phase === "awaiting-approval"
+      ? "approval"
+      : topologyActivity?.phase === "failed"
+        ? "failed"
+        : "active"
+    : undefined;
 
-  /**
-   * What to call the box holding the sites, and what to call a row's site.
-   *
-   * One site keeps its own name as the heading, which is what this page looked
-   * like when it could only hold one, and is what `?source=` still produces.
-   * Several of them get a plain label, because no business name is true above a
-   * box containing another business.
-   */
-  const heading = sites.length === 1 ? (sites[0] as Source).name : "Connected websites";
   const displayLabel = mode === "embedded" ? "Display preview" : "Ray-Ban Display";
-  const displayCopy =
-    mode === "embedded"
-      ? "The same 600 × 600 Display app, embedded here for the browser demo."
-      : "The current screen on the paired glasses. Wearer input returns through the relay; tools still run in this browser.";
   const connectedOrigins = useMemo(
     () => new Set(link.tools.map((tool) => tool.origin)),
     [link.tools],
@@ -384,6 +554,53 @@ export function Workspace() {
           : link.link === "offline"
             ? "Offline"
             : "Connecting";
+
+  /*
+   * Changing the held origins restarts the relay-owned Session. That is safe
+   * on the idle action menu and nowhere else: parameters, confirmation,
+   * transfer, and invocation all bind to the exact discovered declaration the
+   * wearer is currently looking at.
+   */
+  const canChangeConnections = link.activity.session.phase === "idle";
+
+  const connectionStatusFor = useCallback(
+    (origin: string) => {
+      if (link.problem) return { label: "Actions unavailable", state: "failed" as const };
+      if (!link.settled(origin)) return { label: "Checking", state: "checking" as const };
+      const count = link.tools.filter((tool) => tool.origin === origin).length;
+      if (count === 0) return { label: "No actions found", state: "empty" as const };
+      return {
+        label: `${count} ${count === 1 ? "action" : "actions"}`,
+        state: "active" as const,
+      };
+    },
+    [link],
+  );
+
+  const closeConnections = useCallback(() => {
+    restoreConnectionsFocus.current = true;
+    setConnectionsOpen(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (connectionsOpen || !restoreConnectionsFocus.current) return;
+    document.getElementById("connections-button")?.focus({ preventScroll: true });
+  }, [connectionsOpen]);
+
+  useEffect(() => {
+    if (connectionsOpen || !restoreConnectionsFocus.current) return;
+    // Replacing provider documents can briefly move browser focus into a new
+    // iframe after the dialog has already restored it. Reassert only when the
+    // browser, not the user, owns focus; never pull it away from another control.
+    const settle = setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body || active.tagName === "IFRAME") {
+        document.getElementById("connections-button")?.focus({ preventScroll: true });
+      }
+      restoreConnectionsFocus.current = false;
+    }, 900);
+    return () => clearTimeout(settle);
+  }, [connectionsOpen]);
 
   const closeProviderInspector = useCallback((origin: string) => {
     setOpenOrigins((current) => current.filter((candidate) => candidate !== origin));
@@ -422,7 +639,8 @@ export function Workspace() {
        * to open the composer and start typing: it committed a half-typed value
        * and advanced the frame out from under the wearer.
        */
-      if (document.activeElement === lens.current) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
       lens.current?.focus();
     }, 600);
     return () => clearTimeout(t);
@@ -482,7 +700,7 @@ export function Workspace() {
 
   const panCanvasStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    if (!window.matchMedia("(min-width: 1320px)").matches) return;
+    if (!window.matchMedia("(min-width: 1180px)").matches) return;
     const target = event.target as Element;
     if (target.closest("[data-topology-node], button, a, input, iframe")) return;
     const canvasBox = event.currentTarget.getBoundingClientRect();
@@ -523,7 +741,7 @@ export function Workspace() {
 
   const moveNodeStart = (id: string, event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
-    if (!window.matchMedia("(min-width: 1320px)").matches) return;
+    if (!window.matchMedia("(min-width: 1180px)").matches) return;
     const target = event.target as Element;
     if (target.closest("iframe, button, a, input, textarea, select, [data-runtime-activity]"))
       return;
@@ -595,6 +813,32 @@ export function Workspace() {
     centerTopology();
   };
 
+  const applyConnections = (nextSites: readonly Source[]) => {
+    if (!canChangeConnections || nextSites.length === 0) return;
+    const next = new URLSearchParams(params);
+    next.delete("connection");
+    next.delete("site");
+    next.delete("source");
+
+    const isDefaultSet =
+      nextSites.length === SOURCES.length &&
+      nextSites.every(
+        (site, index) =>
+          site.sample === true &&
+          site.id === SOURCES[index]?.id &&
+          originOf(site) === originOf(SOURCES[index]!),
+      );
+    if (!isDefaultSet) {
+      for (const value of connectionValues(nextSites)) next.append("connection", value);
+    }
+
+    const nextOrigins = new Set(nextSites.map(originOf));
+    setOpenOrigins((current) => current.filter((origin) => nextOrigins.has(origin)));
+    centerTopology();
+    setParams(next, { replace: true });
+    closeConnections();
+  };
+
   return (
     <>
       <SiteHeader>
@@ -646,15 +890,7 @@ export function Workspace() {
             >
               What is this?
             </button>
-            {whatOpen && (
-              <WhatIsThis
-                displayLabel={displayLabel}
-                displayCopy={displayCopy}
-                heading={heading}
-                sites={sites}
-                onClose={() => setWhatOpen(false)}
-              />
-            )}
+            {whatOpen && <WhatIsThis onClose={() => setWhatOpen(false)} />}
           </div>
         )}
         <div className={styles.reqAnchor}>
@@ -690,7 +926,13 @@ export function Workspace() {
                 Connect your display.
               </h1>
               <p id="pair-instruction" className={styles.startLede}>
-                Enter the six-letter code shown on your lens.
+                Open Dusky on your Display, then enter the six-letter code shown there.
+              </p>
+              <p className={styles.startSetup} data-testid="first-time-setup">
+                <strong>First time?</strong> In Meta AI, add{" "}
+                <span className={styles.startSetupUrl}>https://dusky-display.vercel.app</span> under{" "}
+                <span className={styles.startSetupPath}>App connections → Web apps</span>. Check{" "}
+                <span className={styles.startSetupPath}>Requirements</span> for Chrome setup.
               </p>
             </div>
 
@@ -798,8 +1040,8 @@ export function Workspace() {
                 <h1 className={styles.canvasTitle}>Connected websites and their actions</h1>
                 <p className={styles.canvasDescription}>
                   {sampleWebsites
-                    ? "These sample websites supply the actions beside them. Show or hide any page; the others stay visible."
-                    : "These websites supply the actions beside them. Show or hide any page; the others stay visible."}
+                    ? "These sample websites supply the actions beside them. Open a page only when you want to inspect it; hidden pages stay connected."
+                    : `${sampleWebsiteCount} ${sampleWebsiteCount === 1 ? "sample" : "samples"} and ${addedWebsiteCount} added ${addedWebsiteCount === 1 ? "website" : "websites"} supply the actions beside them. Hidden pages stay connected.`}
                 </p>
                 {link.link !== "open" && (
                   <p className={styles.canvasProblem} role="status">
@@ -809,58 +1051,8 @@ export function Workspace() {
               </div>
             </div>
 
-            <div className={styles.canvasControls} data-motion-item="" data-motion-order="2">
-              <button
-                type="button"
-                aria-label={
-                  wideTopology
-                    ? `Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`
-                    : "Flow: top to bottom at this window width"
-                }
-                title={
-                  wideTopology
-                    ? `Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`
-                    : "Top to bottom at this window width"
-                }
-                onClick={changeCanvasLayout}
-                disabled={!wideTopology}
-              >
-                <span className={styles.layoutGlyph} aria-hidden="true">
-                  {effectiveCanvasLayout === "horizontal" ? "↔" : "↕"}
-                </span>
-                <span>
-                  {effectiveCanvasLayout === "horizontal" ? "Left to right" : "Top to bottom"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={styles.websiteToggle}
-                aria-label={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
-                title={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
-                onClick={() => setOpenOrigins(allWebsitesOpen ? [] : topologyOrigins)}
-              >
-                <span className={styles.layoutGlyph} aria-hidden="true">
-                  {allWebsitesOpen ? "−" : "+"}
-                </span>
-                <span>{allWebsitesOpen ? "Hide all pages" : "Show all pages"}</span>
-              </button>
-              {(canvasPan.x !== 0 || canvasPan.y !== 0 || hasMovedNodes) && (
-                <button
-                  type="button"
-                  aria-label="Center"
-                  title="Center topology"
-                  onClick={centerTopology}
-                >
-                  <span className={styles.layoutGlyph} aria-hidden="true">
-                    ⌾
-                  </span>
-                  <span>Center</span>
-                </button>
-              )}
-            </div>
-
             <div
-              className={styles.graphPlane}
+              className={`${styles.graphPlane} ${runtimeMotion.surface}`}
               style={
                 {
                   "--canvas-pan-x": `${canvasPan.x}px`,
@@ -871,7 +1063,10 @@ export function Workspace() {
               <TopologyConnections
                 origins={topologyOrigins}
                 connectedOrigins={connectedOrigins}
-                runtimeConnected={link.link === "open"}
+                runtimeConnected={
+                  link.link === "open" && link.activity.session.displayConnected === true
+                }
+                activity={topologyActivity}
                 viewKey={`${effectiveCanvasLayout}:${
                   topologyOrigins.filter((origin) => openOrigins.includes(origin)).join("|") ||
                   "hidden"
@@ -881,12 +1076,16 @@ export function Workspace() {
 
               <div className={styles.graphNodes}>
                 <section
-                  className={styles.displayGraphNode}
+                  className={`${styles.displayGraphNode} ${runtimeMotion.node}`}
                   data-mode={mode}
                   data-topology-node=""
                   data-node-id="display"
                   data-node-dragging={draggingNode === "display" ? "" : undefined}
                   data-topology-focus="display"
+                  data-display-connected={
+                    link.activity.session.displayConnected === true ? "true" : "false"
+                  }
+                  data-runtime-node-state={displayCueState}
                   data-motion-item=""
                   data-motion-order="2"
                   style={nodeStyle("display")}
@@ -953,8 +1152,11 @@ export function Workspace() {
                 >
                   <div className={styles.runtimePanel} data-runtime-panel="">
                     <div
-                      className={styles.browserRuntimeNode}
+                      className={`${styles.browserRuntimeNode} ${runtimeMotion.node}`}
                       data-runtime-status=""
+                      data-runtime-node-state={
+                        displayCueState ?? (providerCueOrigin ? "active" : undefined)
+                      }
                       data-squircle=""
                     >
                       <div className={styles.runtimeHeading}>
@@ -963,15 +1165,25 @@ export function Workspace() {
                           {linkLabel}
                         </span>
                       </div>
-                      <p className={styles.runtimeSummary}>
+                      <p
+                        className={styles.runtimeSummary}
+                        data-state={
+                          link.problem ? "failed" : link.discoverySettled ? "checked" : "checking"
+                        }
+                        role="status"
+                      >
                         <strong>
                           {link.tools.length} {link.tools.length === 1 ? "action" : "actions"}
                         </strong>
                         <span>
-                          across {connectedOrigins.size}{" "}
-                          {connectedOrigins.size === 1 ? "website" : "websites"}
+                          {link.problem
+                            ? "website actions unavailable"
+                            : link.discoverySettled
+                              ? `from ${sites.length} ${sites.length === 1 ? "website" : "websites"}`
+                              : `checking ${sites.length} ${sites.length === 1 ? "website" : "websites"}`}
                         </span>
                       </p>
+                      <AgentAccess state={link.provideState} />
                       <span
                         className={styles.runtimePort}
                         data-side="in"
@@ -1007,16 +1219,22 @@ export function Workspace() {
                       ? `Hide ${site.name} page`
                       : `Show ${site.name} page`;
                     const inspectIcon: ProviderInspectIconState = pinned ? "close" : "inspect";
+                    const awaitingApprovalHere =
+                      link.activity.session.phase === "approval" &&
+                      link.activity.session.tool?.origin === origin;
                     return (
                       <fieldset
                         key={site.id}
                         className={styles.providerActionPair}
                         aria-label={`${site.name} provider and actions`}
                         data-topology-focus={`provider:${origin}`}
+                        data-connection-kind={site.sample === true ? "sample" : "added"}
+                        data-motion-item=""
+                        data-motion-kind="connection"
                         data-motion-order={String(siteIndex + 4)}
                       >
                         <figure
-                          className={styles.providerNode}
+                          className={`${styles.providerNode} ${runtimeMotion.node}`}
                           aria-labelledby={labelId}
                           data-topology-node=""
                           data-node-id={`provider:${origin}`}
@@ -1025,6 +1243,13 @@ export function Workspace() {
                           }
                           data-inspected={inspected ? "" : undefined}
                           data-pinned={pinned ? "" : undefined}
+                          data-runtime-node-state={
+                            providerCueOrigin === origin
+                              ? topologyActivity?.phase === "failed"
+                                ? "failed"
+                                : "active"
+                              : undefined
+                          }
                           style={nodeStyle(`provider:${origin}`)}
                           onPointerDown={(event) => moveNodeStart(`provider:${origin}`, event)}
                           onPointerMove={(event) => moveNode(`provider:${origin}`, event)}
@@ -1113,11 +1338,20 @@ export function Workspace() {
                         </figure>
 
                         <article
-                          className={styles.actionNode}
+                          className={`${styles.actionNode} ${runtimeMotion.node}`}
                           aria-label={`${site.name} actions`}
                           data-topology-node=""
                           data-node-id={`actions:${origin}`}
                           data-node-dragging={draggingNode === `actions:${origin}` ? "" : undefined}
+                          data-runtime-node-state={
+                            awaitingApprovalHere
+                              ? "approval"
+                              : providerCueOrigin === origin
+                                ? topologyActivity?.phase === "failed"
+                                  ? "failed"
+                                  : "active"
+                                : undefined
+                          }
                           style={nodeStyle(`actions:${origin}`)}
                           onPointerDown={(event) => moveNodeStart(`actions:${origin}`, event)}
                           onPointerMove={(event) => moveNode(`actions:${origin}`, event)}
@@ -1136,22 +1370,58 @@ export function Workspace() {
                           <ul className={`${styles.actionList} ${styles.actionListWithCount}`}>
                             {available.map((tool, toolIndex) => {
                               const decision = gate(tool);
+                              const selected = selectedActionActivity(
+                                link.activity,
+                                tool.origin,
+                                tool.name,
+                              );
+                              const latest = latestActionByTool.get(
+                                `${tool.origin}\u0000${tool.name}`,
+                              );
+                              const surfaceActivity = actionSurfaceActivity(selected, latest);
+                              const cueHitsThisTool =
+                                cueTool?.origin === tool.origin &&
+                                cueTool.name === tool.name &&
+                                link.activity.cue?.kind === "invocation-start";
                               return (
                                 <li
                                   key={`${tool.origin}/${tool.name}`}
+                                  className={runtimeMotion.actionRow}
+                                  data-topology-tool-origin={tool.origin}
+                                  data-topology-tool-name={tool.name}
+                                  data-action-state={surfaceActivity?.state}
+                                  data-provider-hit={
+                                    surfaceActivity
+                                      ? String(surfaceActivity.providerHit)
+                                      : undefined
+                                  }
                                   data-motion-item=""
                                   data-motion-kind="action"
                                   data-motion-order={String(Math.min(toolIndex + 1, 8))}
                                 >
+                                  {cueHitsThisTool && (
+                                    <span
+                                      key={link.activity.cue?.sequence}
+                                      className={runtimeMotion.actionGleam}
+                                      aria-hidden="true"
+                                    />
+                                  )}
                                   <span className={styles.actionName}>{actionLabel(tool)}</span>
                                   <span
-                                    className={styles.actionApproval}
-                                    data-confirm={decision.requiresConfirmation ? "" : undefined}
+                                    className={`${styles.actionApproval} ${
+                                      surfaceActivity ? runtimeMotion.actionState : ""
+                                    }`}
+                                    data-confirm={
+                                      !surfaceActivity && decision.requiresConfirmation
+                                        ? ""
+                                        : undefined
+                                    }
                                     data-consequence={decision.consequence}
                                   >
-                                    {decision.requiresConfirmation
-                                      ? "approval required"
-                                      : "no approval needed"}
+                                    {surfaceActivity?.label ??
+                                      (decision.requiresConfirmation
+                                        ? "approval required"
+                                        : "no approval needed")}
                                   </span>
                                 </li>
                               );
@@ -1161,7 +1431,7 @@ export function Workspace() {
                                 {link.problem
                                   ? "Could not read this page’s actions."
                                   : settled
-                                    ? "No actions authorized for this console."
+                                    ? "No actions discovered in this browser."
                                     : "Reading this page’s actions…"}
                               </li>
                             )}
@@ -1185,6 +1455,94 @@ export function Workspace() {
           </div>
         )}
       </div>
+
+      {session && (
+        <div
+          className={styles.canvasControls}
+          data-motion-item=""
+          data-motion-order="2"
+          data-squircle=""
+          role="toolbar"
+          aria-label="Graph controls"
+        >
+          <button
+            id="connections-button"
+            type="button"
+            className={styles.connectionsButton}
+            aria-label={`Manage ${sites.length} connected ${sites.length === 1 ? "website" : "websites"}`}
+            aria-haspopup="dialog"
+            aria-expanded={connectionsOpen}
+            data-open={connectionsOpen || undefined}
+            data-tooltip="Configure Websites"
+            onClick={() => setConnectionsOpen((open) => !open)}
+          >
+            <span className={styles.commandIcon} aria-hidden="true">
+              <WebsitesIcon />
+            </span>
+            <span className={styles.commandLabel}>Configure Websites</span>
+            <strong className={styles.commandValue}>{sites.length}</strong>
+          </button>
+          <button
+            type="button"
+            aria-label={
+              wideTopology
+                ? `Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`
+                : "Flow: top to bottom at this window width"
+            }
+            data-tooltip={
+              wideTopology
+                ? `Switch to ${canvasLayout === "horizontal" ? "top-to-bottom" : "left-to-right"} flow`
+                : "Top-to-bottom flow at this window size"
+            }
+            onClick={changeCanvasLayout}
+            disabled={!wideTopology}
+          >
+            <span className={styles.commandIcon} aria-hidden="true">
+              <OrientationIcon direction={effectiveCanvasLayout} />
+            </span>
+            <span className={styles.commandLabel}>Orientation</span>
+            <strong className={styles.commandValue}>
+              {effectiveCanvasLayout === "horizontal" ? "L → R" : "T → B"}
+            </strong>
+          </button>
+          <button
+            type="button"
+            className={styles.websiteToggle}
+            aria-label={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
+            data-tooltip={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
+            onClick={() => setOpenOrigins(allWebsitesOpen ? [] : topologyOrigins)}
+          >
+            <span className={styles.commandIcon} aria-hidden="true">
+              <PageViewIcon open={allWebsitesOpen} />
+            </span>
+            <span className={styles.commandLabel}>Page View</span>
+            <strong className={styles.commandValue}>{allWebsitesOpen ? "Shown" : "Hidden"}</strong>
+          </button>
+          {(canvasPan.x !== 0 || canvasPan.y !== 0 || hasMovedNodes) && (
+            <button
+              type="button"
+              aria-label="Center"
+              data-tooltip="Center the graph"
+              onClick={centerTopology}
+            >
+              <span className={styles.commandIcon} aria-hidden="true">
+                <CenterIcon />
+              </span>
+              <span className={styles.commandLabel}>Reset view</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {session && connectionsOpen && (
+        <ConnectionsPanel
+          sites={sites}
+          canChange={canChangeConnections}
+          statusFor={connectionStatusFor}
+          onApply={applyConnections}
+          onClose={closeConnections}
+        />
+      )}
     </>
   );
 }
