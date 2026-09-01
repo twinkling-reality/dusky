@@ -107,6 +107,43 @@ Chrome 151 exposes a WebMCP DevTools Protocol domain containing:
 
 The current browser flow does not depend on that domain.
 
+### Local test-process lifecycle
+
+Measured on 2026-08-31 while repeatedly auditing the console redesign. The
+local browser suite starts the relay, console, Display, three sample providers,
+the runtime-provider fixture, and Chrome with `WebMCPTesting` enabled. That is
+seven local services across ports `7801` through `7806` and `7900`, plus the
+browser process.
+
+An interrupted Playwright command did not always retain a process-group owner
+long enough to stop every descendant. A cancelled audit could therefore leave
+Vite, the relay watcher, or WebMCP-enabled Chrome alive after the parent task
+had ended. Repeating the audit could accumulate idle browser descendants, keep
+the laptop hot, or collide with an already occupied test port.
+
+This was a local test-orchestration defect, not evidence that the WebMCP
+protocol leaks servers and not a production Dusky relay leak. WebMCP matters to
+the reproduction because the load-bearing suite deliberately launches real
+Chrome with the experimental feature enabled rather than substituting a mock.
+
+`pnpm test:e2e` and `pnpm test:prod` now run through
+`scripts/run-playwright.mjs`. The wrapper gives Playwright its own process group,
+forwards `SIGINT`, `SIGTERM`, and `SIGHUP` to that group, and escalates to
+`SIGKILL` after three seconds only when graceful cleanup does not finish. It
+does not kill a server that was already running before the test and was reused
+by Playwright; that process remains owned by the person or task that started
+it.
+
+After the complete 42-test local suite, the cleanup check found no listeners on
+the test ports and no remaining Playwright, Chrome, Vite, relay watcher, or
+Turbo development descendants.
+
+For a later project submission, the defensible lesson is: testing an
+experimental browser capability end to end also requires supervising the
+browser and every local service as one disposable system. Do not describe this
+as a WebMCP server bug unless a reproduction outside Dusky's test runner proves
+that claim.
+
 ## Meta Ray-Ban Display Web Apps
 
 The following viewport, input, permission, storage, and delivery constraints

@@ -11,10 +11,10 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-playwright.mjs",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test:prod": "playwright test --config playwright.prod.config.ts"
+    "test:prod": "node scripts/run-playwright.mjs --config playwright.prod.config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

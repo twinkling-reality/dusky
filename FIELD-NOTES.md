@@ -205,6 +205,27 @@ Do not push while recording.
 
 ## Building against WebMCP
 
+### Cancelling a browser audit left the whole local lab running
+
+The load-bearing tests do not fake WebMCP. One run launches the Dusky relay,
+console, Display, three provider apps, a runtime-only provider, and Chrome with
+`WebMCPTesting` enabled. During the 2026-08-31 console redesign, cancelling
+repeated Playwright audits could end the visible task without reliably ending
+all of those descendants. The remaining processes held ports, accumulated
+browser work, and kept the laptop hot even though the audit looked finished.
+
+The fix was ownership rather than a broader kill command. The Playwright runner
+now lives in its own process group and forwards termination to the group, with
+a bounded force-kill fallback. Processes that predated the audit are not swept
+up, because `reuseExistingServer` does not make somebody else's development
+server ours to terminate.
+
+This distinction matters if the story reaches a Devpost submission: Dusky's
+real-browser WebMCP proof needs more lifecycle machinery than a mocked unit
+test, but the observed leak was in our interrupted local orchestration, not in
+the WebMCP protocol or the production relay. The measured behavior and cleanup
+contract are recorded in [WebMCP runtime](./docs/WEBMCP-RUNTIME.md#local-test-process-lifecycle).
+
 ### Never discover the browser argument shape with a provider action
 
 Chrome 151 requires JSON-string arguments while the current WebMCP shape uses
