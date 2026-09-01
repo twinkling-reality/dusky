@@ -13,14 +13,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Canopy Lab · WebMCP provider',
-  description: 'A public runtime WebMCP provider for the Dusky demonstration.',
+  title: 'Canopy Lab | Shade planning',
+  description: 'Compare canopy shade across courtyards, terraces, and gardens.',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {children}
+      </body>
     </html>
   );
 }
