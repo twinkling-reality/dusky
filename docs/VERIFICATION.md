@@ -89,12 +89,39 @@ or subjective quality.
 
 ## Historical official deployment evidence
 
+On 2026-08-31, the official production suite passed against the deployed
+application source at commit `ce2abe1`:
+
+- 11 of 11 production Playwright tests passed with `pnpm test:prod` in 29.7
+  seconds;
+- the live planner created the intended two-step Amber & Oak to Northstar
+  Dispatch task and advanced to the first action's parameter screen;
+- the console waited for all 11 actions from all three provider documents
+  before submitting that cross-site request;
+- the official Console, Display, Verdant Market, Amber & Oak, Northstar
+  Dispatch, and relay endpoints responded successfully; and
+- scans of the deployed Console and provider bundles found neither of the
+  removed placeholder strings `Tool activity` nor `Part of Dusky`.
+
+Verdant Market and Northstar Dispatch were rebuilt and promoted manually
+because those two Vercel projects did not have repository deployment links.
+Northstar Dispatch's Vercel root directory was corrected to `apps/dispatch`
+before deployment. Their application sources are unchanged between their
+manual build revision and `ce2abe1`.
+
+GitHub Actions run `33464803362` also passed at `ce2abe1`: the verification job
+passed, and the round-trip job completed all 43 local Playwright tests. The
+production planner measurements showed that the earlier failures were request
+deadline failures rather than UI or provider discovery failures. The shipped
+planner now gives its careful attempt a bounded seven-second window within a
+ten-second total deadline, and the relay no longer reports an accepted agent
+request when planning leaves the wearer on the idle menu.
+
+This is browser and hosted-service evidence. It does not replace the hardware
+checks listed under Visual checks.
+
 On 2026-08-29, commit `f7d9656` passed the 10 production tests that existed at
 that time against the official deployment.
-
-The current official production suite contains 11 tests. It has not passed
-against a deployment containing the present local changes, so no current
-production result is claimed.
 
 `pnpm test:prod` targets the official URLs and includes a live planner request.
 It does not verify a self-hosted or menu-only deployment without adaptation.

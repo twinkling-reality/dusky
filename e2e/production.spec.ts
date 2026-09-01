@@ -320,6 +320,10 @@ test("one spoken request becomes a two-step cross-site result-sharing task", asy
 
   await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
   await expectAgentTools(consolePage);
+  // This task names two businesses. Wait until all three independently loaded
+  // provider documents have finished contributing their actions; sending it
+  // against a partial registry would test a different and incomplete request.
+  await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(11);
 
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
