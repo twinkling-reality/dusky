@@ -178,7 +178,9 @@ test("one click opens a running Dusky, pre-paired, with nothing else to press", 
   await expectReachableIn(lens, /Book table/);
   await expectReachableIn(lens, /Send message/);
   await expect(page.getByRole("region", { name: "Technical log" })).toBeVisible();
-  await expect(page.getByText(/actions from 3 websites/).first()).toBeVisible();
+  const runtime = page.locator("[data-runtime-status]");
+  await expect(runtime.getByText("11 actions", { exact: true })).toBeVisible();
+  await expect(runtime.getByText("across 3 websites", { exact: true })).toBeVisible();
   await expect(page.locator('[data-node-id^="provider:"][data-inspected]')).toHaveCount(3);
 
   // The thing a judge must not have to discover by closing the tab. A footnote

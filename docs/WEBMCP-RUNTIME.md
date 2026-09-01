@@ -127,14 +127,15 @@ the reproduction because the load-bearing suite deliberately launches real
 Chrome with the experimental feature enabled rather than substituting a mock.
 
 `pnpm test:e2e` and `pnpm test:prod` now run through
-`scripts/run-playwright.mjs`. The wrapper gives Playwright its own process group,
-forwards `SIGINT`, `SIGTERM`, and `SIGHUP` to that group, and escalates to
-`SIGKILL` after three seconds only when graceful cleanup does not finish. It
-does not kill a server that was already running before the test and was reused
-by Playwright; that process remains owned by the person or task that started
-it.
+`scripts/run-playwright.mjs`. For local runs, the wrapper gives Playwright its
+own process group, forwards `SIGINT`, `SIGTERM`, and `SIGHUP` to that group, and
+escalates to `SIGKILL` after three seconds only when graceful cleanup does not
+finish. In hosted CI, Playwright stays inside the job's supervised process tree.
+The wrapper does not kill a server that was already running before the test and
+was reused by Playwright; that process remains owned by the person or task that
+started it.
 
-After the complete 42-test local suite, the cleanup check found no listeners on
+After the complete 43-test local suite, the cleanup check found no listeners on
 the test ports and no remaining Playwright, Chrome, Vite, relay watcher, or
 Turbo development descendants.
 

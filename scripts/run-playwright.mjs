@@ -2,11 +2,12 @@ import { spawn } from "node:child_process";
 
 /**
  * Run Playwright in its own process group so an interrupted local audit cannot
- * orphan its web servers or WebMCP-enabled Chrome instance. Playwright still
- * performs its ordinary graceful cleanup; this wrapper supplies the missing
- * process-group boundary when a terminal, task, or CI job is cancelled.
+ * orphan its web servers or WebMCP-enabled Chrome instance. Hosted CI already
+ * supervises the job process tree, so Playwright must remain in that tree there.
+ * Playwright still performs its ordinary graceful cleanup in both environments.
  */
-const detached = process.platform !== "win32";
+const runningInCi = process.env["CI"] === "true";
+const detached = process.platform !== "win32" && !runningInCi;
 const forwarded = process.argv.slice(2);
 if (forwarded[0] === "--") forwarded.shift();
 const child = spawn("pnpm", ["exec", "playwright", "test", ...forwarded], {

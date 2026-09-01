@@ -214,9 +214,10 @@ repeated Playwright audits could end the visible task without reliably ending
 all of those descendants. The remaining processes held ports, accumulated
 browser work, and kept the laptop hot even though the audit looked finished.
 
-The fix was ownership rather than a broader kill command. The Playwright runner
-now lives in its own process group and forwards termination to the group, with
-a bounded force-kill fallback. Processes that predated the audit are not swept
+The fix was ownership rather than a broader kill command. The local Playwright
+runner now lives in its own process group and forwards termination to the
+group, with a bounded force-kill fallback. Hosted CI keeps Playwright in the
+job's supervised process tree. Processes that predated the audit are not swept
 up, because `reuseExistingServer` does not make somebody else's development
 server ours to terminate.
 
