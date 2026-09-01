@@ -217,6 +217,11 @@ Do not stop at discovery. Verify that a real browser can:
 test supplies the provider at runtime with vocabulary absent from the default
 registry.
 
+The deployed reference provider is
+<https://dusky-canopy-lab.glendonchin.chatgpt.site>. It is also absent from the
+default registry, explicitly authorizes the local and official console
+origins, and can be pasted into **Add Website** for a public demonstration.
+
 ```bash
 pnpm exec playwright test e2e/roundtrip.spec.ts
 ```

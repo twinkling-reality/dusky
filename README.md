@@ -140,8 +140,19 @@ The same guide covers pairing and the complete walkthrough.
 
 The three visible providers are named in the default demo registry, but the
 shared runtime handles them without provider-specific adapters or execution
-branches. A fourth provider is supplied only at browser-test runtime and works
-without changing Dusky's source code, rebuilding the app, or adding an adapter.
+branches. A fourth public provider is supplied at runtime and works without
+changing Dusky's source registry, rebuilding the console, or adding an adapter.
+
+Paste this URL through **Configure Websites → Add Website**:
+
+```text
+https://dusky-canopy-lab.glendonchin.chatgpt.site
+```
+
+Canopy Lab exposes one read-only **Estimate shade** action to the local and
+official Dusky console origins. Its production round-trip test loads it by URL,
+discovers the action, renders the `zone` choices, invokes `garden`, observes the
+provider's own page update, and renders the returned result on the Display.
 
 To load another provider, pass its encoded URL:
 

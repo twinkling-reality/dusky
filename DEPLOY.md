@@ -166,6 +166,7 @@ The repository's public demo currently uses these stable origins:
 | Market fixture | <https://dusky-market.vercel.app> |
 | Reservations fixture | <https://dusky-reservations.vercel.app> |
 | Communications fixture | <https://dusky-dispatch.vercel.app> |
+| Runtime provider | <https://dusky-canopy-lab.glendonchin.chatgpt.site> |
 | Relay | <https://dusky-relay.onrender.com> |
 
 These values are examples for the official deployment. Do not copy them into a

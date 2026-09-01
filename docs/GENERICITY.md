@@ -79,7 +79,14 @@ protocol behavior, not provider identity or vocabulary.
 
 ## Fourth runtime provider
 
-Playwright starts `e2e/runtime-provider` at `http://localhost:7806`.
+The public Canopy Lab provider is available at
+<https://dusky-canopy-lab.glendonchin.chatgpt.site>. It authorizes the local and
+official Dusky console origins and remains absent from
+`apps/console/src/sources.ts`.
+
+Playwright also starts the equivalent local fixture in `e2e/runtime-provider`
+at `http://localhost:7806`. That loopback URL is test infrastructure, not the
+public demo link.
 
 It is not listed in `apps/console/src/sources.ts`. The test supplies it through
 a runtime `site` parameter under the name Canopy Lab.
@@ -103,9 +110,11 @@ path: remove a sample, update the smaller graph, reselect it, add Canopy Lab by
 URL, and observe four provider branches and twelve discovered actions. It also
 holds a pending wearer confirmation while proving that Update graph is disabled.
 
-This proves the production code path for that provider and schema in a local
-end-to-end test. The provider is still test code in this repository, so this
-does not prove universal WebMCP compatibility.
+The same test can target the public provider by setting
+`DUSKY_RUNTIME_PROVIDER_URL`. The production suite separately drives the
+deployed console, relay, Display, and public provider through the same action.
+This proves the production code path for that provider and schema. It does not
+prove universal WebMCP compatibility.
 
 ## Executable-source guard
 

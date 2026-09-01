@@ -37,6 +37,29 @@ invocation, and results remain usable without a model.
 
 The embedded panel loads the same Display application used on the glasses.
 
+## Add a real fourth Website
+
+Canopy Lab is a public HTTPS WebMCP provider that is deliberately absent from
+Dusky's source registry. It authorizes both the official console and the local
+console, so the same URL works in either demo:
+
+```text
+https://dusky-canopy-lab.glendonchin.chatgpt.site
+```
+
+1. Open **Configure Websites**.
+2. Choose **Add Website**.
+3. Paste the Canopy Lab URL and choose **Verify Connection**.
+4. Add it with the default name or enter a display name.
+5. Choose **Estimate shade** on the Display and select **garden**.
+
+Dusky discovers the action from the live provider document, renders the
+provider's enum as Display choices, invokes it once, and shows the returned
+shade facts. Nothing for Canopy Lab is added to `apps/console/src/sources.ts`.
+
+`http://localhost:7806` remains a test-only fixture used by Playwright. It is
+not a URL to paste during a public demonstration.
+
 ## Glasses path
 
 The official deployment may lag the repository. Check
@@ -150,6 +173,10 @@ http://localhost:7803/demo?start=1&site=%7B%22name%22%3A%22Example%22%2C%22url%2
 
 The URL selects a page to load. It does not grant WebMCP access. The provider
 must permit iframe embedding and authorize the exact console origin.
+
+The public Canopy Lab URL above is the maintained reference provider for this
+flow. The placeholder URLs in this section document the general query format,
+not a working public provider.
 
 See [Provider guide](./PROVIDER-GUIDE.md) for the full contract.
 

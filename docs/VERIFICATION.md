@@ -1,5 +1,24 @@
 # Verification
 
+## Public runtime provider verification on 2026-09-01
+
+Canopy Lab version 2 was published at
+<https://dusky-canopy-lab.glendonchin.chatgpt.site>. The public response was
+HTTP 200 with no `X-Frame-Options` or restrictive `frame-ancestors` header.
+
+Two real Chrome round trips passed with WebMCP enabled:
+
+- the local console loaded the public HTTPS provider through the runtime
+  `site` value, discovered **Estimate shade**, rendered its `zone` enum, invoked
+  `garden`, observed `62% shade` in the provider document, and rendered the
+  returned result on the Display;
+- the deployed console, relay, and Display completed the same path against the
+  same public provider.
+
+The focused local and production Playwright runs each passed 1 of 1 tests. The
+provider remains absent from the default source registry. Port `7806` remains
+only the equivalent local Playwright fixture.
+
 Dusky separates unit, browser, visual, deployment, and hardware evidence. A
 passing result supports only the layer it exercised.
 
