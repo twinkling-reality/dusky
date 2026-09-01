@@ -2,14 +2,21 @@ import type {
   AgentReply,
   AgentRequest,
   ConsoleToServer,
+  RuntimeToolRef,
   ServerToConsole,
   SiteRef,
   ToolDescriptor,
 } from "@dusky/contracts";
 import { CLOSE_SUPERSEDED } from "@dusky/contracts";
 import { isWebMcpAvailable, registerTools, WebMcpBridge } from "@dusky/webmcp";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { duskyTools } from "./duskyTools.js";
+import {
+  createRuntimeActivityState,
+  type RuntimeActivityState,
+  runtimeActivityReducer,
+  selectRuntimeInvocations,
+} from "./runtimeActivity.js";
 
 /**
  * The console's half of the session.
@@ -31,7 +38,9 @@ export interface RuntimeAction {
   id: string;
   origin: string;
   toolName: string;
-  status: "running" | "completed" | "failed" | "unknown";
+  status: "running" | "returned" | "succeeded" | "failed" | "unknown";
+  /** True only after the bridge crossed the live provider execution boundary. */
+  providerHit: boolean;
 }
 
 export interface ConsoleLink {
@@ -59,6 +68,8 @@ export interface ConsoleLink {
    * nothing from looking like it is still loading forever.
    */
   settled: (origin: string) => boolean;
+  /** Whether every configured origin is settled and discovery itself succeeded. */
+  discoverySettled: boolean;
   /**
    * Why discovery could not run at all, if it could not.
    *
@@ -74,8 +85,12 @@ export interface ConsoleLink {
   problem: string | null;
   /** User-meaningful provider invocations, correlated by relay request id. */
   recentActions: RuntimeAction[];
+  /** Durable session truth plus one-shot, revision-keyed visual cues. */
+  activity: RuntimeActivityState;
   /** Whether Dusky's own tools are registered for an agent in this browser. */
   provides: boolean;
+  /** The measured registration state behind `provides`, including honest failure states. */
+  provideState: "unavailable" | "registering" | "ready" | "failed";
 }
 
 /**
@@ -118,6 +133,8 @@ export function useConsoleLink(
   const [tools, setTools] = useState<ToolDescriptor[]>([]);
   /** Whether discovery has gone quiet, which settles every site at once. */
   const [quiet, setQuiet] = useState(false);
+  /** A tool-change event makes even previously populated origins provisional. */
+  const [changing, setChanging] = useState(false);
   /** Set when discovery threw, so an empty list is not read as an empty site. */
   const [problem, setProblem] = useState<string | null>(null);
   const emptyFor = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -134,8 +151,17 @@ export function useConsoleLink(
   const sawDiscovery = useCallback(() => {
     clearTimeout(emptyFor.current);
     setQuiet(false);
+    setChanging(false);
     setProblem(null);
     emptyFor.current = setTimeout(() => setQuiet(true), EMPTY_HOLD_MS);
+  }, []);
+
+  /** A tool-change burst makes the combined registry provisional immediately. */
+  const unsettleDiscovery = useCallback(() => {
+    clearTimeout(emptyFor.current);
+    setQuiet(false);
+    setChanging(true);
+    setProblem(null);
   }, []);
 
   /**
@@ -148,18 +174,56 @@ export function useConsoleLink(
   const gaveUp = useCallback((reason: string) => {
     clearTimeout(emptyFor.current);
     setQuiet(true);
+    setChanging(false);
     setProblem(reason);
   }, []);
-  const [recentActions, setRecentActions] = useState<RuntimeAction[]>([]);
+  const [activity, dispatchActivity] = useReducer(
+    runtimeActivityReducer,
+    ready && sessionId ? sessionId : null,
+    createRuntimeActivityState,
+  );
   const webmcp = isWebMcpAvailable();
 
-  const [provides, setProvides] = useState(false);
+  const [provideState, setProvideState] = useState<ConsoleLink["provideState"]>(() =>
+    webmcp ? "registering" : "unavailable",
+  );
+  const provides = provideState === "ready";
   const bridge = useRef<WebMcpBridge | null>(null);
   const ws = useRef<WebSocket | null>(null);
   /** Agent tool calls waiting on the relay, keyed by request id. */
   const waiting = useRef(new Map<string, (r: AgentReply) => void>());
 
   const origins = useMemo(() => sites.map((s) => s.origin), [sites]);
+
+  useEffect(() => {
+    dispatchActivity({
+      type: "replaceSession",
+      sessionId: ready && sessionId ? sessionId : null,
+    });
+  }, [ready, sessionId]);
+
+  const recentActions = useMemo<RuntimeAction[]>(() => {
+    return selectRuntimeInvocations(activity)
+      .slice(-20)
+      .map((invocation) => {
+        let status: RuntimeAction["status"] = invocation.status;
+        if (invocation.status !== "running" && invocation.outcome) {
+          status =
+            invocation.outcome === "succeeded"
+              ? "succeeded"
+              : invocation.outcome === "failed"
+                ? "failed"
+                : "unknown";
+        }
+        return {
+          id: invocation.requestId,
+          origin: invocation.tool.origin,
+          toolName: invocation.tool.name,
+          status,
+          providerHit: invocation.providerHit,
+        };
+      });
+  }, [activity]);
 
   useEffect(() => {
     bridge.current = new WebMcpBridge(origins);
@@ -207,14 +271,20 @@ export function useConsoleLink(
     let openedAt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const invocations = new Map<string, AbortController>();
+    const invocationTools = new Map<string, RuntimeToolRef>();
 
     // A different set of sites re-runs this effect. The previous set's tools
     // are not this set's tools, and leaving them on screen until discovery
     // finishes would show a menu that belongs to somewhere else.
     setTools([]);
     setQuiet(false);
+    setChanging(false);
     setProblem(null);
-    setRecentActions([]);
+    // A different held-origin set is a different server-side Session even
+    // when the pairing code stays the same. Clear exact-tool history here;
+    // an ordinary socket reconnect happens inside `connect` and preserves it.
+    dispatchActivity({ type: "replaceSession", sessionId: null });
+    dispatchActivity({ type: "replaceSession", sessionId });
     clearTimeout(emptyFor.current);
 
     const connect = () => {
@@ -256,15 +326,25 @@ export function useConsoleLink(
             }
             return;
           }
+          if (msg.t === "sessionSnapshot") {
+            dispatchActivity({ type: "relaySnapshot", snapshot: msg.snapshot });
+            return;
+          }
+          if (msg.t === "sessionActivity") {
+            dispatchActivity({ type: "relayEvent", event: msg.event });
+            return;
+          }
           if (msg.t === "cancelInvoke") {
             invocations.get(msg.requestId)?.abort();
-            setRecentActions((current) =>
-              current.map((action) =>
-                action.id === msg.requestId && action.status === "running"
-                  ? { ...action, status: "unknown" }
-                  : action,
-              ),
-            );
+            const tool = invocationTools.get(msg.requestId);
+            if (tool) {
+              dispatchActivity({
+                type: "bridgeInvocation",
+                requestId: msg.requestId,
+                tool,
+                stage: "unknown",
+              });
+            }
             return;
           }
 
@@ -295,16 +375,9 @@ export function useConsoleLink(
           if (msg.t === "invoke") {
             const args = (msg.args ?? {}) as Record<string, unknown>;
             const controller = new AbortController();
+            const tool = { origin: msg.origin, name: msg.toolName };
             invocations.set(msg.requestId, controller);
-            setRecentActions((current) => [
-              ...current.filter((action) => action.id !== msg.requestId).slice(-19),
-              {
-                id: msg.requestId,
-                origin: msg.origin,
-                toolName: msg.toolName,
-                status: "running",
-              },
-            ]);
+            invocationTools.set(msg.requestId, tool);
             try {
               const value = await b.invoke(
                 msg.origin,
@@ -312,28 +385,35 @@ export function useConsoleLink(
                 args,
                 msg.expectedTool,
                 controller.signal,
+                () => {
+                  dispatchActivity({
+                    type: "bridgeInvocation",
+                    requestId: msg.requestId,
+                    tool,
+                    stage: "executing",
+                  });
+                },
               );
               if (!isCurrent()) return;
-              setRecentActions((current) =>
-                current.map((action) =>
-                  action.id === msg.requestId && action.status === "running"
-                    ? { ...action, status: "completed" }
-                    : action,
-                ),
-              );
+              dispatchActivity({
+                type: "bridgeInvocation",
+                requestId: msg.requestId,
+                tool,
+                stage: "returned",
+              });
               send({ t: "invoked", requestId: msg.requestId, ok: true, value });
             } catch (err) {
               if (!isCurrent()) return;
-              setRecentActions((current) =>
-                current.map((action) =>
-                  action.id === msg.requestId && action.status === "running"
-                    ? { ...action, status: "failed" }
-                    : action,
-                ),
-              );
+              dispatchActivity({
+                type: "bridgeInvocation",
+                requestId: msg.requestId,
+                tool,
+                stage: controller.signal.aborted ? "unknown" : "failed",
+              });
               send({ t: "invoked", requestId: msg.requestId, ok: false, error: errText(err) });
             } finally {
               invocations.delete(msg.requestId);
+              invocationTools.delete(msg.requestId);
             }
           }
         })();
@@ -341,6 +421,11 @@ export function useConsoleLink(
 
       sock.onclose = (ev) => {
         if (disposed) return;
+
+        for (const controller of invocations.values()) controller.abort();
+        invocations.clear();
+        invocationTools.clear();
+        dispatchActivity({ type: "disconnect" });
 
         // Another tab is holding this session. Taking it back would evict them,
         // they would reconnect and evict us, and the wearer's screen would be
@@ -375,6 +460,7 @@ export function useConsoleLink(
     // while somebody was mid-task. One burst is one change.
     let settle: ReturnType<typeof setTimeout> | undefined;
     const off = bridge.current?.onToolsChanged(() => {
+      unsettleDiscovery();
       if (settle !== undefined) clearTimeout(settle);
       settle = setTimeout(() => {
         settle = undefined;
@@ -389,11 +475,12 @@ export function useConsoleLink(
       clearTimeout(emptyFor.current);
       for (const controller of invocations.values()) controller.abort();
       invocations.clear();
+      invocationTools.clear();
       off?.();
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, sites, ready, send, sawDiscovery, gaveUp]);
+  }, [relayUrl, sessionId, sites, ready, send, sawDiscovery, gaveUp, unsettleDiscovery]);
 
   /**
    * Register Dusky's own tools, so an agent in this browser can drive the
@@ -411,22 +498,29 @@ export function useConsoleLink(
    * matching note in @dusky/webmcp.
    */
   useEffect(() => {
-    if (!ready || !isWebMcpAvailable()) return;
+    if (!ready) {
+      setProvideState(webmcp ? "registering" : "unavailable");
+      return;
+    }
+    if (!webmcp) {
+      setProvideState("unavailable");
+      return;
+    }
     const lifetime = new AbortController();
+    setProvideState("registering");
     registerTools(duskyTools({ ask }), { signal: lifetime.signal })
       .then(() => {
         if (lifetime.signal.aborted) return;
-        setProvides(true);
+        setProvideState("ready");
       })
       .catch(() => {
         if (lifetime.signal.aborted) return;
-        setProvides(false);
+        setProvideState("failed");
       });
     return () => {
       lifetime.abort();
-      setProvides(false);
     };
-  }, [ready, ask]);
+  }, [ready, ask, webmcp]);
 
   /**
    * A site has answered for itself, or discovery has stopped answering at all.
@@ -442,7 +536,33 @@ export function useConsoleLink(
     [quiet, tools],
   );
 
-  return { link, webmcp, tools, settled, problem, recentActions, provides };
+  const discoverySettled =
+    !changing &&
+    problem === null &&
+    origins.length > 0 &&
+    origins.every((origin) => settled(origin));
+
+  /**
+   * The relay owns task admission, so the browser's measured settle state has
+   * to cross the transport boundary instead of being enforced only in this UI.
+   */
+  useEffect(() => {
+    if (!ready || link !== "open") return;
+    send({ t: "discoverySettled", settled: discoverySettled });
+  }, [ready, link, discoverySettled, send]);
+
+  return {
+    link,
+    webmcp,
+    tools,
+    settled,
+    discoverySettled,
+    problem,
+    recentActions,
+    activity,
+    provides,
+    provideState,
+  };
 }
 
 function errText(e: unknown): string {

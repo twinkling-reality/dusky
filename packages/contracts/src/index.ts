@@ -134,6 +134,76 @@ export type TaskState =
   | "failed"
   | "cancelled";
 
+/** Provider-neutral identity used by runtime activity and visual evidence. */
+export interface RuntimeToolRef {
+  origin: string;
+  name: string;
+}
+
+/**
+ * Why the current Display frame exists.
+ *
+ * `DisplayFrame.kind` deliberately stays small for rendering. A working frame
+ * can mean planning, resolving an argument, or invoking a provider, though,
+ * and those are materially different claims in a runtime topology.
+ */
+export type SessionPhase =
+  | "idle"
+  | "planning"
+  | "parameters"
+  | "approval"
+  | "transfer"
+  | "resolving"
+  | "invoking"
+  | "result"
+  | "error";
+
+/** Semantic outcome derived by the session, never inferred from a return alone. */
+export type SessionOutcome = "succeeded" | "failed" | "unknown";
+
+export interface SessionTaskRef {
+  current: number;
+  total: number;
+}
+
+/** Latest non-sensitive state sent when a console attaches or reconnects. */
+export interface SessionActivitySnapshot {
+  /** Monotonic within one SessionActor. Consumers use it to ignore old events. */
+  revision: number;
+  displayConnected: boolean;
+  frameId: string;
+  frameKind: DisplayFrame["kind"];
+  phase: SessionPhase;
+  tool?: RuntimeToolRef;
+  task?: SessionTaskRef;
+  outcome?: SessionOutcome;
+}
+
+/**
+ * Bounded evidence for the console topology.
+ *
+ * Raw choices, text, arguments, results, and provider prose are intentionally
+ * absent. The stream says which boundary changed, not what private value moved.
+ */
+export type SessionActivityEvent =
+  | { kind: "display_presence"; revision: number; connected: boolean }
+  | {
+      kind: "display_input";
+      revision: number;
+      frameId: string;
+      input: "choice" | "text" | "cancel";
+    }
+  | {
+      kind: "frame";
+      revision: number;
+      frameId: string;
+      frameKind: DisplayFrame["kind"];
+      phase: SessionPhase;
+      tool?: RuntimeToolRef;
+      task?: SessionTaskRef;
+      outcome?: SessionOutcome;
+    };
+
 /* ------------------------------------------------- display <-> server wire */
 
 export type DisplayToServer =
@@ -192,6 +262,10 @@ export interface SiteRef {
  */
 export type ServerToConsole =
   | { t: "discover"; requestId: string; origins: string[] }
+  /** Hydrates topology state without replaying old motion on reconnect. */
+  | { t: "sessionSnapshot"; snapshot: SessionActivitySnapshot }
+  /** Live, ordered evidence of accepted Display input and visible transitions. */
+  | { t: "sessionActivity"; event: SessionActivityEvent }
   | {
       t: "invoke";
       requestId: string;
@@ -221,6 +295,13 @@ export type ConsoleToServer =
   | { t: "tools"; requestId: string; tools: ToolDescriptor[]; error?: string }
   | { t: "invoked"; requestId: string; ok: true; value: string }
   | { t: "invoked"; requestId: string; ok: false; error: string }
+  /**
+   * Whether the current multi-origin discovery pass is quiet enough to plan
+   * against as a whole. False does not hide deterministic menu choices already
+   * discovered; it only prevents a new interpreted task from racing a partial
+   * registry.
+   */
+  | { t: "discoverySettled"; settled: boolean }
   /** Fired from ontoolchange so the Display can refresh without polling. */
   | { t: "toolsChanged" }
   /**

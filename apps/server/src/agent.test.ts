@@ -1,4 +1,9 @@
-import type { AgentRequest, ToolDescriptor } from "@dusky/contracts";
+import type {
+  AgentRequest,
+  SessionActivityEvent,
+  SessionActivitySnapshot,
+  ToolDescriptor,
+} from "@dusky/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { SessionActor } from "./hub.js";
 
@@ -94,6 +99,7 @@ function actor(
     ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
     results?: Record<string, string>;
     hangInvokes?: boolean;
+    settled?: boolean;
   } = {},
 ) {
   const invoked: string[] = [];
@@ -147,6 +153,7 @@ async function paired(
     ) => Promise<{ name: string; args: Record<string, unknown> } | null>;
     results?: Record<string, string>;
     hangInvokes?: boolean;
+    settled?: boolean;
     sites?: { origin: string; name?: string }[];
   } = {},
 ) {
@@ -155,6 +162,10 @@ async function paired(
     built.consoleSock as unknown as Sock,
     opts.sites ?? [{ origin: "https://shop.test" }],
   );
+  await built.a.onConsoleMessage({
+    t: "discoverySettled",
+    settled: opts.settled ?? true,
+  });
   const display = opts.withDisplay === false ? undefined : new FakeSocket();
   if (display) built.a.attachDisplay(display as unknown as Sock);
   return { ...built, display };
@@ -170,6 +181,180 @@ function currentFrameId(display: FakeSocket | undefined): string {
 }
 
 const ask = (a: SessionActor, request: AgentRequest) => a.onAgentRequest(request);
+
+function sessionWireMessages(
+  sock: FakeSocket,
+): (
+  | { t: "sessionSnapshot"; snapshot: SessionActivitySnapshot }
+  | { t: "sessionActivity"; event: SessionActivityEvent }
+)[] {
+  return sock.sent
+    .map(
+      (text) =>
+        JSON.parse(text) as {
+          t: string;
+          snapshot?: SessionActivitySnapshot;
+          event?: SessionActivityEvent;
+        },
+    )
+    .filter(
+      (
+        message,
+      ): message is
+        | { t: "sessionSnapshot"; snapshot: SessionActivitySnapshot }
+        | { t: "sessionActivity"; event: SessionActivityEvent } =>
+        message.t === "sessionSnapshot" || message.t === "sessionActivity",
+    );
+}
+
+describe("bounded runtime activity", () => {
+  it("snapshots true Display presence and publishes attach and detach changes", async () => {
+    const built = actor();
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test" },
+    ]);
+
+    const initial = sessionWireMessages(built.consoleSock).find(
+      (message) => message.t === "sessionSnapshot",
+    );
+    expect(initial?.snapshot).toMatchObject({
+      displayConnected: false,
+      frameKind: "idle",
+      phase: "idle",
+    });
+
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+    built.a.detachDisplay(display as unknown as Sock);
+
+    const presence = sessionWireMessages(built.consoleSock)
+      .filter((message) => message.t === "sessionActivity")
+      .map((message) => message.event)
+      .filter((event) => event.kind === "display_presence");
+    expect(presence.map((event) => event.connected)).toEqual([true, false]);
+    expect(presence[1]?.revision).toBeGreaterThan(presence[0]?.revision ?? -1);
+  });
+
+  it("sends presence hydration before live frame events when the Display arrived first", async () => {
+    const built = actor();
+    const display = new FakeSocket();
+    built.a.attachDisplay(display as unknown as Sock);
+    await built.a.attachConsole(built.consoleSock as unknown as Sock, [
+      { origin: "https://shop.test" },
+    ]);
+
+    const wire = sessionWireMessages(built.consoleSock);
+    expect(wire[0]).toMatchObject({
+      t: "sessionSnapshot",
+      snapshot: { revision: 1, displayConnected: true },
+    });
+    expect(wire[1]).toMatchObject({
+      t: "sessionActivity",
+      event: { kind: "frame", revision: 2 },
+    });
+  });
+
+  it("hydrates a reconnect with the current phase and exact active tool without replaying activity", async () => {
+    const { a, consoleSock, display } = await paired();
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "https://shop.test add_to_cart",
+    });
+    const priorRevision = sessionWireMessages(consoleSock)
+      .filter((message) => message.t === "sessionActivity")
+      .at(-1)?.event.revision;
+
+    const again = new FakeSocket();
+    const raw = again.send.bind(again);
+    again.send = (text: string) => {
+      raw(text);
+      const message = JSON.parse(text) as { t: string; requestId?: string };
+      if (message.t === "discover" && message.requestId) {
+        queueMicrotask(() => {
+          void a.onConsoleMessage({ t: "tools", requestId: message.requestId!, tools: TOOLS });
+        });
+      }
+    };
+    await a.attachConsole(again as unknown as Sock, [{ origin: "https://shop.test" }]);
+
+    const wire = sessionWireMessages(again);
+    expect(wire.filter((message) => message.t === "sessionActivity")).toEqual([]);
+    expect(wire.find((message) => message.t === "sessionSnapshot")?.snapshot).toMatchObject({
+      revision: priorRevision,
+      displayConnected: true,
+      frameKind: "choose",
+      phase: "parameters",
+      tool: { origin: "https://shop.test", name: "add_to_cart" },
+    });
+  });
+
+  it("publishes only bounded input and exact active-tool frame context", async () => {
+    const { a, consoleSock, display } = await paired();
+    consoleSock.sent.length = 0;
+
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(display),
+      choiceId: "https://shop.test add_to_cart",
+    });
+    await a.onDisplayMessage({
+      t: "text",
+      frameId: currentFrameId(display),
+      value: "PRIVATE-PRODUCT-4417",
+    });
+
+    const events = sessionWireMessages(consoleSock)
+      .filter((message) => message.t === "sessionActivity")
+      .map((message) => message.event);
+    expect(events.map((event) => event.kind)).toEqual([
+      "display_input",
+      "frame",
+      "display_input",
+      "frame",
+    ]);
+    expect(
+      events.filter((event) => event.kind === "display_input").map((event) => event.input),
+    ).toEqual(["choice", "text"]);
+    expect(events.filter((event) => event.kind === "frame")).toEqual([
+      expect.objectContaining({
+        frameKind: "choose",
+        phase: "parameters",
+        tool: { origin: "https://shop.test", name: "add_to_cart" },
+      }),
+      expect.objectContaining({
+        frameKind: "confirm",
+        phase: "approval",
+        tool: { origin: "https://shop.test", name: "add_to_cart" },
+      }),
+    ]);
+    expect(JSON.stringify(events)).not.toContain("PRIVATE-PRODUCT-4417");
+    expect(JSON.stringify(events)).not.toContain("choiceId");
+    expect(JSON.stringify(events)).not.toContain("value");
+  });
+
+  it("does not publish activity for stale-frame input", async () => {
+    const { a, consoleSock, display } = await paired();
+    const staleId = currentFrameId(display);
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: staleId,
+      choiceId: "https://shop.test add_to_cart",
+    });
+    consoleSock.sent.length = 0;
+
+    await a.onDisplayMessage({ t: "text", frameId: staleId, value: "stale private text" });
+    await a.onDisplayMessage({ t: "cancel", frameId: staleId });
+    await a.onDisplayMessage({
+      t: "choose",
+      frameId: staleId,
+      choiceId: "__cancel",
+    });
+
+    expect(sessionWireMessages(consoleSock)).toEqual([]);
+    expect(a.current().kind).toBe("choose");
+  });
+});
 
 describe("what an outside agent can see", () => {
   it("reports the session, the display and what is on it", async () => {
@@ -214,6 +399,47 @@ describe("what an outside agent can see", () => {
 });
 
 describe("sending a task", () => {
+  it("refuses agent tasks until discovery settles, then accepts the same request", async () => {
+    const { a } = await paired({ planner: true, settled: false });
+
+    const before = await ask(a, { op: "task", text: "add the organic oat milk" });
+    expect(before.ok).toBe(false);
+    if (before.ok) throw new Error("unreachable");
+    expect(before.error).toContain("still arriving");
+    expect(a.current().kind).toBe("idle");
+
+    const status = await ask(a, { op: "status" });
+    if (!status.ok) throw new Error("unreachable");
+    expect(status.value).toMatchObject({
+      discovery_settled: false,
+      accepting_tasks: false,
+    });
+
+    await a.onConsoleMessage({ t: "discoverySettled", settled: true });
+    expect((await ask(a, { op: "task", text: "add the organic oat milk" })).ok).toBe(true);
+    expect(a.current().kind).toBe("confirm");
+  });
+
+  it("refuses spoken tasks until discovery settles, then accepts the same words", async () => {
+    const { a, display } = await paired({ planner: true, settled: false });
+    const frameId = currentFrameId(display);
+
+    await a.onDisplayMessage({
+      t: "text",
+      frameId,
+      value: "add the organic oat milk",
+    });
+    expect(a.current().kind).toBe("idle");
+
+    await a.onConsoleMessage({ t: "discoverySettled", settled: true });
+    await a.onDisplayMessage({
+      t: "text",
+      frameId,
+      value: "add the organic oat milk",
+    });
+    expect(a.current().kind).toBe("confirm");
+  });
+
   it("refuses when no glasses are connected, and says how to connect them", async () => {
     const { a } = await paired({ planner: true, withDisplay: false });
     const r = await ask(a, { op: "task", text: "add oat milk" });

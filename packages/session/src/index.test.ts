@@ -1,6 +1,6 @@
 import type { DisplayFrame, ToolDescriptor } from "@dusky/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { type Planner, Session, type ToolRunner } from "./index.js";
+import { type Planner, Session, type SessionActivity, type ToolRunner } from "./index.js";
 
 const tool = (p: Partial<ToolDescriptor>): ToolDescriptor => ({
   name: "x",
@@ -1018,6 +1018,54 @@ describe("what the wearer sees while waiting", () => {
     expect(seen.map((f) => f.kind)).toEqual(["working", "working", "choose"]);
     expect(seen[1]?.kind === "working" && seen[1].note).toBe("Looking up your options");
   });
+
+  it("emits provider-neutral phase and exact tool context beside visible frames", async () => {
+    const activity: SessionActivity[] = [];
+    const s = new Session({
+      source: "Shop",
+      runner: fakeRunner(),
+      onActivity: (event) => activity.push(event),
+    });
+
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.submitText("oat-1");
+    await s.handle("__confirm");
+
+    expect(activity.map((event) => event.phase)).toEqual([
+      "idle",
+      "parameters",
+      "approval",
+      "invoking",
+      "result",
+    ]);
+    expect(activity.slice(1).map((event) => event.tool)).toEqual(
+      Array.from({ length: 4 }, () => ({ origin: ADD.origin, name: ADD.name })),
+    );
+    expect(activity.at(-1)?.outcome).toBe("succeeded");
+    expect(s.currentActivity()).toEqual(activity.at(-1));
+  });
+
+  it("distinguishes planning and resolver waits from provider invocation", async () => {
+    const activity: SessionActivity[] = [];
+    const planner: Planner = {
+      pickTool: async () => ({ name: "add_to_cart", args: {} }),
+      planResolver: async () => ({ name: "search_products", args: { query: "oat" } }),
+    };
+    const s = new Session({
+      source: "Shop",
+      runner: fakeRunner(),
+      planner,
+      onActivity: (event) => activity.push(event),
+    });
+
+    await s.start();
+    activity.length = 0;
+    await s.submitText("some oat milk");
+
+    expect(activity.map((event) => event.phase)).toEqual(["planning", "resolving", "parameters"]);
+    expect(activity[1]?.tool).toEqual({ origin: ADD.origin, name: ADD.name });
+  });
 });
 
 /**
@@ -1053,6 +1101,27 @@ describe("reporting what the site actually said", () => {
     expect(f.ok).toBe(false);
     expect(f.title).toContain("did not work");
     expect(f.detail).toBe("Out of stock");
+  });
+
+  it("publishes a failed outcome beside the returned failure frame", async () => {
+    const { runner } = runnerReturning(JSON.stringify({ ok: false, message: "Out of stock" }));
+    const activity: SessionActivity[] = [];
+    const s = new Session({
+      source: "Shop",
+      runner,
+      onActivity: (event) => activity.push(event),
+    });
+
+    await s.start();
+    await s.handle("add_to_cart");
+    await s.handle("oat-1");
+    await s.handle("__confirm");
+
+    expect(activity.at(-1)).toMatchObject({
+      phase: "result",
+      outcome: "failed",
+      tool: { origin: ADD.origin, name: ADD.name },
+    });
   });
 
   it("reports a success the site did confirm", async () => {

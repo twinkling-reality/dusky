@@ -53,9 +53,9 @@ test("console discovers the partner site's tools cross-origin", async ({ page })
   await expect(tools.getByText("Search catalog")).toBeVisible();
   await expect(tools.getByText("Add to cart")).toBeVisible();
   await expect(tools.locator("li")).toHaveCount(11);
-  await expect(page.getByRole("region", { name: "Technical log" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Execution log" })).toBeVisible();
   await expect(page.getByText("11 actions", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("across 3 websites", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("from 3 websites", { exact: true }).first()).toBeVisible();
 });
 
 test("a genuinely new runtime provider works without a rebuild or adapter", async ({ browser }) => {
@@ -76,7 +76,9 @@ test("a genuinely new runtime provider works without a rebuild or adapter", asyn
 
   // This origin and its vocabulary appear nowhere in the fixture registry.
   // The console has only its URL and the descriptors returned by WebMCP.
-  await expect(consolePage.locator('iframe[title="Canopy Lab"]')).toBeVisible();
+  const providerFrame = consolePage.locator('iframe[title="Canopy Lab"]');
+  await expect(providerFrame).toHaveCount(1);
+  await expect(providerFrame).toHaveAttribute("aria-hidden", "true");
   await expect(discovered(consolePage).getByText("Estimate shade")).toBeVisible();
   await expect(discovered(consolePage).getByText("Search catalog")).toHaveCount(0);
   await expect(consolePage.locator('iframe[title="Amber & Oak"]')).toHaveCount(0);
@@ -149,6 +151,22 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   // Nothing has run yet: the partner site is untouched.
   const cart = consolePage.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
   await expect(cart).toHaveText("empty");
+  const actionRow = consolePage.locator(
+    '[data-topology-tool-origin="http://localhost:7801"][data-topology-tool-name="add_to_cart"]',
+  );
+  await expect(actionRow).toHaveAttribute("data-action-state", "approval");
+  await expect(actionRow).toContainText("Awaiting wearer approval");
+  const actionSideBorders = await actionRow.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { left: style.borderLeftWidth, right: style.borderRightWidth };
+  });
+  expect(actionSideBorders).toEqual({ left: "0px", right: "0px" });
+  await expect(
+    consolePage.getByRole("region", { name: "Execution log" }).getByRole("listitem"),
+  ).toHaveCount(0);
+  const topology = consolePage.locator("canvas[data-activity-phase]");
+  await expect(topology).toHaveAttribute("data-activity-phase", "awaiting-approval");
+  await expect(topology).not.toHaveAttribute("data-activity-origin", /.+/);
 
   await focusChoice(displayPage, /Confirm/);
   await displayPage.keyboard.press("Enter");
@@ -164,17 +182,20 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   await expect(displayPage.getByText("Cart total")).toBeVisible();
   await expect(displayPage.getByText("$4.29")).toBeVisible();
 
-  // One browser invocation is one Technical log row. Settlement updates that
+  // One browser invocation is one Execution log row. Settlement updates that
   // row in place instead of appending a detached result, and the row keeps the
   // provider origin that owns the live handle.
-  const technicalLog = consolePage.getByRole("region", { name: "Technical log" });
+  const technicalLog = consolePage.getByRole("region", { name: "Execution log" });
   const logRows = technicalLog.getByRole("listitem");
   await expect(logRows).toHaveCount(1);
-  await expect(logRows.first()).toHaveAttribute("data-status", "completed");
+  await expect(logRows.first()).toHaveAttribute("data-status", "succeeded");
+  await expect(logRows.first()).toHaveAttribute("data-provider-hit", "true");
   await expect(logRows.first()).toHaveAttribute("data-tool-name", "add_to_cart");
   await expect(logRows.first()).toContainText("Add to cart");
   await expect(logRows.first()).toContainText("Verdant Market");
-  await expect(logRows.first()).toContainText("Returned");
+  await expect(logRows.first()).toContainText("Succeeded");
+  await expect(actionRow).toHaveAttribute("data-action-state", "succeeded");
+  await expect(actionRow).toHaveAttribute("data-provider-hit", "true");
   await expect(technicalLog.getByText("1 action", { exact: true })).toBeVisible();
   await expect(technicalLog).not.toContainText(
     /registry|discovery|tools changed|provider origins|localhost/i,
@@ -185,6 +206,50 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   });
   await consolePage.screenshot({ path: "test-results/console-runtime-log.png", fullPage: true });
   await displayPage.screenshot({ path: "test-results/display-result.png" });
+
+  await ctx.close();
+});
+
+test("a provider return with ok false is visibly failed, never painted as success", async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext();
+  const consolePage = await ctx.newPage();
+  const displayPage = await ctx.newPage();
+  const code = freshCode();
+
+  await consolePage.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
+  await expect(discovered(consolePage).getByText("Change reservation")).toBeVisible();
+  await displayPage.goto(`http://localhost:7802/?session=${code}`);
+  await expectReachable(displayPage, /Change reservation/);
+
+  await focusChoice(displayPage, /Change reservation/);
+  await displayPage.keyboard.press("Enter");
+  const compose = displayPage.locator('input[type="text"]');
+  await expect(compose).toBeVisible();
+  await compose.fill("AO-9999");
+  await compose.press("Enter");
+  await focusChoice(displayPage, /^6:00 PM$/);
+  await displayPage.keyboard.press("Enter");
+  await expect(displayPage.getByRole("button", { name: /Confirm/ })).toBeVisible();
+
+  const actionRow = consolePage.locator(
+    '[data-topology-tool-origin="http://localhost:7804"][data-topology-tool-name="change_reservation"]',
+  );
+  await expect(actionRow).toHaveAttribute("data-action-state", "approval");
+  await focusChoice(displayPage, /Confirm/);
+  await displayPage.keyboard.press("Enter");
+
+  await expect(displayPage.getByText(/No booking called AO-9999/)).toBeVisible();
+  const row = consolePage
+    .getByRole("region", { name: "Execution log" })
+    .getByRole("listitem")
+    .filter({ hasText: "Change reservation" });
+  await expect(row).toHaveAttribute("data-status", "failed");
+  await expect(row).toHaveAttribute("data-provider-hit", "true");
+  await expect(row).toContainText("Failed");
+  await expect(row).not.toContainText("Succeeded");
+  await expect(actionRow).toHaveAttribute("data-action-state", "failed");
 
   await ctx.close();
 });
@@ -231,10 +296,10 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   await expect(displayPage.getByText("Organic oat milk")).toBeVisible();
   await expect(displayPage.getByText("Total")).toBeVisible();
 
-  const logRows = consolePage.getByRole("region", { name: "Technical log" }).getByRole("listitem");
+  const logRows = consolePage.getByRole("region", { name: "Execution log" }).getByRole("listitem");
   await expect(logRows).toHaveCount(2);
-  await expect(logRows.filter({ hasText: "Add to cart" })).toContainText("Returned");
-  await expect(logRows.filter({ hasText: "Review cart" })).toContainText("Returned");
+  await expect(logRows.filter({ hasText: "Add to cart" })).toContainText("Succeeded");
+  await expect(logRows.filter({ hasText: "Review cart" })).toContainText("Succeeded");
   await consolePage.locator("[data-runtime-panel]").screenshot({
     path: "test-results/console-runtime-log-multiple.png",
   });

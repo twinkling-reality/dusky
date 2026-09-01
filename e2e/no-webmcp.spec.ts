@@ -26,6 +26,14 @@ test("a browser that cannot speak WebMCP is not reported as an empty site", asyn
   const console_ = await context.newPage();
   await console_.goto(`http://localhost:7803/demo?session=${code}&mode=glasses`);
 
+  const agentAccess = console_.locator("[data-agent-access]");
+  await expect(agentAccess).toHaveAttribute("data-state", "unavailable");
+  await expect(agentAccess).toHaveText("Control from a browser agentUnavailable");
+  await expect(agentAccess).toHaveAttribute(
+    "aria-label",
+    "Browser agent control is unavailable because WebMCP is not enabled in this browser.",
+  );
+
   const panel = display.locator("div[data-kind]");
   await expect(panel).toBeVisible();
 

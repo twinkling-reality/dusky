@@ -52,6 +52,10 @@ describe("tool registry changes", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(changed).toHaveBeenCalledOnce();
 
+    const callsBeforeBackoff = modelContext.getTools.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(modelContext.getTools.mock.calls.length - callsBeforeBackoff).toBeLessThanOrEqual(21);
+
     off();
     tools.push({
       name: "review_cart",
@@ -120,6 +124,86 @@ describe("provider invocation shape", () => {
       expect(modelContext.registerTool).toHaveBeenCalledOnce();
     },
   );
+
+  it("emits exact tool identity immediately before the provider is executed", async () => {
+    const order: string[] = [];
+    const providerRun = vi.fn(async () => {
+      order.push("provider");
+      return JSON.stringify({ ok: true });
+    });
+    const modelContext = modelContextFor("object", providerRun);
+    vi.stubGlobal("document", { modelContext });
+
+    const bridge = new WebMcpBridge([provider.origin]);
+    await bridge.discover();
+    await bridge.invoke(
+      provider.origin,
+      provider.name,
+      { amount: 10 },
+      undefined,
+      undefined,
+      (event) => {
+        order.push(event.kind);
+        expect(event.tool).toEqual({ origin: provider.origin, name: provider.name });
+      },
+    );
+
+    expect(order).toEqual(["executing", "provider"]);
+  });
+
+  it("does not emit provider execution when validation fails before executeTool", async () => {
+    const providerRun = vi.fn(async () => JSON.stringify({ ok: true }));
+    const modelContext = modelContextFor("object", providerRun);
+    vi.stubGlobal("document", { modelContext });
+    const originalDescription = provider.description;
+
+    try {
+      const bridge = new WebMcpBridge([provider.origin]);
+      const expected = (await bridge.discover())[0];
+      if (!expected) throw new Error("expected provider descriptor");
+      provider.description = "Changed after the wearer saw it.";
+      const lifecycle = vi.fn();
+
+      await expect(
+        bridge.invoke(
+          provider.origin,
+          provider.name,
+          { amount: 10 },
+          expected,
+          undefined,
+          lifecycle,
+        ),
+      ).rejects.toThrow(/changed this tool/);
+      expect(lifecycle).not.toHaveBeenCalled();
+      expect(providerRun).not.toHaveBeenCalled();
+    } finally {
+      provider.description = originalDescription;
+    }
+  });
+
+  it("does not start the provider if cancellation lands before execution", async () => {
+    const providerRun = vi.fn(async () => JSON.stringify({ ok: true }));
+    const modelContext = modelContextFor("object", providerRun);
+    vi.stubGlobal("document", { modelContext });
+    const bridge = new WebMcpBridge([provider.origin]);
+    await bridge.discover();
+    const controller = new AbortController();
+    controller.abort();
+    const lifecycle = vi.fn();
+
+    await expect(
+      bridge.invoke(
+        provider.origin,
+        provider.name,
+        { amount: 10 },
+        undefined,
+        controller.signal,
+        lifecycle,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(lifecycle).not.toHaveBeenCalled();
+    expect(providerRun).not.toHaveBeenCalled();
+  });
 
   it("never retries a provider that throws the browser parse-error text", async () => {
     const providerRun = vi.fn(async () => {

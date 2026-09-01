@@ -44,13 +44,22 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
 
   await consolePage.goto(`http://localhost:7803/demo?session=${CODE}&mode=glasses`);
   // Session state stays visible, while internal registration chatter does not.
-  await expect(consolePage.getByRole("region", { name: "Technical log" })).toBeVisible();
+  await expect(consolePage.getByRole("region", { name: "Execution log" })).toBeVisible();
   await expect(consolePage.getByText("registered Dusky's own 4 tools")).toHaveCount(0);
+  const agentAccess = consolePage.locator("[data-agent-access]");
+  await expect(agentAccess).toHaveAttribute("data-state", "ready");
+  await expect(agentAccess).toHaveText("Control from a browser agentAvailable");
+  await expect(agentAccess).toHaveAttribute(
+    "aria-label",
+    "Browser agent control available: check Display status, list website actions, send a task, or cancel.",
+  );
   // Dusky's own tools are registered as soon as the page loads, which is
   // BEFORE the relay has finished discovering the partner's. Pairing used to
   // take a form fill and two clicks, which hid that gap; a code in the URL
   // does not. Wait for discovery, or the agent asks an empty session.
   await expect(consolePage.getByTestId("actions").locator("li")).toHaveCount(11);
+  await expect(consolePage.getByText("from 3 websites", { exact: true })).toBeVisible();
+  await expect(consolePage.getByText("Discovery", { exact: true })).toHaveCount(0);
 
   // Registering our own tools must not pollute what the WEARER sees. Chrome
   // returns this document's own tools from getTools({fromOrigins}) even when
@@ -106,7 +115,13 @@ test("an agent in the browser can inspect and drive a Dusky session", async ({ b
   await expectReachable(displayPage, /Add to cart/);
 
   const status = await callDuskyTool(consolePage, "get_display_status");
-  expect(status).toMatchObject({ ok: true, session: CODE, display_connected: true, state: "idle" });
+  expect(status).toMatchObject({
+    ok: true,
+    session: CODE,
+    display_connected: true,
+    discovery_settled: true,
+    state: "idle",
+  });
 
   /* ---- the constraint that makes this safe to expose at all ---- */
 

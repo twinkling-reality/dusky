@@ -17,6 +17,10 @@ import type {
   Choice,
   DisplayFrame,
   Fact,
+  RuntimeToolRef,
+  SessionOutcome,
+  SessionPhase,
+  SessionTaskRef,
   ToolDescriptor,
 } from "@dusky/contracts";
 import {
@@ -129,6 +133,27 @@ export interface SessionOptions {
    * cursorless display is indistinguishable from a crash.
    */
   onTransition?: (frame: DisplayFrame) => void;
+  /**
+   * The same visible transition with bounded provider-neutral context.
+   *
+   * This exists separately from `onTransition` so transports can add truthful
+   * topology evidence without changing the Display rendering port.
+   */
+  onActivity?: (activity: SessionActivity) => void;
+}
+
+export interface SessionActivity {
+  frame: DisplayFrame;
+  phase: SessionPhase;
+  tool?: RuntimeToolRef;
+  task?: SessionTaskRef;
+  outcome?: SessionOutcome;
+}
+
+interface ActivityContext {
+  phase?: SessionPhase;
+  tool?: RuntimeToolRef | ToolDescriptor;
+  outcome?: SessionOutcome;
 }
 
 /** Shown on the menu when a spoken request did not turn into anything. */
@@ -273,9 +298,11 @@ export class Session {
   private transfer: PendingTransfer | null = null;
   private outcomes: TaskOutcome[] = [];
   private frame: DisplayFrame;
+  private activity: SessionActivity;
 
   constructor(private readonly o: SessionOptions) {
     this.frame = idleFrame(o.source, []);
+    this.activity = { frame: this.frame, phase: "idle" };
   }
 
   private now(): number {
@@ -288,6 +315,11 @@ export class Session {
 
   current(): DisplayFrame {
     return this.frame;
+  }
+
+  /** Latest bounded context for reconnect snapshots. */
+  currentActivity(): SessionActivity {
+    return this.activity;
   }
 
   /** Visible to the relay so another agent cannot interrupt between steps. */
@@ -303,9 +335,22 @@ export class Session {
    * observable rather than merely computed, and it is why a transport does
    * not have to guess when to repaint.
    */
-  private show(f: DisplayFrame): DisplayFrame {
+  private show(f: DisplayFrame, context: ActivityContext = {}): DisplayFrame {
     this.frame = f;
+    const tool = context.tool ?? this.pending?.tool;
+    const task =
+      this.taskStep > 0 && this.taskTotal > 0
+        ? { current: this.taskStep, total: this.taskTotal }
+        : undefined;
+    this.activity = {
+      frame: f,
+      phase: context.phase ?? phaseFor(f),
+      ...(tool ? { tool: { origin: tool.origin, name: tool.name } } : {}),
+      ...(task ? { task } : {}),
+      ...(context.outcome ? { outcome: context.outcome } : {}),
+    };
     this.o.onTransition?.(f);
+    this.o.onActivity?.(this.activity);
     return f;
   }
 
@@ -538,7 +583,9 @@ export class Session {
     // The wearer caused this wait, so they have to see it. The title echoes
     // what Dusky heard, because a misheard request is the thing they most
     // need to catch before it turns into an action.
-    this.show(busyFrame(this.menuSource(), text, "Finding the right action"));
+    this.show(busyFrame(this.menuSource(), text, "Finding the right action"), {
+      phase: "planning",
+    });
 
     // A planner is assistance, never a dependency. Anything it does wrong,
     // including throwing, has to land the wearer on the menu they can already
@@ -709,6 +756,7 @@ export class Session {
             `${label(inFlight.tool)} was sent before you went back. It may still finish.`,
             false,
           ),
+          { tool: inFlight.tool, outcome: "unknown" },
         );
       }
       if (!wasPending) this.site = null;
@@ -1038,6 +1086,12 @@ export class Session {
         "Choose again so Dusky shares only what the current action accepts.",
         false,
       ),
+      {
+        ...(transfer
+          ? { tool: { origin: transfer.destinationOrigin, name: transfer.destinationTool } }
+          : {}),
+        outcome: "failed",
+      },
     );
   }
 
@@ -1112,6 +1166,7 @@ export class Session {
         "Choose it again so Dusky uses what the site offers now.",
         false,
       ),
+      { tool: p.tool, outcome: "failed" },
     );
   }
 
@@ -1161,6 +1216,7 @@ export class Session {
           "Choose it again so Dusky uses what the site offers now.",
           false,
         ),
+        { tool: planned.tool, outcome: "failed" },
       );
     }
 
@@ -1220,7 +1276,10 @@ export class Session {
        * the intent is exactly what makes the lookup answerable.
        */
       if (missing.kind === "text" && this.o.planner && this.intent.trim() !== "") {
-        this.show(busyFrame(this.siteOf(p.tool.origin), label(p.tool), "Looking up your options"));
+        this.show(busyFrame(this.siteOf(p.tool.origin), label(p.tool), "Looking up your options"), {
+          phase: "resolving",
+          tool: p.tool,
+        });
         // One clock for the whole attempt, started before the planner is
         // asked anything, because the wearer is already waiting by then.
         const resolverStartedAt = this.now();
@@ -1438,6 +1497,7 @@ export class Session {
           "Choose again so you approve what will actually run.",
           false,
         ),
+        { tool: p.tool, outcome: "failed" },
       );
     }
     return this.execute();
@@ -1574,6 +1634,7 @@ export class Session {
             "The site did not respond in time. It may still have run.",
             retryable,
           ),
+          { tool: p.tool, outcome: "unknown" },
         );
       } else {
         // Success is asserted from the returned RESULT, never from the fact
@@ -1635,6 +1696,7 @@ export class Session {
                 }
               : {}),
           }),
+          { tool: p.tool, outcome: said.ok ? "succeeded" : "failed" },
         );
       }
     } catch (err) {
@@ -1650,6 +1712,7 @@ export class Session {
       if (!abandoned) {
         this.show(
           errorFrame(this.siteOf(p.tool.origin), `${label(p.tool)} failed`, msg(err), retryable),
+          { tool: p.tool, outcome: "failed" },
         );
       }
     } finally {
@@ -1666,6 +1729,25 @@ export class Session {
 }
 
 /* --------------------------------------------------------------- helpers */
+
+function phaseFor(frame: DisplayFrame): SessionPhase {
+  switch (frame.kind) {
+    case "idle":
+      return "idle";
+    case "working":
+      return "invoking";
+    case "choose":
+      return "parameters";
+    case "confirm":
+      return "approval";
+    case "transfer":
+      return "transfer";
+    case "result":
+      return "result";
+    case "error":
+      return "error";
+  }
+}
 
 function msg(e: unknown): string {
   return safeResultText(e instanceof Error ? e.message : String(e));

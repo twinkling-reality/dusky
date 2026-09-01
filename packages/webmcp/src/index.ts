@@ -9,7 +9,7 @@
  * cross-origin round trip. See spikes/00-cross-origin-roundtrip.
  */
 
-import type { JsonSchema, ToolDescriptor } from "@dusky/contracts";
+import type { JsonSchema, RuntimeToolRef, ToolDescriptor } from "@dusky/contracts";
 
 /* -------------------------------------------------- minimal ambient types */
 
@@ -36,7 +36,18 @@ interface ModelContextLike {
   ontoolchange?: ((this: unknown, ev: Event) => unknown) | null;
 }
 
+/** Fired only at the exact provider-execution boundary. */
+export interface WebMcpInvokeLifecycleEvent {
+  kind: "executing";
+  tool: RuntimeToolRef;
+}
+
+export type WebMcpInvokeLifecycle = (event: WebMcpInvokeLifecycleEvent) => void;
+
 const ARGUMENT_PROBE_PREFIX = "dusky_internal_argument_shape_probe_";
+const COMPATIBILITY_SCAN_FAST_MS = 500;
+const COMPATIBILITY_SCAN_SLOW_MS = 2_500;
+const COMPATIBILITY_SCAN_FAST_COUNT = 20;
 let argumentProbeSequence = 0;
 const argumentProbeNames = new WeakMap<Window, Set<string>>();
 
@@ -301,30 +312,40 @@ export class WebMcpBridge {
      * signature prevents unchanged scans from resetting the wearer's frame.
      */
     let disposed = false;
-    let scanning = false;
+    let unchangedScans = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (disposed) return;
+      const delay =
+        unchangedScans < COMPATIBILITY_SCAN_FAST_COUNT
+          ? COMPATIBILITY_SCAN_FAST_MS
+          : COMPATIBILITY_SCAN_SLOW_MS;
+      timer = setTimeout(() => void scan(), delay);
+    };
     const scan = async () => {
-      if (disposed || scanning) return;
-      scanning = true;
+      if (disposed) return;
       try {
         const raw = await mc.getTools({ fromOrigins: this.origins });
         const next = registrySignature(raw, this.origins);
-        if (this.knownRegistry === null) this.knownRegistry = next;
-        else if (next !== this.knownRegistry) {
+        if (this.knownRegistry === null) {
           this.knownRegistry = next;
+          unchangedScans += 1;
+        } else if (next !== this.knownRegistry) {
+          this.knownRegistry = next;
+          unchangedScans = 0;
           cb();
-        }
+        } else unchangedScans += 1;
       } catch {
         // Discovery itself owns error reporting. A background compatibility
         // check must never crash the page or replace that result.
       } finally {
-        scanning = false;
+        schedule();
       }
     };
     void scan();
-    const timer = setInterval(() => void scan(), 500);
     return () => {
       disposed = true;
-      clearInterval(timer);
+      if (timer !== undefined) clearTimeout(timer);
     };
   }
 
@@ -349,6 +370,7 @@ export class WebMcpBridge {
     args: Record<string, unknown>,
     expectedTool?: ToolDescriptor,
     signal?: AbortSignal,
+    onLifecycle?: WebMcpInvokeLifecycle,
   ): Promise<string> {
     const mc = ctx();
     if (!mc) throw new Error(ENABLE_HINT);
@@ -361,6 +383,16 @@ export class WebMcpBridge {
     const opts = signal ? { signal } : undefined;
 
     const shape = await this.argumentShape(mc);
+    // A timeout can land while the harmless compatibility probe is running.
+    // Do not begin a provider call after the caller has already withdrawn it.
+    if (signal?.aborted) {
+      const error = new Error("Invocation was cancelled before provider execution.");
+      error.name = "AbortError";
+      throw error;
+    }
+    // Nothing asynchronous may sit between this evidence and executeTool. This
+    // is the first point at which saying the provider was hit is truthful.
+    onLifecycle?.({ kind: "executing", tool: { origin, name } });
     if (shape === "string") {
       return await mc.executeTool(handle, JSON.stringify(args) as unknown, opts);
     }

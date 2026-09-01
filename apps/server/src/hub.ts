@@ -9,11 +9,13 @@ import type {
   DisplayToServer,
   ServerToConsole,
   ServerToDisplay,
+  SessionActivityEvent,
+  SessionActivitySnapshot,
   SiteRef,
   ToolDescriptor,
 } from "@dusky/contracts";
 import { CLOSE_SUPERSEDED } from "@dusky/contracts";
-import { Session, type ToolRunner } from "@dusky/session";
+import { Session, type SessionActivity, type ToolRunner } from "@dusky/session";
 import type { WebSocket } from "ws";
 import type { PlannerFactory } from "./planner.js";
 
@@ -152,9 +154,13 @@ export class SessionActor {
   private session: Session;
   private frameId = "0";
   private seq = 0;
+  /** Ordered evidence for console snapshots and animation deduplication. */
+  private activityRevision = 0;
   /** The last frame actually sent, so a replay can keep its id. */
   private lastSent: string | null = null;
   private readonly hasPlanner: boolean;
+  /** Whether the console's complete multi-origin discovery pass is settled. */
+  private discoverySettled = false;
   private readonly record: (e: Omit<AuditEntry, "at" | "sessionId">) => void;
   /**
    * The name a wearer reads for each origin this console is holding.
@@ -207,7 +213,7 @@ export class SessionActor {
       // not just the one a call happens to settle on. Working and thinking
       // frames only exist for the wearer if they are transmitted while the
       // work is still running.
-      onTransition: () => this.pushFrame(),
+      onActivity: (activity) => this.pushFrame(activity),
     });
   }
 
@@ -227,6 +233,37 @@ export class SessionActor {
     this.display.send(JSON.stringify(msg));
   }
 
+  private publishActivity(
+    event:
+      | Omit<Extract<SessionActivityEvent, { kind: "display_presence" }>, "revision">
+      | Omit<Extract<SessionActivityEvent, { kind: "display_input" }>, "revision">
+      | Omit<Extract<SessionActivityEvent, { kind: "frame" }>, "revision">,
+  ): void {
+    this.activityRevision += 1;
+    this.toConsole({
+      t: "sessionActivity",
+      event: { ...event, revision: this.activityRevision } as SessionActivityEvent,
+    });
+  }
+
+  private snapshot(): SessionActivitySnapshot {
+    const activity = this.session.currentActivity();
+    return {
+      revision: this.activityRevision,
+      displayConnected: this.display?.readyState === 1,
+      frameId: this.frameId,
+      frameKind: activity.frame.kind,
+      phase: activity.phase,
+      ...(activity.tool ? { tool: activity.tool } : {}),
+      ...(activity.task ? { task: activity.task } : {}),
+      ...(activity.outcome ? { outcome: activity.outcome } : {}),
+    };
+  }
+
+  private sendSnapshot(): void {
+    this.toConsole({ t: "sessionSnapshot", snapshot: this.snapshot() });
+  }
+
   /**
    * Push the current frame. Called after every transition and on reconnect.
    *
@@ -239,10 +276,11 @@ export class SessionActor {
    * redeploy dropping every socket for about forty seconds, so this is not a
    * rare path.
    */
-  private pushFrame(): void {
+  private pushFrame(activity?: SessionActivity): void {
     const frame = this.session.current();
     const encoded = JSON.stringify(frame);
-    if (encoded !== this.lastSent) {
+    const changed = encoded !== this.lastSent;
+    if (changed) {
       this.seq += 1;
       this.frameId = String(this.seq);
       this.lastSent = encoded;
@@ -253,6 +291,17 @@ export class SessionActor {
       state: stateFor(frame.kind),
       frame,
     });
+    if (activity && changed) {
+      this.publishActivity({
+        kind: "frame",
+        frameId: this.frameId,
+        frameKind: activity.frame.kind,
+        phase: activity.phase,
+        ...(activity.tool ? { tool: activity.tool } : {}),
+        ...(activity.task ? { task: activity.task } : {}),
+        ...(activity.outcome ? { outcome: activity.outcome } : {}),
+      });
+    }
   }
 
   /** Record that this session is in use. Idempotent and very cheap. */
@@ -280,8 +329,10 @@ export class SessionActor {
 
   attachDisplay(sock: WebSocket): void {
     this.touch();
+    const wasConnected = this.display?.readyState === 1;
     this.display?.close(CLOSE_SUPERSEDED, "another display took this session");
     this.display = sock;
+    if (!wasConnected) this.publishActivity({ kind: "display_presence", connected: true });
     // Say NOTHING until a browser has paired.
     //
     // The Display shows its own pairing frame, with the code on it, until the
@@ -297,7 +348,9 @@ export class SessionActor {
   }
 
   detachDisplay(sock: WebSocket): void {
-    if (this.display === sock) this.display = null;
+    if (this.display !== sock) return;
+    this.display = null;
+    this.publishActivity({ kind: "display_presence", connected: false });
   }
 
   /**
@@ -323,6 +376,10 @@ export class SessionActor {
   async attachConsole(sock: WebSocket, sites: SiteRef[]): Promise<void> {
     this.consoleSock?.close(CLOSE_SUPERSEDED, "another window took this session");
     this.consoleSock = sock;
+    // A new document owns a new discovery pass, even when it holds the same
+    // origins. Its live handles are not settled merely because the prior tab's
+    // were.
+    this.discoverySettled = false;
 
     const origins = sites.map((s) => s.origin);
     const changed = !sameOrigins(this.runner.origins, origins);
@@ -334,6 +391,13 @@ export class SessionActor {
         return named ? [[s.origin, named] as const] : [];
       }),
     );
+
+    // Hydrate before discovery can produce a live event. A snapshot is not an
+    // animation cue, and sending it first is load-bearing when the Display was
+    // already attached: otherwise the first frame event and the later snapshot
+    // share a revision, so a monotonic consumer correctly ignores the snapshot
+    // and never learns that the physical Display is present.
+    this.sendSnapshot();
 
     if (changed) {
       this.session = this.makeSession();
@@ -397,12 +461,27 @@ export class SessionActor {
       case "choose":
         // Acknowledge before any work, so the wearer never wonders.
         this.toDisplay({ t: "ack", frameId: msg.frameId, choiceId: msg.choiceId });
+        this.publishActivity({
+          kind: "display_input",
+          frameId: msg.frameId,
+          input: "choice",
+        });
         await this.session.handle(msg.choiceId);
         return;
       case "text":
+        // Text on an idle frame is a new spoken request. Deterministic menu
+        // choices remain usable while discovery is provisional, but planning a
+        // sentence against only the first origins to arrive would turn timing
+        // into tool selection.
+        if (!this.discoverySettled && this.session.current().kind === "idle") {
+          this.pushFrame();
+          return;
+        }
+        this.publishActivity({ kind: "display_input", frameId: msg.frameId, input: "text" });
         await this.session.submitText(msg.value);
         return;
       case "cancel":
+        this.publishActivity({ kind: "display_input", frameId: msg.frameId, input: "cancel" });
         await this.session.handle("__cancel");
         return;
     }
@@ -463,6 +542,9 @@ export class SessionActor {
   private statusValue(): Record<string, unknown> {
     const frame = this.session.current();
     const busy = this.busyWith();
+    const notAccepting =
+      busy ??
+      (this.discoverySettled ? null : "provider action discovery is still settling in the browser");
     const task = this.session.taskProgress();
     return {
       session: this.id,
@@ -482,8 +564,9 @@ export class SessionActor {
       },
       task: task ?? undefined,
       can_interpret_requests: this.hasPlanner,
-      accepting_tasks: busy === null && this.display?.readyState === 1,
-      not_accepting_because: busy ?? undefined,
+      discovery_settled: this.discoverySettled,
+      accepting_tasks: notAccepting === null && this.display?.readyState === 1,
+      not_accepting_because: notAccepting ?? undefined,
     };
   }
 
@@ -524,6 +607,13 @@ export class SessionActor {
           return {
             ok: false,
             error: `Not sent: ${busy}. Interrupting would change what they are deciding about. Try again once they have finished.`,
+          };
+        }
+        if (!this.discoverySettled) {
+          return {
+            ok: false,
+            error:
+              "Not sent: provider actions are still arriving in this browser. Try again once discovery is settled.",
           };
         }
         if (!this.hasPlanner) {
@@ -571,6 +661,9 @@ export class SessionActor {
         // error. This one silently discarded it.
         this.runner.settle(msg.requestId, msg.tools, msg.error);
         return;
+      case "discoverySettled":
+        this.discoverySettled = msg.settled;
+        return;
       case "invoked":
         if (msg.ok) this.runner.settle(msg.requestId, msg.value);
         else this.runner.settle(msg.requestId, undefined, msg.error);
@@ -586,6 +679,7 @@ export class SessionActor {
         // Several sites register on their own schedules, the console's 200ms
         // debounce merges a burst but cannot merge bursts seconds apart, and
         // any one of them can land after the wearer has started something.
+        this.discoverySettled = false;
         await this.session.refresh();
         return;
       case "agent": {
