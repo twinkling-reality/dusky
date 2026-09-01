@@ -1119,6 +1119,7 @@ test("desktop graph zoom keeps the topology and its connections together", async
   const connections = page.locator("canvas[data-runtime-edges]");
   const graphPlane = connections.locator("..");
   await expect(topology).toHaveAttribute("data-zoom", "1.00");
+  await expect(page.locator('[data-node-id="display"]')).toHaveCSS("border-radius", "22px");
 
   await page.getByRole("button", { name: "Zoom out" }).click();
   await expect(topology).toHaveAttribute("data-zoom", "0.90");
@@ -1168,6 +1169,31 @@ test("desktop graph zoom keeps the topology and its connections together", async
   await page.getByRole("button", { name: "Reset View" }).click();
   await expect(topology).toHaveAttribute("data-zoom", "1.00");
   await expect(graphPlane).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(topology).toHaveAttribute("data-zoom", "1.20");
+  await expect(topology).toHaveCSS("overflow-x", "clip");
+  await expect(topology.locator('[data-edge="left"]')).toBeVisible();
+  await expect(topology.locator('[data-edge="right"]')).toBeVisible();
+  const boundary = await topology.evaluate((canvas) => {
+    const plane = canvas.querySelector<HTMLCanvasElement>(
+      "canvas[data-runtime-edges]",
+    )?.parentElement;
+    if (!plane) throw new Error("Graph plane is missing");
+    const canvasBox = canvas.getBoundingClientRect();
+    const planeBox = plane.getBoundingClientRect();
+    return {
+      transformedPastCanvas: planeBox.left < canvasBox.left || planeBox.right > canvasBox.right,
+      pageHasHorizontalOverflow:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  expect(boundary.transformedPastCanvas).toBe(true);
+  expect(boundary.pageHasHorizontalOverflow).toBe(false);
+
+  await page.getByRole("button", { name: "Reset View" }).click();
+  await expect(topology).toHaveAttribute("data-zoom", "1.00");
 });
 
 /**

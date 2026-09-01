@@ -5797,6 +5797,23 @@ body
   }
 }
 
+/* The Display's live runtime cue belongs to its visible squircle. Without the
+ * matching radius, RuntimeMotion's activity ring exposes the square wrapper
+ * that holds the scaled 600 by 600 frame. */
+.displayGraphNode[data-mode="embedded"] {
+  border-radius: 22px;
+}
+
+/* The topology is a viewport. Its edge fades soften the cut, but the canvas
+ * itself owns the boundary so zoom and pan cannot create page overflow or
+ * reveal graph content again on the far side of a fade. */
+@media (min-width: 841px) {
+  .topologyCanvas[data-layout],
+  .topologyCanvas[data-inspecting] {
+    overflow: clip;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .topologyCanvas[data-layout] .graphPlane {
     transition: none;

@@ -25,6 +25,16 @@ test("sample and added WebMCP websites can be selected into the live graph", asy
   const panel = page.getByRole("dialog", { name: "Websites" });
   await expect(panel).toBeVisible();
   await expect(panel).toBeFocused();
+  const closeButton = panel.getByRole("button", { name: "Close Configured Websites" });
+  const closeBox = await closeButton.boundingBox();
+  expect(closeBox).not.toBeNull();
+  const closeCenter = (closeBox?.x ?? 0) + (closeBox?.width ?? 0) / 2;
+  for (const disconnect of await panel.getByRole("button", { name: /^Disconnect / }).all()) {
+    const disconnectBox = await disconnect.boundingBox();
+    expect(disconnectBox).not.toBeNull();
+    const disconnectCenter = (disconnectBox?.x ?? 0) + (disconnectBox?.width ?? 0) / 2;
+    expect(disconnectCenter).toBeCloseTo(closeCenter, 1);
+  }
   const connected = panel.getByRole("list", { name: "Connected Websites" });
   await expect(connected.getByText("Verdant Market", { exact: true })).toBeVisible();
   await expect(connected.getByText("Amber & Oak", { exact: true })).toBeVisible();
@@ -37,10 +47,7 @@ test("sample and added WebMCP websites can be selected into the live graph", asy
     "data-tooltip",
     "Disconnect Northstar Dispatch",
   );
-  await expect(panel.getByRole("button", { name: "Close Configured Websites" })).toHaveAttribute(
-    "data-tooltip",
-    "Close Configured Websites",
-  );
+  await expect(closeButton).toHaveAttribute("data-tooltip", "Close Configured Websites");
   await disconnectNorthstar.click();
   await expect(page.getByRole("dialog", { name: "Websites" })).toHaveCount(0);
   await expect(websites).toBeFocused();
