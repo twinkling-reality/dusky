@@ -9,6 +9,7 @@
       "!**/.vercel",
       "!**/test-results",
       "!**/playwright-report",
+      "!sites/canopy",
       "!pnpm-lock.yaml"
     ]
   },
