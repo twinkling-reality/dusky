@@ -247,6 +247,43 @@ interface ActionSurfaceActivity {
   providerHit: boolean;
 }
 
+function ActionStateIcon({ state }: { state: ActionSurfaceState }) {
+  return (
+    <span className={runtimeMotion.actionStateIcon} data-state={state} aria-hidden="true">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        {state === "preparing" ? (
+          <>
+            <rect x="2.5" y="3" width="11" height="8.5" rx="2" />
+            <circle cx="8" cy="7.25" r="1" />
+            <path d="M6.25 13.5h3.5" />
+          </>
+        ) : state === "approval" ? (
+          <>
+            <circle cx="8" cy="8" r="5.25" />
+            <path d="M6.3 5.7v4.6M9.7 5.7v4.6" />
+          </>
+        ) : state === "running" ? (
+          <>
+            <circle cx="8" cy="8" r="5.25" />
+            <path d="M8 4.8V8l2.25 1.35" />
+          </>
+        ) : state === "succeeded" ? (
+          <path d="m3.4 8.2 2.8 2.75 6.4-6.15" />
+        ) : state === "failed" ? (
+          <path d="m4.25 4.25 7.5 7.5M11.75 4.25l-7.5 7.5" />
+        ) : state === "unknown" ? (
+          <>
+            <path d="M5.9 5.8a2.3 2.3 0 1 1 3.45 2c-.9.5-1.35 1.05-1.35 1.7" />
+            <path d="M8 12.25h.01" />
+          </>
+        ) : (
+          <path d="M12.25 5.25H6.5a3 3 0 1 0 0 6h5.25M9.75 3.25l2.5 2-2.5 2" />
+        )}
+      </svg>
+    </span>
+  );
+}
+
 function selectedActionActivity(
   activity: ReturnType<typeof useConsoleLink>["activity"],
   origin: string,
@@ -1418,6 +1455,12 @@ export function Workspace() {
                                     }
                                     data-consequence={decision.consequence}
                                   >
+                                    {surfaceActivity && (
+                                      <ActionStateIcon
+                                        key={`${surfaceActivity.state}:${surfaceActivity.label}`}
+                                        state={surfaceActivity.state}
+                                      />
+                                    )}
                                     {surfaceActivity?.label ??
                                       (decision.requiresConfirmation
                                         ? "approval required"

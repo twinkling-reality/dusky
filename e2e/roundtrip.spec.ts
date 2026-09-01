@@ -139,6 +139,36 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   await displayPage.keyboard.press("Enter");
 
   // A bare string parameter opens the composer.
+  const actionRow = consolePage.locator(
+    '[data-topology-tool-origin="http://localhost:7801"][data-topology-tool-name="add_to_cart"]',
+  );
+  await expect(actionRow).toHaveAttribute("data-action-state", "preparing");
+  const inputStatus = actionRow.getByText("Input on Display", { exact: true });
+  await expect(inputStatus).toBeVisible();
+  const inputSelectionStyle = await inputStatus.evaluate((element) => {
+    const status = getComputedStyle(element);
+    const row = getComputedStyle(element.closest("li")!);
+    const icon = element.querySelector<HTMLElement>('[data-state="preparing"]');
+    return {
+      borderLeft: status.borderLeftWidth,
+      borderRight: status.borderRightWidth,
+      textTransform: status.textTransform,
+      fontSize: Number.parseFloat(status.fontSize),
+      rowPaddingTop: Number.parseFloat(row.paddingTop),
+      iconWidth: icon?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(inputSelectionStyle).toMatchObject({
+    borderLeft: "0px",
+    borderRight: "0px",
+    textTransform: "none",
+  });
+  expect(inputSelectionStyle.rowPaddingTop / inputSelectionStyle.fontSize).toBeGreaterThanOrEqual(
+    0.4,
+  );
+  expect(inputSelectionStyle.iconWidth / inputSelectionStyle.fontSize).toBeGreaterThanOrEqual(1.1);
+  await actionRow.screenshot({ path: "test-results/action-selection.png" });
+
   const compose = displayPage.locator('input[type="text"]');
   await expect(compose).toBeVisible();
   await compose.fill("oat-1");
@@ -151,9 +181,6 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   // Nothing has run yet: the partner site is untouched.
   const cart = consolePage.frameLocator('iframe[title="Verdant Market"]').getByTestId("cart");
   await expect(cart).toHaveText("empty");
-  const actionRow = consolePage.locator(
-    '[data-topology-tool-origin="http://localhost:7801"][data-topology-tool-name="add_to_cart"]',
-  );
   await expect(actionRow).toHaveAttribute("data-action-state", "approval");
   await expect(actionRow).toContainText("Awaiting wearer approval");
   const actionSideBorders = await actionRow.evaluate((element) => {
