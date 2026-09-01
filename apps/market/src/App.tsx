@@ -17,28 +17,15 @@ import { CATALOG, money, type Product } from "./catalog.js";
 
 const DEFAULT_AGENT_ORIGIN = import.meta.env["VITE_DUSKY_ORIGIN"] ?? "http://localhost:7803";
 
-/**
- * Where to send somebody who arrived here directly.
- *
- * This page is a prop. It is built to be seen inside Dusky's demo, in a panel
- * a few hundred pixels wide, and standing on its own it tells a visitor
- * nothing about what it is or how they got here.
- */
-const DUSKY_ORIGIN = DEFAULT_AGENT_ORIGIN;
-
 export function App() {
   const [cart, setCart] = useState<Product[]>([]);
-  const [log, setLog] = useState<string[]>([]);
-  const [status, setStatus] = useState<"pending" | "ready" | "unavailable">("pending");
 
   // The tools close over cart state, so keep a ref the callbacks can read
   // without forcing a re-registration on every mutation.
   const cartRef = useRef<Product[]>(cart);
   cartRef.current = cart;
 
-  const note = useCallback((line: string) => {
-    setLog((l) => [...l.slice(-40), line]);
-  }, []);
+  const note = useCallback((_line: string) => undefined, []);
 
   useEffect(() => {
     // Created synchronously so a StrictMode double-invoke cannot leave the
@@ -124,12 +111,10 @@ export function App() {
     )
       .then(() => {
         if (lifetime.signal.aborted) return;
-        setStatus("ready");
         note(`registered 4 tools, exposedTo ${DEFAULT_AGENT_ORIGIN}`);
       })
       .catch((err: unknown) => {
         if (lifetime.signal.aborted) return;
-        setStatus("unavailable");
         note(err instanceof Error ? err.message : String(err));
       });
 
@@ -183,22 +168,6 @@ export function App() {
             </li>
           ))}
         </ul>
-      </section>
-
-      <p className={styles.origin}>
-        Part of <a href={DUSKY_ORIGIN}>Dusky</a>, which reads the tools this page declares and turns
-        them into an interface for a pair of glasses. You are most likely meant to be looking at
-        this inside Dusky rather than on its own.
-      </p>
-
-      <section className={styles.section}>
-        <h2 className={styles.h2}>
-          Tool activity
-          <span className={styles.status} data-status={status}>
-            {status === "ready" ? "4 tools registered" : status}
-          </span>
-        </h2>
-        <pre className={styles.log}>{log.length ? log.join("\n") : "waiting for an agent"}</pre>
       </section>
     </main>
   );

@@ -34,16 +34,21 @@ test("the console discovers a second, unrelated site cross-origin", async ({ pag
   // Three tools, and only because Amber & Oak named this origin in exposedTo.
   const actions = page.getByTestId("actions");
   await expect(actions.locator("li")).toHaveCount(3);
-  // A different origin from the market's, reached by the same bridge.
-  await expect(page.getByText("http://localhost:7804")).toBeVisible();
+  // A different origin from the market's, reached by the same bridge. The URL
+  // remains implementation detail, so verify the loaded document rather than
+  // printing localhost plumbing into the UI.
+  await expect(page.locator('iframe[title="Amber & Oak"]')).toHaveAttribute(
+    "src",
+    /^http:\/\/localhost:7804\/?\?surface=console$/,
+  );
 
   // The console shows what the site actually registered. One tool supplied a
-  // title, the other two did not and are listed under their raw names. A tool
-  // with no title used to render a blank row here, because Chrome returns an
-  // empty string rather than omitting the field.
+  // title, while the other two receive generic humanized labels. A tool with
+  // no title used to render a blank row because Chrome returns an empty string
+  // rather than omitting the field.
   await expect(page.getByTestId("actions").getByText("Find a table")).toBeVisible();
-  await expect(page.getByTestId("actions").getByText("book_table")).toBeVisible();
-  await expect(page.getByTestId("actions").getByText("change_reservation")).toBeVisible();
+  await expect(page.getByTestId("actions").getByText("Book table")).toBeVisible();
+  await expect(page.getByTestId("actions").getByText("Change reservation")).toBeVisible();
 });
 
 test("policy classifies a site it has never seen, from the schema alone", async ({ page }) => {
@@ -51,20 +56,20 @@ test("policy classifies a site it has never seen, from the schema alone", async 
 
   // readOnlyHint honored: looking up tables changes nothing.
   const find = page.getByTestId("actions").locator("li", { hasText: "Find a table" }).first();
-  await expect(find.getByText("runs directly", { exact: true })).toBeVisible();
+  await expect(find.getByText("no approval needed", { exact: true })).toBeVisible();
 
   // Not read-only, and "booking" is a domain word the policy already knew.
   // No rule was added for this site.
-  const book = page.getByTestId("actions").locator("li", { hasText: "book_table" }).first();
-  await expect(book.getByText("wearer confirms", { exact: true })).toBeVisible();
+  const book = page.getByTestId("actions").locator("li", { hasText: "Book table" }).first();
+  await expect(book.getByText("approval required", { exact: true })).toBeVisible();
 
   // Default deny: nothing in change_reservation matches any lexicon, so it is
   // treated as a state change rather than waved through.
   const change = page
     .getByTestId("actions")
-    .locator("li", { hasText: "change_reservation" })
+    .locator("li", { hasText: "Change reservation" })
     .first();
-  await expect(change.getByText("wearer confirms", { exact: true })).toBeVisible();
+  await expect(change.getByText("approval required", { exact: true })).toBeVisible();
 });
 
 test("an enum in the schema becomes buttons, with no code in between", async ({ browser }) => {
@@ -119,7 +124,7 @@ test("a booking runs, stops for a human, and reports the site's own words", asyn
   const displayPage = await ctx.newPage();
   const code = freshCode();
   await pair(consolePage, code);
-  await expect(consolePage.getByText("book_table")).toBeVisible();
+  await expect(consolePage.getByText("Book table")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${code}`);
   await expect(displayPage.getByRole("button", { name: /Book table/ })).toBeVisible();
@@ -182,7 +187,7 @@ test("a returned error is reported as a failure, not as a success", async ({ bro
   const displayPage = await ctx.newPage();
   const code = freshCode();
   await pair(consolePage, code);
-  await expect(consolePage.getByText("change_reservation")).toBeVisible();
+  await expect(consolePage.getByText("Change reservation")).toBeVisible();
 
   await displayPage.goto(`http://localhost:7802/?session=${code}`);
   await focusChoice(displayPage, /Change reservation/);

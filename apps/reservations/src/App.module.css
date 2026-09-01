@@ -137,18 +137,8 @@
   font-size: 0.9rem;
 }
 
-/* A page that only makes sense inside something else should say so. */
-.origin {
-  margin: 0;
-  padding-top: var(--dusky-s3);
-  border-top: 1px solid var(--dusky-hair-soft);
-  font-size: 0.84rem;
-  color: var(--dusky-ink-faint);
-  max-width: 52ch;
-}
-
-/* The console node supplies the provider name and the single fixture
-   disclosure. Direct visits keep the full masthead and warning above. */
+/* The console node supplies the provider identity and framing. Direct visits
+   keep the full masthead and warning above. */
 .page[data-surface="console"] {
   padding-top: var(--dusky-s5);
 }

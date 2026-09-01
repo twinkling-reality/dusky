@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./App.module.css";
 
 const DEFAULT_AGENT_ORIGIN = import.meta.env["VITE_DUSKY_ORIGIN"] ?? "http://localhost:7803";
-const DUSKY_ORIGIN = DEFAULT_AGENT_ORIGIN;
 
 interface Contact {
   id: string;
@@ -29,14 +28,10 @@ const CONTACTS: readonly Contact[] = [
 
 export function App() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [log, setLog] = useState<string[]>([]);
-  const [status, setStatus] = useState<"pending" | "ready" | "unavailable">("pending");
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const note = useCallback((line: string) => {
-    setLog((current) => [...current.slice(-40), line]);
-  }, []);
+  const note = useCallback((_line: string) => undefined, []);
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -170,12 +165,10 @@ export function App() {
     )
       .then(() => {
         if (lifetime.signal.aborted) return;
-        setStatus("ready");
         note(`registered 4 tools, exposedTo ${DEFAULT_AGENT_ORIGIN}`);
       })
       .catch((error: unknown) => {
         if (lifetime.signal.aborted) return;
-        setStatus("unavailable");
         note(error instanceof Error ? error.message : String(error));
       });
 
@@ -236,21 +229,6 @@ export function App() {
           </div>
         </section>
       </div>
-
-      <p className={styles.origin}>
-        Part of <a href={DUSKY_ORIGIN}>Dusky</a>. The browser reads the tools this page declares;
-        the page never receives another site&apos;s result unless the wearer approves that transfer.
-      </p>
-
-      <section className={styles.activity}>
-        <h2 className={styles.h2}>
-          Tool activity
-          <span className={styles.status} data-status={status}>
-            {status === "ready" ? "4 tools registered" : status}
-          </span>
-        </h2>
-        <pre className={styles.log}>{log.length ? log.join("\n") : "waiting for an agent"}</pre>
-      </section>
     </main>
   );
 }
