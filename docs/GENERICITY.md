@@ -18,9 +18,21 @@ A source record contains an identifier, display name, URL, and descriptive text
 for the console. It does not contain tools, UI definitions, policy rules,
 invocation adapters, argument mappings, or result parsers.
 
-Runtime `site` parameters can replace the default registry. Public values must
-use HTTPS. Loopback HTTP is accepted for development. Duplicate origins,
-embedded credentials, and unsupported schemes are rejected.
+The bottom website tray exposes that configuration as product behavior. A person
+can select any subset of the bundled samples and add authorized provider URLs
+to one inert draft, then update the same live graph once. Repeated `connection` values preserve that exact set in the
+console URL. The graph, iframes, discovery origins, relay site list, and Display
+menu all derive from it.
+
+One browser session holds at most eight provider documents. Public added values
+must use HTTPS; loopback HTTP is accepted for development. Duplicate origins,
+embedded credentials, and unsupported schemes are rejected. A changed origin
+set can be applied only while the Display is idle because the relay correctly
+restarts the session registry for a different set.
+
+Legacy runtime `site` parameters still replace the default registry. That
+isolated path remains useful for proving one unfamiliar provider with no
+bundled provider present.
 
 ## Browser authorization
 
@@ -85,6 +97,11 @@ The browser test verifies that:
 6. the provider document records `garden: 62% shade, healthy`;
 7. the Display renders facts from the unfamiliar result keys;
 8. market-specific output is absent.
+
+`e2e/connections.spec.ts` separately verifies the product-facing configuration
+path: remove a sample, update the smaller graph, reselect it, add Canopy Lab by
+URL, and observe four provider branches and twelve discovered actions. It also
+holds a pending wearer confirmation while proving that Update graph is disabled.
 
 This proves the production code path for that provider and schema in a local
 end-to-end test. The provider is still test code in this repository, so this

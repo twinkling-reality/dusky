@@ -205,6 +205,35 @@ Do not push while recording.
 
 ## Building against WebMCP
 
+### An in-app browser can expose your tools and still hide the providers'
+
+Measured on 2026-09-01 against the live official deployment in the Codex
+desktop in-app browser, the closest automatable surface available to the
+ChatGPT desktop browser.
+
+The calling document worked. Dusky registered all four of its own tools, the
+browser agent enumerated them, and `get_display_status` reached the paired
+relay session. The embedded Display was connected. The landing page's own
+registration probe reported three of three requirements met.
+
+The provider path did not work. Verdant Market, Amber & Oak, and Northstar
+Dispatch all loaded completely in their cross-origin frames, each frame carried
+`allow="tools"`, and their visible fixture state was readable. After ten
+seconds the console had zero provider actions from all three origins, and the
+Display showed no available actions.
+
+Flagged Chrome 152 against the same URL returned 4, 3, and 4 provider tools and
+all four calling-document tools in about two seconds. That isolates the split:
+the in-app environment implemented enough WebMCP for the top document to be a
+provider, but not the cross-origin consumer path Dusky needs.
+
+The Requirements self-test used to label that outcome simply `3/3`, which made
+top-level registration look like proof of the whole product path. It now names
+the probe as page-level and states Chrome with WebMCP Testing as the measured
+full-provider route. A compatibility probe has to exercise the boundary the
+product depends on; success on the easier half is not evidence about the harder
+one.
+
 ### Cancelling a browser audit left the whole local lab running
 
 The load-bearing tests do not fake WebMCP. One run launches the Dusky relay,

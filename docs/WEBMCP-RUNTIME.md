@@ -8,6 +8,13 @@ stated by the platform documentation.
 Unless another date is stated, the WebMCP observations were measured on
 2026-08-25 against Chrome `151.0.7922.174`.
 
+On 2026-09-01, the live official console was rechecked in Google Chrome
+`152.0.7977.65` with the same `WebMCPTesting` feature. `document.modelContext`
+was present, the three `allow="tools"` provider frames returned 4, 3, and 4
+tools respectively through `getTools({ fromOrigins })`, and Dusky's four
+calling-document tools also registered. The console rendered the filtered 11
+provider actions and mounted the embedded Display.
+
 Local browser tests launch Chrome with:
 
 ```text
@@ -38,6 +45,20 @@ the browser shape is known, each provider tool is invoked exactly once.
 
 A provider error, including one that contains the browser's parse-error text,
 never triggers the compatibility probe or a second provider invocation.
+
+### Provider execution evidence
+
+The console does not treat receipt of an `invoke` relay message as evidence
+that a provider ran. Descriptor revalidation, the harmless argument-shape
+probe, and cancellation can all stop before the provider boundary.
+
+`WebMcpBridge.invoke` accepts a lifecycle callback and fires `executing` with
+the exact `(origin, name)` synchronously after those checks and immediately
+before `document.modelContext.executeTool`. No asynchronous work sits between
+the event and the call. A validation or pre-execution cancellation failure
+emits no provider-hit event. A returned value remains a neutral return until
+`packages/session` derives a semantic succeeded, failed, or unknown outcome
+from the result.
 
 ### Input schemas
 
@@ -82,6 +103,19 @@ by the calling document even when the requested origins named only providers.
 Dusky filters results to the requested origins so its own browser-agent tools
 cannot appear on the wearer's menu.
 
+### In-app browser compatibility is not one flag
+
+Measured on 2026-09-01 in the Codex desktop in-app browser, the closest
+automatable surface available to the ChatGPT desktop browser. Dusky's four
+calling-document tools registered and were exposed to the browser agent, while
+the three loaded cross-origin provider documents returned zero actions to the
+console despite each iframe carrying `allow="tools"`.
+
+This proves that calling-document registration is not a compatibility proxy
+for cross-origin discovery. The Requirements panel names its tool-registration
+probe as page-level and directs the full provider path to the measured Chrome
+configuration. The actual ChatGPT desktop browser remains unmeasured.
+
 ### Tool order
 
 The browser owns the order returned by `getTools`. Dusky applies a deterministic
@@ -94,7 +128,11 @@ have also exposed a legacy handler or no event surface at all.
 
 `packages/webmcp` prefers the standard event, supports the measured legacy
 handler, and uses a descriptor-signature poll only for the incomplete host
-object that has neither.
+object that has neither. That compatibility watcher checks every 500
+milliseconds only during the first 20 unchanged scans, then backs off to every
+2.5 seconds. A registry change returns it to the fast settle window. Disposing
+the bridge clears the pending timer. Chrome's event-capable implementation
+never enters this polling path.
 
 ### DevTools Protocol
 
@@ -135,9 +173,11 @@ The wrapper does not kill a server that was already running before the test and
 was reused by Playwright; that process remains owned by the person or task that
 started it.
 
-After the complete 43-test local suite, the cleanup check found no listeners on
-the test ports and no remaining Playwright, Chrome, Vite, relay watcher, or
-Turbo development descendants.
+During the 2026-09-01 UI audit, one runtime-provider fixture on port `7806`
+from an earlier direct Playwright invocation was found and terminated. The
+final focused run used the supervised wrapper. After it completed and the
+manually started development tree was stopped, no listeners remained on ports
+`7801` through `7806` or `7900`.
 
 For a later project submission, the defensible lesson is: testing an
 experimental browser capability end to end also requires supervising the

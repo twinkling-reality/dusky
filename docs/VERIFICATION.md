@@ -3,7 +3,94 @@
 Dusky separates unit, browser, visual, deployment, and hardware evidence. A
 passing result supports only the layer it exercised.
 
-## Local development snapshot
+## Browser compatibility measurement on 2026-09-01
+
+The actual ChatGPT desktop built-in browser was not available to automate on
+this host. The closest available surface was the Codex desktop in-app browser,
+driven through its native Browser control, against the live official URLs.
+
+That in-app browser produced a split result:
+
+- the landing page's own main-world self-test reported WebMCP enabled, page
+  tool registration working, and relay connected;
+- on `/demo?start=1`, the browser exposed Dusky's four calling-document tools:
+  `get_display_status`, `list_display_actions`, `send_task_to_display`, and
+  `cancel_active_task`;
+- the embedded Display connected to the relay, and calling the read-only status
+  tool returned that live paired session;
+- all three provider iframe documents loaded, each iframe carried
+  `allow="tools"`, and the provider pages rendered their fixture state; but
+- after ten seconds, cross-origin discovery still returned zero provider
+  actions from every origin, and the Display showed `No actions available
+  here`.
+
+The Browser controller's direct page evaluation runs in an isolated world and
+reported `typeof document.modelContext === "undefined"`. That result is not
+used as evidence about the page's main world. The page's own self-test
+successfully registered and retrieved a temporary tool, and the Browser
+controller enumerated Dusky's four producer tools, which proves functional
+calling-document WebMCP. The failed fact is narrower and directly observed:
+the same environment did not return the cross-origin provider tools needed for
+the full Dusky path.
+
+Chrome was measured separately through the repository's known-good launcher:
+Google Chrome `152.0.7977.65`, `channel: "chrome"`, with
+`--enable-features=WebMCPTesting`, against the same live `/demo?start=1` URL.
+In that environment:
+
+- `document.modelContext` was an object;
+- `getTools({ fromOrigins })` returned 4 Verdant Market tools, 3 Amber & Oak
+  tools, and 4 Northstar Dispatch tools;
+- the same call also returned Dusky's four calling-document producer tools,
+  which the console filtered out of the wearer registry;
+- the console rendered all 11 provider actions; and
+- Open Dusky redirected to a fresh session and mounted the embedded Display.
+
+This was a read-only compatibility measurement, not a production task
+invocation and not a production-suite run. It measures the live deployment as
+served on 2026-09-01, not the uncommitted product-surface changes in this
+working tree. Those changes require a console redeploy before they can be
+claimed on the live URL.
+
+## Pre-demo surface verification on 2026-09-01
+
+The uncommitted working tree based on commit `7197ac3` passed locally on macOS
+in Google Chrome 152 with `WebMCPTesting` enabled:
+
+- 432 of 432 unit and deterministic tests with `pnpm test`;
+- all 15 packages with `pnpm typecheck`;
+- linting with `pnpm lint`, with no errors and the same five retained CSS
+  specificity warnings;
+- all six build tasks with `pnpm build`;
+- a final full local Playwright run completed 45 of 46 tests, including all 7
+  load-bearing real-WebMCP round-trip tests; its only failure was the first
+  `page.goto` waiting 60 seconds for the full `load` event while the host was
+  under heavy system load, before any product assertion ran;
+- after that harness navigation was narrowed to `domcontentloaded`, both
+  connections tests passed in a focused run through the supervised
+  `pnpm test:e2e` wrapper. An earlier same-day full run had completed all 46
+  tests before the final UI and compatibility-poll refinements.
+
+The browser suite covered the visible producer controls, honest unavailable
+state, discovery-settled agent admission, all three mounted-but-collapsed
+provider frames, phone layout, reduced motion, exact approval targeting,
+provider execution evidence, semantic success and explicit-negative failure,
+durable multi-action log outcomes, and the complete Display-to-provider round
+trip. It also selected a smaller sample set through Connections, restored the
+third sample, added the fourth runtime provider by URL, observed four graph
+branches and twelve actions, and proved that Apply is disabled during a wearer
+confirmation. `git diff --check` also passed.
+
+The first complete browser run caught a retained entrance `clip-path` clipping
+a provider dragged beyond its original grid cell. That animation clip was
+removed and the focused geometry regression passed. The final UI review also
+measured zero horizontal overflow for every configured-site row at 1440 by 900
+and 390 by 844, and the 1200-pixel open-page geometry regression passed. The
+production suite was not run because these changes have neither a release
+commit nor a deployment; the production record below remains evidence only for
+its named deployed commit.
+
+## Previous local development snapshot
 
 On 2026-08-31, the local development snapshot passed:
 

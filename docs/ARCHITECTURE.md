@@ -70,10 +70,47 @@ for parameter handling and policy. The console refuses a live handle whose
 descriptor no longer matches, otherwise executes it once in the provider
 document and sends the raw result string to the relay.
 
+The console's topology is runtime evidence, not an ambient animation. The
+session relay sends revisioned, bounded snapshots and live events containing
+Display presence, accepted input boundaries, visible frame phase, exact tool
+identity, and semantic outcome. It never sends choices, text, arguments, raw
+results, or provider prose in that stream. Separately, `packages/webmcp`
+signals the console synchronously immediately before `executeTool`; that is
+the only event allowed to light a provider route. A returned browser promise
+is shown as returned until the `Session` classifies the result as succeeded,
+failed, or unknown.
+
+`apps/console/src/runtimeActivity.ts` reduces those two evidence sources by
+relay revision and invocation request id. Reconnect snapshots hydrate durable
+state without replaying motion, disconnect turns only running calls unknown,
+and settled outcomes stay attached to the invocation after a later action
+begins. The canvas renders one bounded directional trace, fades the residual
+route, and returns to a static idle graph. Reduced-motion mode omits travel and
+uses a brief static route cue; persistent action rows and the execution log use
+text and shape in addition to color.
+
 The default source registry contains display names and URLs. It contains no
 tool definitions, policy, UI mappings, invocation adapters, or result parsers.
-Runtime `site` query values can replace that registry for one console page.
-They choose pages to load and do not grant WebMCP access.
+The bottom website tray can select bundled samples and add a provider URL into
+the same live topology. Before an added URL can be connected, the console
+temporarily mounts that page in a bounded `allow="tools"` preflight frame and
+requires origin-filtered discovery to return at least one authorized WebMCP
+tool. The preflight frame is then removed; it grants no access and retains no
+live handle. Accepted additions, removals, and reconnects replace the origin
+set immediately while the Display is idle. The authoritative provider frames
+then load and discover again for the new relay-owned session. Shareable
+`connection` query values contain only a sample id or an added display name and
+URL. The console caps one connection set at eight live documents.
+
+Applying a changed origin set is available only while the Display is idle.
+The relay treats a different origin set as a new `Session`, because pending
+parameters, confirmation, transfer, or invocation may name a tool that the new
+set no longer holds. The graph, provider iframes, WebMCP discovery request,
+relay site list, and Display menu all derive from the applied set.
+
+Legacy runtime `site` query values still replace the default registry for the
+isolated fourth-provider proof. Both configuration paths choose pages to load;
+neither grants WebMCP access.
 
 ### Relay
 
@@ -84,6 +121,13 @@ The actor owns transport lifetime, the `Session`, the current wire frame id,
 provider display labels, and outstanding console requests. It routes every
 `Session.onTransition` through the Display socket. It rejects an input whose
 frame id no longer matches the frame being shown.
+
+The actor also revisions the bounded console activity stream. It publishes
+Display input only after the current-frame check passes, publishes frame
+activity only when visible frame content changes, and sends a snapshot before
+attach-time discovery can produce a newer event. That ordering lets a console
+hydrate real Display presence before processing live transitions and prevents
+reconnects or stale packets from fabricating activity.
 
 The `Session` owns task state, menus, parameter collection, policy gates,
 bounded result projections, transfer consent, and results. It never touches a
@@ -131,10 +175,11 @@ Playwright starts `e2e/runtime-provider` on port `7806`. It is absent from the
 default console registry and declares vocabulary not used by the bundled
 providers.
 
-The round-trip test supplies only its URL and display name. The console
-discovers it, the Display builds its enum screen, the provider records the
-invocation, and the result becomes generic facts. No shared package receives a
-provider branch or adapter.
+The round-trip test supplies only its URL and display name. A separate browser
+test adds it through the same connection workspace that can mix it with the bundled
+samples. The console discovers it, the Display builds its enum screen, the
+provider records the invocation, and the result becomes generic facts. No
+shared package receives a provider branch or adapter.
 
 ## What this architecture does not do
 

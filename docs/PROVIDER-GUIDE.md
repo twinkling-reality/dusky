@@ -163,6 +163,19 @@ validation, idempotency, and transaction behavior.
 
 ## 8. Load the provider at runtime
 
+For the product path, open **Websites** on the Dusky graph. Add an available
+known provider with **Reconnect**, or choose **Add Website** and enter the exact
+connection link supplied by a site that supports Dusky. **Verify Connection**
+loads that page temporarily and requires at least one origin-authorized WebMCP
+action before the optional naming step appears. **Add Website** or **Skip**
+connects it immediately; there is no draft or separate graph update. An
+ordinary homepage, restaurant page, or chat URL is not a connection link merely
+because it is a valid URL. Connection changes are available only while the
+Display is on its action menu.
+
+The raw query path below remains useful for isolated development and automated
+proofs. It replaces the sample list rather than mixing with it.
+
 Supply a URL to the local console:
 
 ```text

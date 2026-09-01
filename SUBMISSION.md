@@ -8,6 +8,23 @@ primary developer guide or a current deployment claim.
 Dusky turns authorized website actions into simple Meta Ray-Ban Display
 screens, with confirmation before any action it does not classify as read-only.
 
+## Judge browser path
+
+Use Google Chrome with `chrome://flags/#enable-webmcp-testing` enabled, then
+restart Chrome before opening Dusky. This is the primary judge path and the
+configuration used by the real-browser verification suite.
+
+On 2026-09-01, Google Chrome `152.0.7977.65` with that feature returned all 11
+provider tools and Dusky's four producer tools from the live official console.
+The actual ChatGPT desktop built-in browser was not available to automate. The
+closest available Codex in-app browser exposed Dusky's four producer tools and
+connected the embedded Display, but returned zero cross-origin provider tools
+from the three loaded `allow="tools"` frames. It therefore did not reach a
+usable full demo state.
+
+Do not instruct judges to rely on an in-app browser for the complete provider
+demo without a newer dated measurement that proves cross-origin discovery.
+
 ## Project description
 
 Meta Ray-Ban Display has a 600 by 600 screen, no cursor, no scrolling, four
@@ -40,8 +57,9 @@ destination action.
 
 The demo contains three first-party fixture providers with eleven tools across
 shopping, reservations, and communications. A fourth test-only provider is
-absent from the default registry. A real-Chrome test supplies its URL at
-runtime, discovers its tool, builds an enum screen, invokes it, and renders its
+absent from the default registry. The bottom website tray can add its URL to the
+live graph beside the three samples. Real-Chrome tests also supply it in
+isolation, discover its tool, build an enum screen, invoke it, and render its
 unfamiliar result fields without a provider adapter.
 
 This is evidence for the providers and schemas tested. It is not a claim of
@@ -113,12 +131,14 @@ screens. Show the visible Back row.
 
 ### 1:58 to 2:18
 
-Show Canopy Lab supplied through a runtime `site` value. Choose `garden` and
-show the returned shade and condition fields.
+Open **Websites**, show the three sample branches, add Canopy Lab by URL,
+and choose **Update graph**. Show its Added node and new branch appear, then
+choose `garden` and show the returned shade and condition fields.
 
-> Canopy Lab is absent from the default registry. The browser test supplies its
-> URL at runtime and completes the same WebMCP-to-Display path without a provider
-> adapter. That proves this provider path, not universal compatibility.
+> These three websites are bundled samples. Canopy Lab is absent from their
+> registry; I added its authorized URL at runtime. Dusky discovered its action,
+> built the controls, and completed the same path without a provider adapter.
+> That proves this provider path, not universal compatibility.
 
 ### 2:18 to 2:30
 
