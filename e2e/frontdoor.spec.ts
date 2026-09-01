@@ -1265,6 +1265,15 @@ test("one tab holds three unrelated businesses, on one menu", async ({ page }) =
     });
     expect(resizedDisplay).toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
+    // The resize handler deliberately clears desktop offsets. Let that React
+    // update commit before starting a new drag, or a late resize commit can
+    // erase the movement after the pointer has already been released.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
 
     // Provider cards are direct grid children. Moving one across its original
     // column boundary must not expose an invisible intermediate scrollport;

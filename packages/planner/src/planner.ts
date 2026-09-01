@@ -136,9 +136,9 @@ const DECISIVE_MARGIN = 2;
 
 const DEFAULTS = {
   shortlistSize: 6,
-  budgetMs: 7_000,
-  fastTimeoutMs: 2_500,
-  carefulTimeoutMs: 5_000,
+  budgetMs: 10_000,
+  fastTimeoutMs: 3_000,
+  carefulTimeoutMs: 7_000,
   escalateOnConsequential: true,
 } as const;
 

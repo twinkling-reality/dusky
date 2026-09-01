@@ -107,7 +107,7 @@ describe("the request the adapter builds", () => {
     await client().decide({ tier: "careful", system: "S", user: "U", timeoutMs: 2_000 });
     const output = outputConfig();
 
-    expect(body()["model"]).toBe("claude-opus-5");
+    expect(body()["model"]).toBe("claude-sonnet-5");
     expect(output["effort"]).toBe("low");
     // One schema across both tiers and every planning path, so the API's
     // 24-hour schema cache is hit rather than recompiled per request.

@@ -19,10 +19,9 @@
  * 2.5s timeout can occupy 7.5s of a wearer's attention. Retrying is the tier
  * escalation's job, and it is accounted for in the planner's budget.
  *
- * NO PROMPT-CACHE BREAKPOINT, and the threshold is per-model rather than one
- * number: 4096 tokens on claude-haiku-4-5, 512 on claude-opus-5. The system
- * prompts here are a few hundred tokens, so a `cache_control` marker would
- * cache nothing on the fast tier while implying otherwise.
+ * NO PROMPT-CACHE BREAKPOINT. The system prompts here are only a few hundred
+ * tokens, below the fast tier's cacheable prefix floor, so a `cache_control`
+ * marker would cache nothing there while implying otherwise.
  *
  * Fixing that ceiling is not enough on its own. Caching is a PREFIX match and
  * the volatile request line is rendered before the cards, so the stable part
@@ -114,19 +113,16 @@ export interface TierConfig {
  */
 const FAST: TierConfig = { model: "claude-haiku-4-5", maxTokens: 512 };
 /**
- * `maxTokens` here is NOT the size of the answer. On claude-opus-5 thinking is
- * on by default when `thinking` is omitted, unlike opus-4-8 and opus-4-7, and
- * `max_tokens` is a hard cap on thinking PLUS response text. The answer is a
- * few dozen tokens, so a 512 ceiling left almost nothing for thinking: the
- * model hit the cap, `stop_reason` came back `max_tokens`, and the branch
- * below read that as the model declining. The careful tier abstained on
- * exactly the low-confidence and consequential picks it exists to handle, and
- * it did so silently, because an abstention is recorded as an abstention.
+ * `maxTokens` here is NOT the size of the answer. On claude-sonnet-5 adaptive
+ * thinking is on by default, and `max_tokens` is a hard cap on thinking PLUS
+ * response text. The answer is only a few dozen tokens, but a 512 ceiling left
+ * almost nothing for thinking: the model hit the cap and returned no usable
+ * structured answer.
  *
  * Billing is on tokens generated, not on the ceiling, so the headroom is free
  * unless it is used. Do not lower this to save money; it does not.
  */
-const CAREFUL: TierConfig = { model: "claude-opus-5", effort: "low", maxTokens: 4096 };
+const CAREFUL: TierConfig = { model: "claude-sonnet-5", effort: "low", maxTokens: 4096 };
 
 export interface AnthropicModelClientOptions {
   /** Supply your own configured client, or let the SDK read the environment. */

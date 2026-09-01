@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { focusChoice } from "./drive.js";
 import { freshCode } from "./session-code.js";
 
@@ -25,6 +25,19 @@ const MARKET = "https://dusky-market.vercel.app";
 const RESERVATIONS = "https://dusky-reservations.vercel.app";
 const DISPATCH = "https://dusky-dispatch.vercel.app";
 const RELAY = "https://dusky-relay.onrender.com";
+
+async function expectAgentTools(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
+          return (await mc.getTools()).map((tool) => tool.name);
+        }),
+      { timeout: 30_000 },
+    )
+    .toEqual(expect.arrayContaining(["get_display_status", "send_task_to_display"]));
+}
 
 test("the relay is reachable and healthy", async ({ request }) => {
   const res = await request.get(`${RELAY}/health`);
@@ -91,8 +104,9 @@ test("the deployed console discovers the deployed market cross-origin", async ({
   await expect(page.getByText("Review cart")).toBeVisible();
 
   // Dusky's own tools are registered for this browser's agent, and are NOT
-  // mixed into what the wearer sees.
-  await expect(page.getByText(/for this browser's agent/)).toBeVisible();
+  // mixed into what the wearer sees. Querying the registry proves that contract
+  // without putting developer-facing registration copy back into the UI.
+  await expectAgentTools(page);
   await expect(page.getByText("send_task_to_display")).toHaveCount(0);
 });
 
@@ -158,12 +172,11 @@ test("the deployed console holds all three deployed sites at once", async ({ pag
 
   const actions = page.getByTestId("actions");
 
-  // Amber & Oak declares a title on one tool out of three, deliberately. The
-  // other two are listed under their raw names, which is what Chrome returning
-  // `title: ""` rather than omitting it used to turn into a blank row.
+  // Amber & Oak's three actions use the same readable labels shown to the
+  // wearer. Raw tool identifiers remain an implementation detail.
   await expect(actions.getByText("Find a table")).toBeVisible();
-  await expect(actions.getByText("book_table")).toBeVisible();
-  await expect(actions.getByText("change_reservation")).toBeVisible();
+  await expect(actions.getByText("Book table")).toBeVisible();
+  await expect(actions.getByText("Change reservation")).toBeVisible();
 
   // And the shop's four, on the same list rather than instead of them.
   await expect(actions.getByText("Search catalog")).toBeVisible();
@@ -263,7 +276,7 @@ test("an agent in the browser can drive the deployed session", async ({ browser 
   const code = freshCode();
 
   await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
-  await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
+  await expectAgentTools(consolePage);
 
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
@@ -306,7 +319,7 @@ test("one spoken request becomes a two-step cross-site result-sharing task", asy
   const code = freshCode();
 
   await consolePage.goto(`${CONSOLE}/demo?session=${code}&mode=glasses`);
-  await expect(consolePage.getByText(/for this browser's agent/)).toBeVisible();
+  await expectAgentTools(consolePage);
 
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();

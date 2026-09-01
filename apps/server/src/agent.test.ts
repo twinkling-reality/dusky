@@ -230,6 +230,15 @@ describe("sending a task", () => {
     expect(r.error).toContain("no planner");
   });
 
+  it("does not claim a task was sent when the planner declined it", async () => {
+    const { a } = await paired({ taskSteps: [] });
+    const r = await ask(a, { op: "task", text: "do something unclear" });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.error).toContain("could not match");
+    expect(a.current().kind).toBe("idle");
+  });
+
   /**
    * The constraint this whole design exists for.
    *

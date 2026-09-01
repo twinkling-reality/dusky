@@ -535,6 +535,13 @@ export class SessionActor {
         }
         this.record({ kind: "plan", detail: { path: "agentTask", textLength: text.length } });
         await this.session.submitIntent(text);
+        if (this.session.current().kind === "idle") {
+          return {
+            ok: false,
+            error:
+              "Dusky could not match that request to a safe action plan. The wearer's menu is unchanged.",
+          };
+        }
         return {
           ok: true,
           value: {
