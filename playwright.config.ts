@@ -46,7 +46,8 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "pnpm exec vite e2e/runtime-provider --host 127.0.0.1 --port 7806 --strictPort",
+      command:
+        "pnpm --filter @dusky/app-market exec vite ../../e2e/runtime-provider --host 127.0.0.1 --port 7806 --strictPort",
       url: "http://localhost:7806",
       reuseExistingServer: true,
       timeout: 30_000,
