@@ -2,6 +2,7 @@ import { gate } from "@dusky/policy";
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,7 +16,7 @@ import header from "./SiteHeader.module.css";
 import { codeProblem, isCode, mintCode, type PairMode } from "./session.js";
 import { originOf, type Source, sitesFromQuery } from "./sources.js";
 import { TopologyConnections } from "./TopologyConnections.js";
-import { useConsoleLink } from "./useConsoleLink.js";
+import { type RuntimeAction, useConsoleLink } from "./useConsoleLink.js";
 import styles from "./Workspace.module.css";
 
 /**
@@ -31,6 +32,27 @@ import styles from "./Workspace.module.css";
 
 const RELAY_URL = import.meta.env["VITE_RELAY_URL"] ?? "ws://localhost:7900/console";
 const DISPLAY_URL = import.meta.env["VITE_DISPLAY_URL"] ?? "http://localhost:7802";
+const NODE_BOUNDARY_GUTTER = 1;
+
+function clampMovement(value: number, minimum: number, maximum: number): number {
+  if (minimum > maximum) return 0;
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function visualBoundaryOf(element: HTMLElement) {
+  const boxes = [
+    element.getBoundingClientRect(),
+    ...Array.from(element.querySelectorAll<HTMLElement>("[data-node-boundary]"), (child) =>
+      child.getBoundingClientRect(),
+    ),
+  ];
+  return {
+    top: Math.min(...boxes.map((box) => box.top)),
+    right: Math.max(...boxes.map((box) => box.right)),
+    bottom: Math.max(...boxes.map((box) => box.bottom)),
+    left: Math.min(...boxes.map((box) => box.left)),
+  };
+}
 
 /**
  * What you are looking at, on the same terms as the requirements dropdown.
@@ -58,6 +80,7 @@ function WhatIsThis({
   onClose: () => void;
 }) {
   const box = useRef<HTMLElement | null>(null);
+  const sampleWebsites = sites.every((site) => site.sample === true);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -87,23 +110,22 @@ function WhatIsThis({
         <div>
           <dt>{heading}</dt>
           <dd>
-            {sites.length > 1
-              ? "Provider pages exposing WebMCP tools authorized for this console. Dusky builds the Display flow from their combined registry. A moving path means an origin has exposed tools; it is not a per-call trace. The bundled pages are test fixtures."
-              : "A provider page exposing WebMCP tools authorized for this console. Dusky builds the Display flow from its live registry. A moving path means the origin has exposed tools; it is not a per-call trace. Bundled pages are test fixtures."}
+            {sampleWebsites
+              ? "These sample websites show how unrelated pages can offer actions without custom integrations. Show or hide any page; the others stay visible."
+              : "Each card contains the website loaded in this browser. Show or hide any page; the others stay visible."}
           </dd>
         </div>
         <div>
           <dt>Available actions</dt>
           <dd>
-            Things each provider page authorized Dusky to offer now. “Wearer confirms” marks an
-            action that needs approval before it runs.
+            Things each provider page authorized Dusky to offer now. Dusky marks whether an action
+            needs approval on the Display before it runs.
           </dd>
         </div>
         <div>
-          <dt>Runtime activity</dt>
+          <dt>Technical log</dt>
           <dd>
-            Session-wide discovery, relay, agent, and invocation evidence from the browser runtime.
-            Rows are not assigned to a provider unless the runtime supplied that identity.
+            Actions run in this session, the website each came from, and their current status.
           </dd>
         </div>
       </dl>
@@ -114,205 +136,99 @@ function WhatIsThis({
   );
 }
 
-type ActivityKind = "discovery" | "invocation" | "result" | "agent" | "registry" | "error";
+type ProviderInspectIconState = "inspect" | "pin" | "close";
 
-interface ActivityEvent {
-  id?: string;
-  kind: ActivityKind;
-  label: string;
-  subject: string;
-  detail: string;
+function ProviderInspectIcon({ state }: { state: ProviderInspectIconState }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      {state === "close" ? (
+        <>
+          <path d="m5.25 5.25 9.5 9.5" />
+          <path d="m14.75 5.25-9.5 9.5" />
+        </>
+      ) : state === "pin" ? (
+        <>
+          <path d="M7 3.25h6M8 3.25v3.8L6 9.5h8l-2-2.45v-3.8" />
+          <path d="M10 9.5v7.25" />
+        </>
+      ) : (
+        <>
+          <path d="M3.75 2.75h8.5v12.5h-8.5z" />
+          <path d="M6.25 6.25h3.5M6.25 9h2.25" />
+          <circle cx="13.25" cy="12.75" r="2.75" />
+          <path d="m15.2 14.7 2.05 2.05" />
+        </>
+      )}
+    </svg>
+  );
 }
 
-function activityEvent(line: string): ActivityEvent {
-  const discovery = line.match(/^getTools\(\{fromOrigins\}\) -> (\d+) tools from (\d+) of (\d+)$/);
-  if (discovery) {
-    return {
-      kind: "discovery",
-      label: "Discovery",
-      subject: `${discovery[1]} tools available`,
-      detail: `${discovery[2]} of ${discovery[3]} provider origins answered`,
-    };
-  }
-
-  const invocation = line.match(/^executeTool\(([^,]+),\s*(.*)\)$/);
-  if (invocation) {
-    return {
-      kind: "invocation",
-      label: "Tool call",
-      subject: invocation[1] ?? "Unknown tool",
-      detail: invocation[2] === "{}" ? "No arguments" : (invocation[2] ?? ""),
-    };
-  }
-
-  if (line.startsWith("  -> failed:")) {
-    return {
-      kind: "error",
-      label: "Failure",
-      subject: "Provider invocation",
-      detail: line.slice("  -> failed:".length).trim(),
-    };
-  }
-
-  if (line.startsWith("  ->")) {
-    return {
-      kind: "result",
-      label: "Result",
-      subject: "Provider returned",
-      detail: line.slice("  ->".length).trim(),
-    };
-  }
-
-  const agentRequest = line.match(/^agent -> ([^(]+)\((.*)\)$/);
-  if (agentRequest) {
-    return {
-      kind: "agent",
-      label: "Agent",
-      subject: agentRequest[1] ?? "Request",
-      detail: agentRequest[2] || "No arguments",
-    };
-  }
-
-  if (line.startsWith("  <-")) {
-    const detail = line.slice("  <-".length).trim();
-    return {
-      kind: detail.startsWith("refused") ? "error" : "result",
-      label: detail.startsWith("refused") ? "Refused" : "Agent result",
-      subject: "Browser agent",
-      detail,
-    };
-  }
-
-  if (line === "ontoolchange settled, re-discovering") {
-    return {
-      kind: "registry",
-      label: "Registry",
-      subject: "Tools changed",
-      detail: "Re-reading authorized provider actions",
-    };
-  }
-
-  if (line.startsWith("registered Dusky's own")) {
-    return {
-      kind: "registry",
-      label: "Registry",
-      subject: "Agent tools ready",
-      detail: line,
-    };
-  }
-
-  if (/failed|could not|not enabled|error/i.test(line)) {
-    return { kind: "error", label: "Error", subject: "Browser runtime", detail: line };
-  }
-
-  return { kind: "registry", label: "Runtime", subject: "Session event", detail: line };
+function actionLabel(tool: { name: string; title?: string }): string {
+  const title = tool.title?.trim();
+  if (title) return title;
+  const words = tool.name.replace(/[_-]+/g, " ").trim();
+  return words.length === 0 ? "Unnamed action" : words[0]?.toUpperCase() + words.slice(1);
 }
 
 function TechnicalLog({
-  activity,
-  open,
-  onToggle,
-  onClose,
+  actions,
+  sites,
+  tools,
 }: {
-  activity: readonly string[];
-  open: boolean;
-  onToggle: () => void;
-  onClose: () => void;
+  actions: readonly RuntimeAction[];
+  sites: readonly Source[];
+  tools: readonly { name: string; title?: string; origin: string }[];
 }) {
-  const box = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const onDown = (event: PointerEvent) => {
-      const element = box.current;
-      const target = event.target as Node | null;
-      if (!element || !target) return;
-      if (
-        element.contains(target) ||
-        (target instanceof Element && target.closest("[aria-controls=technical-log-panel]"))
-      ) {
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("pointerdown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("pointerdown", onDown);
-    };
-  }, [open, onClose]);
-
-  const occurrences = new Map<string, number>();
-  const events = activity
-    .map((line) => {
-      const occurrence = (occurrences.get(line) ?? 0) + 1;
-      occurrences.set(line, occurrence);
-      return { ...activityEvent(line), id: `${line}:${occurrence}` };
-    })
-    .reverse();
+  const siteNames = new Map(sites.map((site) => [originOf(site), site.name]));
+  const rows = [...actions].reverse();
 
   return (
     <section
       id="technical-log"
-      ref={box}
       className={styles.technicalLog}
-      data-open={open ? "" : undefined}
-      data-topology-node=""
-      data-topology-focus="activity"
-      aria-label="Runtime activity"
+      data-runtime-activity=""
+      data-squircle=""
+      data-empty={rows.length === 0 ? "" : undefined}
+      aria-label="Technical log"
     >
-      <span className={styles.activityPort} data-log-end="activity" aria-hidden="true" />
-      <button
-        type="button"
-        className={styles.activitySummary}
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-controls="technical-log-panel"
-        aria-label={`Technical log, ${activity.length} ${activity.length === 1 ? "event" : "events"}`}
-      >
-        <span>Runtime activity</span>
-        <strong>{activity.length}</strong>
-      </button>
+      <header className={styles.technicalLogHead}>
+        <h2>Technical log</h2>
+        {rows.length > 0 && (
+          <span>{`${rows.length} ${rows.length === 1 ? "action" : "actions"}`}</span>
+        )}
+      </header>
 
-      {open && (
-        <section
-          id="technical-log-panel"
-          className={styles.technicalLogPanel}
-          aria-label="Technical log"
-        >
-          <header className={styles.technicalLogHead}>
-            <div>
-              <h2>Technical log</h2>
-              <p>Newest first · session-wide browser evidence</p>
-            </div>
-            <div>
-              <span>{activity.length} events</span>
-              <button type="button" onClick={onClose}>
-                Close
-              </button>
-            </div>
-          </header>
-
-          <div className={styles.technicalLogColumns} aria-hidden="true">
-            <span>Event</span>
-            <span>Entity</span>
-            <span>Detail</span>
-          </div>
-          <ol className={styles.technicalLogEvents}>
-            {events.map((event) => (
-              <li key={event.id} data-kind={event.kind}>
-                <span className={styles.eventLabel}>{event.label}</span>
-                <strong>{event.subject}</strong>
-                <span className={styles.eventDetail}>{event.detail}</span>
-              </li>
-            ))}
-            {events.length === 0 && <li className={styles.noEvents}>No runtime events yet.</li>}
-          </ol>
-        </section>
-      )}
+      {rows.length === 0 && <p className={styles.technicalLogEmpty}>No actions in this session.</p>}
+      <ol className={styles.technicalLogEvents} aria-live="polite" aria-relevant="additions text">
+        {rows.map((action) => {
+          const tool = tools.find(
+            (candidate) => candidate.origin === action.origin && candidate.name === action.toolName,
+          );
+          return (
+            <li
+              key={action.id}
+              data-status={action.status}
+              data-origin={action.origin}
+              data-tool-name={action.toolName}
+              aria-atomic="true"
+            >
+              <span className={styles.actionEventIdentity}>
+                <strong>{actionLabel(tool ?? { name: action.toolName })}</strong>
+                <span>{siteNames.get(action.origin) ?? "Connected website"}</span>
+              </span>
+              <span className={styles.eventStatus}>
+                {action.status === "running"
+                  ? "Running"
+                  : action.status === "completed"
+                    ? "Returned"
+                    : action.status === "unknown"
+                      ? "Outcome unknown"
+                      : "Failed"}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }
@@ -321,18 +237,25 @@ export function Workspace() {
   const probe = useRequirements();
   const [reqOpen, setReqOpen] = useState(false);
   const [whatOpen, setWhatOpen] = useState(false);
-  const [logOpen, setLogOpen] = useState(false);
   const [canvasLayout, setCanvasLayout] = useState<"horizontal" | "vertical">("horizontal");
+  const [wideTopology, setWideTopology] = useState(
+    () => window.matchMedia("(min-width: 1320px)").matches,
+  );
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
   const [canvasPanning, setCanvasPanning] = useState(false);
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const inspectButtons = useRef(new Map<string, HTMLButtonElement>());
   const canvasDrag = useRef<{
     pointerId: number;
     x: number;
     y: number;
     panX: number;
     panY: number;
+    minPanX: number;
+    maxPanX: number;
+    minPanY: number;
+    maxPanY: number;
   } | null>(null);
   const nodeDrag = useRef<{
     id: string;
@@ -341,6 +264,10 @@ export function Workspace() {
     y: number;
     offsetX: number;
     offsetY: number;
+    minOffsetX: number;
+    maxOffsetX: number;
+    minOffsetY: number;
+    maxOffsetY: number;
   } | null>(null);
   const [params, setParams] = useSearchParams();
   /*
@@ -356,6 +283,36 @@ export function Workspace() {
    * note on `sitesFromQuery`.
    */
   const sites = useMemo(() => sitesFromQuery(params.toString()), [params]);
+  const topologyOrigins = useMemo(() => sites.map(originOf), [sites]);
+  const sampleWebsites = sites.every((site) => site.sample === true);
+  const [openOrigins, setOpenOrigins] = useState<string[]>(() => topologyOrigins);
+  const allWebsitesOpen = topologyOrigins.every((origin) => openOrigins.includes(origin));
+  const effectiveCanvasLayout = wideTopology ? canvasLayout : "vertical";
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1320px)");
+    /*
+     * A freeform desktop placement is not valid geometry after the viewport
+     * changes. Keeping those pixel offsets was how a node dragged on a wide
+     * canvas could wake up beyond the page rail in the stacked layout.
+     */
+    const update = () => {
+      setWideTopology(query.matches);
+      canvasDrag.current = null;
+      nodeDrag.current = null;
+      setCanvasPan({ x: 0, y: 0 });
+      setNodeOffsets({});
+      setCanvasPanning(false);
+      setDraggingNode(null);
+    };
+    update();
+    query.addEventListener("change", update);
+    window.addEventListener("resize", update);
+    return () => {
+      query.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   /*
    * What the relay is told, and it must be a STABLE array.
@@ -407,27 +364,48 @@ export function Workspace() {
    * Several of them get a plain label, because no business name is true above a
    * box containing another business.
    */
-  const heading = sites.length === 1 ? (sites[0] as Source).name : "Provider pages";
+  const heading = sites.length === 1 ? (sites[0] as Source).name : "Connected websites";
   const displayLabel = mode === "embedded" ? "Display preview" : "Ray-Ban Display";
   const displayCopy =
     mode === "embedded"
       ? "The same 600 × 600 Display app, embedded here for the browser demo."
       : "The current screen on the paired glasses. Wearer input returns through the relay; tools still run in this browser.";
-  const topologyOrigins = useMemo(() => sites.map(originOf), [sites]);
   const connectedOrigins = useMemo(
     () => new Set(link.tools.map((tool) => tool.origin)),
     [link.tools],
   );
   const linkLabel =
     link.link === "open"
-      ? "Relay connected"
+      ? "Ready"
       : link.link === "superseded"
-        ? "Session moved"
+        ? "Moved to another tab"
         : link.link === "reconnecting"
           ? "Reconnecting"
           : link.link === "offline"
-            ? "Relay offline"
+            ? "Offline"
             : "Connecting";
+
+  const closeProviderInspector = useCallback((origin: string) => {
+    setOpenOrigins((current) => current.filter((candidate) => candidate !== origin));
+    const button = inspectButtons.current.get(origin);
+    requestAnimationFrame(() => button?.focus({ preventScroll: true }));
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const activeProvider = document.activeElement?.closest<HTMLElement>(
+        '[data-node-id^="provider:"][data-inspected]',
+      );
+      const nodeId = activeProvider?.dataset["nodeId"];
+      const origin = nodeId?.startsWith("provider:") ? nodeId.slice("provider:".length) : null;
+      if (!origin || !openOrigins.includes(origin)) return;
+      event.preventDefault();
+      closeProviderInspector(origin);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openOrigins, closeProviderInspector]);
 
   // Arrow keys reach the panel only when the frame has focus, and a judge who
   // has to discover that is a judge who thinks the demo is broken.
@@ -504,15 +482,24 @@ export function Workspace() {
 
   const panCanvasStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    if (!window.matchMedia("(min-width: 841px)").matches) return;
+    if (!window.matchMedia("(min-width: 1320px)").matches) return;
     const target = event.target as Element;
     if (target.closest("[data-topology-node], button, a, input, iframe")) return;
+    const canvasBox = event.currentTarget.getBoundingClientRect();
+    const graphBox = event.currentTarget
+      .querySelector<HTMLElement>(`.${styles.graphNodes}`)
+      ?.getBoundingClientRect();
+    if (!graphBox) return;
     canvasDrag.current = {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
       panX: canvasPan.x,
       panY: canvasPan.y,
+      minPanX: canvasPan.x + canvasBox.left - graphBox.left,
+      maxPanX: canvasPan.x + canvasBox.right - graphBox.right,
+      minPanY: canvasPan.y + canvasBox.top - graphBox.top,
+      maxPanY: canvasPan.y + canvasBox.bottom - graphBox.bottom,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     setCanvasPanning(true);
@@ -522,8 +509,8 @@ export function Workspace() {
     const drag = canvasDrag.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     setCanvasPan({
-      x: drag.panX + event.clientX - drag.x,
-      y: drag.panY + event.clientY - drag.y,
+      x: clampMovement(drag.panX + event.clientX - drag.x, drag.minPanX, drag.maxPanX),
+      y: clampMovement(drag.panY + event.clientY - drag.y, drag.minPanY, drag.maxPanY),
     });
   };
 
@@ -536,10 +523,16 @@ export function Workspace() {
 
   const moveNodeStart = (id: string, event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
-    if (!window.matchMedia("(min-width: 841px)").matches) return;
+    if (!window.matchMedia("(min-width: 1320px)").matches) return;
     const target = event.target as Element;
-    if (target.closest("iframe, button, a, input, textarea, select")) return;
+    if (target.closest("iframe, button, a, input, textarea, select, [data-runtime-activity]"))
+      return;
     const offset = nodeOffsets[id] ?? { x: 0, y: 0 };
+    const nodeBox = visualBoundaryOf(event.currentTarget);
+    const canvasBox = event.currentTarget
+      .closest<HTMLElement>('[data-testid="topology-canvas"]')
+      ?.getBoundingClientRect();
+    if (!canvasBox) return;
     nodeDrag.current = {
       id,
       pointerId: event.pointerId,
@@ -547,6 +540,10 @@ export function Workspace() {
       y: event.clientY,
       offsetX: offset.x,
       offsetY: offset.y,
+      minOffsetX: offset.x + canvasBox.left + NODE_BOUNDARY_GUTTER - nodeBox.left,
+      maxOffsetX: offset.x + canvasBox.right - NODE_BOUNDARY_GUTTER - nodeBox.right,
+      minOffsetY: offset.y + canvasBox.top + NODE_BOUNDARY_GUTTER - nodeBox.top,
+      maxOffsetY: offset.y + canvasBox.bottom - NODE_BOUNDARY_GUTTER - nodeBox.bottom,
     };
     event.preventDefault();
     event.stopPropagation();
@@ -560,8 +557,8 @@ export function Workspace() {
     setNodeOffsets((current) => ({
       ...current,
       [id]: {
-        x: drag.offsetX + event.clientX - drag.x,
-        y: drag.offsetY + event.clientY - drag.y,
+        x: clampMovement(drag.offsetX + event.clientX - drag.x, drag.minOffsetX, drag.maxOffsetX),
+        y: clampMovement(drag.offsetY + event.clientY - drag.y, drag.minOffsetY, drag.maxOffsetY),
       },
     }));
   };
@@ -643,7 +640,6 @@ export function Workspace() {
               className={styles.reqBtn}
               onClick={() => {
                 setWhatOpen((value) => !value);
-                setLogOpen(false);
               }}
               aria-expanded={whatOpen}
               aria-controls="what"
@@ -783,9 +779,10 @@ export function Workspace() {
           <div
             className={styles.topologyCanvas}
             data-testid="topology-canvas"
-            data-layout={canvasLayout}
+            data-layout={effectiveCanvasLayout}
             data-panning={canvasPanning ? "" : undefined}
             data-node-dragging={draggingNode ? "" : undefined}
+            data-inspecting={openOrigins.length > 0 ? "" : undefined}
             data-motion-item=""
             data-motion-order="1"
             onPointerDown={panCanvasStart}
@@ -798,7 +795,12 @@ export function Workspace() {
                 <p className={styles.canvasEyebrow}>
                   {mode === "embedded" ? "Browser demo" : "Glasses session"}
                 </p>
-                <h1 className={styles.canvasTitle}>Authorized WebMCP paths</h1>
+                <h1 className={styles.canvasTitle}>Connected websites and their actions</h1>
+                <p className={styles.canvasDescription}>
+                  {sampleWebsites
+                    ? "These sample websites supply the actions beside them. Show or hide any page; the others stay visible."
+                    : "These websites supply the actions beside them. Show or hide any page; the others stay visible."}
+                </p>
                 {link.link !== "open" && (
                   <p className={styles.canvasProblem} role="status">
                     {linkLabel}
@@ -810,14 +812,37 @@ export function Workspace() {
             <div className={styles.canvasControls} data-motion-item="" data-motion-order="2">
               <button
                 type="button"
-                aria-label={`Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`}
-                title={`Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`}
+                aria-label={
+                  wideTopology
+                    ? `Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`
+                    : "Flow: top to bottom at this window width"
+                }
+                title={
+                  wideTopology
+                    ? `Flow: ${canvasLayout === "horizontal" ? "left to right" : "top to bottom"}`
+                    : "Top to bottom at this window width"
+                }
                 onClick={changeCanvasLayout}
+                disabled={!wideTopology}
               >
                 <span className={styles.layoutGlyph} aria-hidden="true">
-                  {canvasLayout === "horizontal" ? "↔" : "↕"}
+                  {effectiveCanvasLayout === "horizontal" ? "↔" : "↕"}
                 </span>
-                <span>{canvasLayout === "horizontal" ? "Left to right" : "Top to bottom"}</span>
+                <span>
+                  {effectiveCanvasLayout === "horizontal" ? "Left to right" : "Top to bottom"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={styles.websiteToggle}
+                aria-label={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
+                title={allWebsitesOpen ? "Hide all website pages" : "Show all website pages"}
+                onClick={() => setOpenOrigins(allWebsitesOpen ? [] : topologyOrigins)}
+              >
+                <span className={styles.layoutGlyph} aria-hidden="true">
+                  {allWebsitesOpen ? "−" : "+"}
+                </span>
+                <span>{allWebsitesOpen ? "Hide all pages" : "Show all pages"}</span>
               </button>
               {(canvasPan.x !== 0 || canvasPan.y !== 0 || hasMovedNodes) && (
                 <button
@@ -847,8 +872,10 @@ export function Workspace() {
                 origins={topologyOrigins}
                 connectedOrigins={connectedOrigins}
                 runtimeConnected={link.link === "open"}
-                activityCount={link.activity.length}
-                viewKey={canvasLayout}
+                viewKey={`${effectiveCanvasLayout}:${
+                  topologyOrigins.filter((origin) => openOrigins.includes(origin)).join("|") ||
+                  "hidden"
+                }`}
                 className={styles.topologyEdges}
               />
 
@@ -868,14 +895,12 @@ export function Workspace() {
                   onPointerUp={(event) => moveNodeEnd("display", event)}
                   onPointerCancel={(event) => moveNodeEnd("display", event)}
                 >
-                  <h2 className={styles.nodePill}>
+                  <h2
+                    className={`${styles.nodePill} ${styles.displayNodeLabel}`}
+                    data-node-boundary=""
+                  >
                     <span>{displayLabel}</span>
-                    <span
-                      className={styles.nodeState}
-                      data-live={link.link === "open" ? "" : undefined}
-                    >
-                      {link.link === "open" ? "live" : linkLabel}
-                    </span>
+                    {link.link !== "open" && <span className={styles.nodeState}>{linkLabel}</span>}
                   </h2>
 
                   <span
@@ -926,104 +951,164 @@ export function Workspace() {
                   onPointerUp={(event) => moveNodeEnd("runtime", event)}
                   onPointerCancel={(event) => moveNodeEnd("runtime", event)}
                 >
-                  <div className={styles.browserRuntimeNode}>
-                    <p>Browser</p>
-                    <h2>Runtime</h2>
-                    <span>
-                      {link.tools.length} {link.tools.length === 1 ? "action" : "actions"}
-                    </span>
-                    <span
-                      className={styles.runtimePort}
-                      data-side="in"
-                      data-runtime-end="browser"
-                      aria-hidden="true"
-                    />
-                    <span
-                      className={styles.runtimePort}
-                      data-side="out"
-                      data-provider-end="runtime"
-                      aria-hidden="true"
-                    />
-                    <span
-                      className={styles.runtimeLogPort}
-                      data-log-end="runtime"
-                      aria-hidden="true"
-                    />
-                  </div>
+                  <div className={styles.runtimePanel} data-runtime-panel="">
+                    <div
+                      className={styles.browserRuntimeNode}
+                      data-runtime-status=""
+                      data-squircle=""
+                    >
+                      <div className={styles.runtimeHeading}>
+                        <h2>Browser runtime</h2>
+                        <span className={styles.runtimeState} data-state={link.link} role="status">
+                          {linkLabel}
+                        </span>
+                      </div>
+                      <p className={styles.runtimeSummary}>
+                        <strong>
+                          {link.tools.length} {link.tools.length === 1 ? "action" : "actions"}
+                        </strong>
+                        <span>
+                          across {connectedOrigins.size}{" "}
+                          {connectedOrigins.size === 1 ? "website" : "websites"}
+                        </span>
+                      </p>
+                      <span
+                        className={styles.runtimePort}
+                        data-side="in"
+                        data-runtime-end="browser"
+                        aria-hidden="true"
+                      />
+                      <span
+                        className={styles.runtimePort}
+                        data-side="out"
+                        data-provider-end="runtime"
+                        aria-hidden="true"
+                      />
+                    </div>
 
-                  <TechnicalLog
-                    activity={link.activity}
-                    open={logOpen}
-                    onToggle={() => {
-                      setLogOpen((value) => !value);
-                      setWhatOpen(false);
-                    }}
-                    onClose={() => setLogOpen(false)}
-                  />
+                    <TechnicalLog actions={link.recentActions} sites={sites} tools={link.tools} />
+                  </div>
                 </section>
 
                 <section
                   className={styles.providerActionField}
                   data-testid="actions"
-                  aria-label="Proof provider pages and their available actions"
+                  aria-label="Connected websites and their available actions"
                 >
-                  <p className={styles.providerClusterLabel}>
-                    Proof providers · live browser pages
-                  </p>
                   {sites.map((site, siteIndex) => {
                     const origin = originOf(site);
                     const available = link.tools.filter((tool) => tool.origin === origin);
                     const settled = link.settled(origin);
+                    const inspected = openOrigins.includes(origin);
+                    const pinned = inspected;
+                    const panelId = `provider-page-${siteIndex}`;
+                    const labelId = `provider-label-${siteIndex}`;
+                    const inspectLabel = pinned
+                      ? `Hide ${site.name} page`
+                      : `Show ${site.name} page`;
+                    const inspectIcon: ProviderInspectIconState = pinned ? "close" : "inspect";
                     return (
-                      <div
+                      <fieldset
                         key={site.id}
                         className={styles.providerActionPair}
+                        aria-label={`${site.name} provider and actions`}
                         data-topology-focus={`provider:${origin}`}
-                        data-motion-item=""
                         data-motion-order={String(siteIndex + 4)}
                       >
                         <figure
                           className={styles.providerNode}
+                          aria-labelledby={labelId}
                           data-topology-node=""
                           data-node-id={`provider:${origin}`}
                           data-node-dragging={
                             draggingNode === `provider:${origin}` ? "" : undefined
                           }
+                          data-inspected={inspected ? "" : undefined}
+                          data-pinned={pinned ? "" : undefined}
                           style={nodeStyle(`provider:${origin}`)}
                           onPointerDown={(event) => moveNodeStart(`provider:${origin}`, event)}
                           onPointerMove={(event) => moveNode(`provider:${origin}`, event)}
                           onPointerUp={(event) => moveNodeEnd(`provider:${origin}`, event)}
                           onPointerCancel={(event) => moveNodeEnd(`provider:${origin}`, event)}
                         >
-                          <figcaption className={styles.nodePill}>
-                            <span>{site.name}</span>
-                          </figcaption>
-                          <span
-                            className={styles.providerPort}
-                            data-provider-origin={origin}
-                            aria-hidden="true"
-                          />
-                          <span
-                            className={styles.providerActionPort}
-                            data-action-origin={origin}
-                            data-action-end="provider"
-                            aria-hidden="true"
-                          />
-                          <iframe
-                            className={styles.frame}
-                            title={site.name}
-                            src={site.previewUrl ?? site.url}
-                            allow="tools"
-                          />
-                          <div className={styles.nodeFooter}>
-                            <span>{origin}</span>
-                            <span>
-                              {available.length > 0
-                                ? `${available.length} available`
-                                : settled
-                                  ? "no actions"
-                                  : "discovering"}
+                          <div
+                            className={styles.providerNodeControls}
+                            data-provider-controls=""
+                            data-node-boundary=""
+                          >
+                            <span
+                              id={labelId}
+                              className={`${styles.nodePill} ${styles.providerNodeLabel}`}
+                            >
+                              <span>{site.name}</span>
                             </span>
+                            <button
+                              ref={(element) => {
+                                if (element) inspectButtons.current.set(origin, element);
+                                else inspectButtons.current.delete(origin);
+                              }}
+                              type="button"
+                              className={styles.providerInspectButton}
+                              data-open={inspected ? "" : undefined}
+                              data-pinned={pinned ? "" : undefined}
+                              aria-label={inspectLabel}
+                              aria-controls={panelId}
+                              aria-expanded={inspected}
+                              title={inspectLabel}
+                              onClick={() => {
+                                if (pinned) closeProviderInspector(origin);
+                                else
+                                  setOpenOrigins((current) => [
+                                    ...current.filter((candidate) => candidate !== origin),
+                                    origin,
+                                  ]);
+                              }}
+                            >
+                              <ProviderInspectIcon state={inspectIcon} />
+                            </button>
+                            {!inspected ? (
+                              <>
+                                <span
+                                  className={styles.providerPort}
+                                  data-provider-origin={origin}
+                                  data-compact-port=""
+                                  aria-hidden="true"
+                                />
+                                <span
+                                  className={styles.providerActionPort}
+                                  data-action-origin={origin}
+                                  data-action-end="provider"
+                                  data-compact-port=""
+                                  aria-hidden="true"
+                                />
+                              </>
+                            ) : null}
+                          </div>
+                          {inspected ? (
+                            <>
+                              <span
+                                className={styles.providerPort}
+                                data-provider-origin={origin}
+                                aria-hidden="true"
+                              />
+                              <span
+                                className={styles.providerActionPort}
+                                data-action-origin={origin}
+                                data-action-end="provider"
+                                aria-hidden="true"
+                              />
+                            </>
+                          ) : null}
+                          <div className={styles.providerViewport} data-provider-viewport="">
+                            <iframe
+                              id={panelId}
+                              className={styles.frame}
+                              title={site.name}
+                              src={site.previewUrl ?? site.url}
+                              allow="tools"
+                              tabIndex={inspected ? 0 : -1}
+                              aria-hidden={inspected ? undefined : true}
+                            />
                           </div>
                         </figure>
 
@@ -1045,7 +1130,7 @@ export function Workspace() {
                             data-action-end="actions"
                             aria-hidden="true"
                           />
-                          <h2 className={styles.actionCountLabel}>
+                          <h2 className={styles.actionCountLabel} data-node-boundary="">
                             {available.length} {available.length === 1 ? "action" : "actions"}
                           </h2>
                           <ul className={`${styles.actionList} ${styles.actionListWithCount}`}>
@@ -1058,17 +1143,15 @@ export function Workspace() {
                                   data-motion-kind="action"
                                   data-motion-order={String(Math.min(toolIndex + 1, 8))}
                                 >
-                                  <span className={styles.actionName}>
-                                    {tool.title ?? tool.name}
-                                  </span>
+                                  <span className={styles.actionName}>{actionLabel(tool)}</span>
                                   <span
                                     className={styles.actionApproval}
                                     data-confirm={decision.requiresConfirmation ? "" : undefined}
-                                    title={decision.reason}
+                                    data-consequence={decision.consequence}
                                   >
                                     {decision.requiresConfirmation
-                                      ? "wearer confirms"
-                                      : "runs directly"}
+                                      ? "approval required"
+                                      : "no approval needed"}
                                   </span>
                                 </li>
                               );
@@ -1084,7 +1167,7 @@ export function Workspace() {
                             )}
                           </ul>
                         </article>
-                      </div>
+                      </fieldset>
                     );
                   })}
                 </section>

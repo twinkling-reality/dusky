@@ -19,7 +19,7 @@ export interface CubicSegment {
 
 export type PathCommand = { kind: "move"; point: Point } | { kind: "curve"; segment: CubicSegment };
 
-type EdgeKind = "display" | "provider" | "actions" | "activity";
+type EdgeKind = "display" | "provider" | "actions";
 
 interface MeasuredEdge {
   id: string;
@@ -40,7 +40,6 @@ interface TopologyConnectionsProps {
   origins: readonly string[];
   connectedOrigins: ReadonlySet<string>;
   runtimeConnected: boolean;
-  activityCount: number;
   viewKey: string;
   className?: string;
 }
@@ -289,10 +288,7 @@ function drawTransferSignal(
 function focusMatches(edge: MeasuredEdge, focus: string | null): boolean {
   if (!focus) return true;
   if (focus === "display") return edge.kind === "display";
-  if (focus === "runtime") {
-    return edge.kind === "display" || edge.kind === "provider" || edge.kind === "activity";
-  }
-  if (focus === "activity") return edge.kind === "activity";
+  if (focus === "runtime") return edge.kind === "display" || edge.kind === "provider";
   if (focus.startsWith("provider:")) {
     const origin = focus.slice("provider:".length);
     return edge.origin === origin;
@@ -313,12 +309,10 @@ export function TopologyConnections({
   origins,
   connectedOrigins,
   runtimeConnected,
-  activityCount,
   viewKey,
   className,
 }: TopologyConnectionsProps) {
   const layer = useRef<HTMLCanvasElement | null>(null);
-  const previousActivityCount = useRef(activityCount);
   const connectedKey = origins.filter((origin) => connectedOrigins.has(origin)).join("|");
 
   useLayoutEffect(() => {
@@ -332,14 +326,9 @@ export function TopologyConnections({
     let edges: readonly MeasuredEdge[] = [];
     let focus: string | null = null;
     let reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const activityPulseStarted =
-      activityCount > previousActivityCount.current ? performance.now() : Number.NEGATIVE_INFINITY;
-    previousActivityCount.current = activityCount;
-
     const palette = getComputedStyle(root);
     const accent = cssColor(palette, "--dusky-accent", "#1c6b68");
     const capability = cssColor(palette, "--topology-capability", "#587069");
-    const warn = cssColor(palette, "--dusky-warn", "#86601d");
 
     const paint = (time: number) => {
       const bounds = canvas.getBoundingClientRect();
@@ -359,16 +348,8 @@ export function TopologyConnections({
                 ? 0.56
                 : 0.5;
         context.globalAlpha = related ? (edge.connected ? activeAlpha : 0.24) : 0.08;
-        context.strokeStyle =
-          edge.kind === "actions" ? capability : edge.kind === "activity" ? warn : accent;
-        context.lineWidth =
-          edge.kind === "display"
-            ? 1.8
-            : edge.kind === "provider"
-              ? 1.5
-              : edge.kind === "actions"
-                ? 1.35
-                : 1.25;
+        context.strokeStyle = edge.kind === "actions" ? capability : accent;
+        context.lineWidth = edge.kind === "display" ? 1.8 : edge.kind === "provider" ? 1.5 : 1.35;
         context.setLineDash([]);
         trace(context, edge.segments);
         context.stroke();
@@ -407,15 +388,11 @@ export function TopologyConnections({
             const duration = 5700 + index * 180;
             const progress = ((time + index * 680) % duration) / duration;
             drawTransferSignal(context, positionOn(samples, progress), capability, 7, 0.66);
-          } else if (edge.kind === "activity" && time - activityPulseStarted < 1400) {
-            const progress = clamp((time - activityPulseStarted) / 1200, 0, 0.999999);
-            drawTransferSignal(context, positionOn(samples, progress), warn, 8, 0.86);
           }
         }
       }
 
       context.globalAlpha = 1;
-      const activityPulsing = !reducedMotion && time - activityPulseStarted < 1400;
       const liveMotion =
         !reducedMotion &&
         edges.some(
@@ -424,7 +401,7 @@ export function TopologyConnections({
             (edge.kind === "display" || edge.kind === "provider" || edge.kind === "actions") &&
             focusMatches(edge, focus),
         );
-      if (activityPulsing || liveMotion) frame = requestAnimationFrame(paint);
+      if (liveMotion) frame = requestAnimationFrame(paint);
     };
 
     const measure = () => {
@@ -435,8 +412,9 @@ export function TopologyConnections({
       canvas.height = Math.max(1, Math.round(bounds.height * ratio));
       context.setTransform(canvas.width / bounds.width, 0, 0, canvas.height / bounds.height, 0, 0);
 
-      const stacked = bounds.width <= 840;
-      const vertical = stacked || root.closest('[data-layout="vertical"]') !== null;
+      // Workspace owns the effective responsive layout. Reading that same value
+      // keeps connector routing and card geometry in agreement at every width.
+      const vertical = root.closest('[data-layout="vertical"]') !== null;
       const display = root.querySelector<HTMLElement>('[data-runtime-end="display"]');
       const browserIn = root.querySelector<HTMLElement>('[data-runtime-end="browser"]');
       const browserOut = root.querySelector<HTMLElement>('[data-provider-end="runtime"]');
@@ -478,7 +456,7 @@ export function TopologyConnections({
             kind: "provider",
             origin: target.origin,
             connected: connectedOrigins.has(target.origin),
-            segments: stacked
+            segments: vertical
               ? bowedCurve(source, targetAnchor, [-44, 38, -52][index] ?? 38)
               : [curve(source, targetAnchor)],
             motionSegments: undefined,
@@ -508,21 +486,6 @@ export function TopologyConnections({
         });
       }
 
-      const logSource = root.querySelector<HTMLElement>('[data-log-end="runtime"]');
-      const logTarget = root.querySelector<HTMLElement>('[data-log-end="activity"]');
-      if (logSource && logTarget) {
-        measured.push({
-          id: "runtime-activity",
-          kind: "activity",
-          connected: activityCount > 0,
-          segments: bowedCurve(
-            anchorOf(logSource, bounds, { x: 0, y: 1 }),
-            anchorOf(logTarget, bounds, { x: 0, y: -1 }),
-            5,
-          ),
-        });
-      }
-
       edges = measured;
       canvas.dataset.runtimeTrunks = String(edges.filter((edge) => edge.kind === "display").length);
       canvas.dataset.providerBuses = "0";
@@ -533,9 +496,6 @@ export function TopologyConnections({
         edges.filter((edge) => edge.kind === "display" || edge.kind === "provider").length,
       );
       canvas.dataset.actionEdges = String(edges.filter((edge) => edge.kind === "actions").length);
-      canvas.dataset.activityEdges = String(
-        edges.filter((edge) => edge.kind === "activity").length,
-      );
       canvas.dataset.connectedOrigins = String(connectedOrigins.size);
       canvas.dataset.reducedMotion = String(reducedMotion);
       paint(performance.now());
@@ -617,7 +577,7 @@ export function TopologyConnections({
       root.removeEventListener("focusout", onFocusOut);
       window.removeEventListener("resize", schedule);
     };
-  }, [origins, connectedOrigins, connectedKey, runtimeConnected, viewKey, activityCount]);
+  }, [origins, connectedOrigins, connectedKey, runtimeConnected, viewKey]);
 
   return (
     <canvas

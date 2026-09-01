@@ -870,8 +870,8 @@
  * pairing screen owns the accent; this control simply leads back to it.
  */
 .pairLink {
-  height: 2rem;
-  padding: 0;
+  height: 2.25rem;
+  padding: 0 var(--dusky-s3);
   border: 1px solid transparent;
   border-radius: 999px;
   background: none;
@@ -1078,6 +1078,14 @@
   left: 2rem;
 }
 
+.canvasDescription {
+  max-width: 32rem;
+  margin: 0.48rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--dusky-ink-dim);
+}
+
 .canvasTitle {
   font-size: clamp(1.45rem, 2.1vw, 2.05rem);
   font-weight: 300;
@@ -1124,7 +1132,7 @@
 }
 
 .graphNodes {
-  top: 5.8rem;
+  top: 7.4rem;
   right: 2rem;
   bottom: 1.45rem;
   left: 2rem;
@@ -1236,18 +1244,6 @@
   width: 10.25rem;
   border-radius: 12px;
   box-shadow: 0 10px 24px rgb(20 22 19 / 5%);
-}
-
-.activitySummary {
-  min-height: 3.1rem;
-}
-
-.activitySummary span {
-  font-size: 0.61rem;
-}
-
-.activitySummary strong {
-  border-radius: 7px;
 }
 
 .displayGraphNode,
@@ -1429,11 +1425,6 @@
   transform: translateX(-50%) rotate(90deg);
 }
 
-.topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
-  height: 13.5rem;
-  min-height: 13.5rem;
-}
-
 .topologyCanvas[data-layout="vertical"] .runtimePort[data-side="in"] {
   top: -0.34rem;
   left: 50%;
@@ -1526,7 +1517,7 @@
     height: auto;
     min-height: 0;
     margin: 0;
-    padding: 7.4rem 1rem 1.5rem;
+    padding: 9.4rem 1rem 1.5rem;
     overflow: hidden;
     cursor: default;
   }
@@ -1538,7 +1529,7 @@
   }
 
   .canvasControls {
-    top: 4.7rem;
+    top: 6.7rem;
     right: 1rem;
     display: flex;
   }
@@ -1728,6 +1719,144 @@
   }
 }
 
+/* ------------------------------------------------ provider page inspection
+ *
+ * The short provider frame is a preview, not a second scroll viewport. The
+ * same live iframe expands for inspection so its browsing context, WebMCP
+ * registration, and visible provider state are never duplicated or reset.
+ */
+.providerViewport {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 14px 14px 0 0;
+  background: var(--dusky-surface);
+}
+
+.providerViewport .frame {
+  display: block;
+  border-radius: 0;
+}
+
+.providerNodeControls {
+  position: absolute;
+  z-index: 22;
+  top: 0;
+  left: 50%;
+  max-width: calc(100% - 1rem);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dusky-s2);
+  transform: translate(-50%, -50%);
+}
+
+.providerInspectButton {
+  position: relative;
+  flex: none;
+  width: 2.05rem;
+  height: 2.05rem;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--dusky-hair);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--dusky-accent) 5%, var(--dusky-surface));
+  color: var(--dusky-ink-dim);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color var(--dusky-motion-fast) var(--dusky-ease),
+    background-color var(--dusky-motion-fast) var(--dusky-ease),
+    color var(--dusky-motion-fast) var(--dusky-ease);
+}
+
+.providerInspectButton::before {
+  content: "";
+  position: absolute;
+  inset: -0.4rem;
+}
+
+.providerInspectButton svg {
+  width: 1rem;
+  height: 1rem;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.providerInspectButton:hover,
+.providerInspectButton:focus-visible,
+.providerInspectButton[data-open] {
+  border-color: var(--dusky-accent);
+  background: color-mix(in srgb, var(--dusky-accent-soft) 24%, var(--dusky-surface));
+  color: var(--dusky-accent);
+  transition: none;
+}
+
+.topologyCanvas[data-layout] .runtimePanel > .technicalLog {
+  width: calc(100% - 2rem);
+}
+
+.providerInspectButton:active {
+  scale: 0.92;
+}
+
+.providerInspectButton:focus-visible {
+  outline: 2px solid var(--dusky-accent);
+  outline-offset: 2px;
+}
+
+/* A collapsed card cannot capture wheel, touch, or keyboard scrolling. Its
+ * explicit inspection control is the only way into the provider document. */
+.providerNode:not([data-inspected]) .frame {
+  width: calc(100% + var(--dusky-s3));
+  max-width: none;
+  pointer-events: none;
+}
+
+.providerInspectHint {
+  display: none;
+}
+
+.providerNode[data-inspected] .nodePill {
+  border-color: color-mix(in srgb, var(--dusky-accent) 52%, var(--dusky-hair));
+}
+
+.providerNode[data-inspected] .providerViewport {
+  border-radius: 18px 18px 0 0;
+}
+
+.providerNode[data-inspected] .frame {
+  width: 100%;
+  pointer-events: auto;
+}
+
+.providerNode[data-inspected] .nodeFooter {
+  min-height: 2.5rem;
+  padding-inline: 0.85rem;
+}
+
+.providerNode[data-inspected] .providerInspectHint {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dusky-accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .providerInspectButton,
+  .providerInspectButton::after,
+  .providerActionPair {
+    animation: none;
+    transition: none;
+  }
+}
+
 /*
  * Canvas interaction and edge treatment.
  *
@@ -1739,6 +1868,7 @@
 @media (min-width: 841px) {
   body .topologyCanvas[data-testid="topology-canvas"] [data-topology-node][data-node-id] {
     transform: translate3d(var(--node-drag-x, 0), var(--node-drag-y, 0), 0);
+    translate: var(--node-inspect-x, 0) var(--node-inspect-y, 0);
     transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
     cursor: grab;
     touch-action: none;
@@ -1890,8 +2020,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .browserRuntimeNode::before 
 body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-runtime-end],
 body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-end],
 body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-provider-origin],
-body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-action-end],
-body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end] {
+body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-action-end] {
   width: 0;
   height: 0;
   border: 0;
@@ -1928,20 +2057,6 @@ body
   right: auto;
   bottom: auto;
   left: 0;
-}
-
-body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end="runtime"] {
-  top: auto;
-  right: auto;
-  bottom: 0;
-  left: 50%;
-}
-
-body .topologyCanvas[data-testid="topology-canvas"][data-layout] [data-log-end="activity"] {
-  top: 0;
-  right: auto;
-  bottom: auto;
-  left: 50%;
 }
 
 body
@@ -2513,26 +2628,33 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 }
 
 .browserRuntimeNode p,
-.browserRuntimeNode h2,
 .browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
   margin: 0;
 }
 
-.browserRuntimeNode p,
-.browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
+.runtimeSummary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
   font-family: var(--dusky-mono);
-  font-size: 0.53rem;
-  letter-spacing: 0.1em;
+  text-align: center;
   text-transform: uppercase;
   color: var(--dusky-ink-faint);
 }
 
-.browserRuntimeNode h2 {
-  margin: 0.18rem 0 0.35rem;
-  font-size: 1.05rem;
-  font-weight: 400;
-  letter-spacing: -0.025em;
+.runtimeSummary strong {
+  font-family: var(--dusky-sans);
+  font-size: 2rem;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.06em;
   color: var(--dusky-ink-strong);
+}
+
+.runtimeSummary span {
+  font-size: 0.54rem;
+  letter-spacing: 0.09em;
 }
 
 .runtimePort,
@@ -2576,13 +2698,13 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   width: 9.5rem;
   border: 1px solid var(--dusky-hair);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--dusky-surface) 94%, transparent);
+  background: color-mix(in srgb, var(--dusky-warn) 5%, var(--dusky-surface));
   transform: translateX(-50%);
   -webkit-backdrop-filter: blur(22px) saturate(1.3);
   backdrop-filter: blur(22px) saturate(1.3);
   transition:
-    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-radius 240ms ease;
+    height var(--dusky-motion) var(--dusky-ease),
+    border-radius var(--dusky-motion-fast) var(--dusky-ease);
 }
 
 .activityPort {
@@ -2592,73 +2714,11 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   transform: translateX(-50%);
 }
 
-.activitySummary {
-  width: 100%;
-  min-height: 3.25rem;
-  padding: 0 0.8rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  color: var(--dusky-ink-dim);
-  cursor: pointer;
-}
-
-.activitySummary span {
-  font-family: var(--dusky-mono);
-  font-size: 0.52rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.activitySummary strong {
-  min-width: 1.65rem;
-  height: 1.65rem;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--dusky-warn) 12%, transparent);
-  font-family: var(--dusky-mono);
-  font-size: 0.62rem;
-  font-weight: 400;
-  color: var(--dusky-warn);
-}
-
-.activitySummary:hover,
-.activitySummary[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--dusky-warn) 7%, transparent);
-  color: var(--dusky-ink-strong);
-}
-
-.activitySummary:focus-visible {
-  outline: 2px solid var(--dusky-accent);
-  outline-offset: 2px;
-}
-
-.technicalLog[data-open] {
-  top: 60%;
-  width: min(38rem, calc(100vw - 5rem));
-  border-radius: 22px;
-  transform: translate(-50%, -50%);
-}
-
-.technicalLog[data-open] .activitySummary {
-  display: none;
-}
-
-.technicalLogPanel {
-  padding: 1rem;
-}
-
 .technicalLogHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.8rem;
+  flex: none;
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
 }
 
 .technicalLogHead h2,
@@ -2667,70 +2727,28 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 }
 
 .technicalLogHead h2 {
-  font-size: 1rem;
+  font-size: 0.86rem;
   font-weight: 450;
   color: var(--dusky-ink-strong);
 }
 
 .technicalLogHead p {
   margin-top: 0.15rem;
-  font-size: 0.68rem;
+  font-size: 0.6rem;
+  line-height: 1.35;
   color: var(--dusky-ink-dim);
 }
 
-.technicalLogHead > div:last-child {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-}
-
-.technicalLogHead > div:last-child span,
-.technicalLogHead > div:last-child button {
-  font-family: var(--dusky-mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.technicalLogHead > div:last-child span {
-  color: var(--dusky-warn);
-}
-
-.technicalLogHead > div:last-child button {
-  min-height: 1.8rem;
-  padding: 0 0.55rem;
-  border: 1px solid var(--dusky-hair);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dusky-ink-dim);
-  cursor: pointer;
-}
-
-.technicalLogHead > div:last-child button:hover {
-  border-color: var(--dusky-accent);
-  color: var(--dusky-accent);
-}
-
-.technicalLogColumns,
 .technicalLogEvents li {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(8rem, 0.75fr) minmax(12rem, 1.25fr);
-  gap: 0.8rem;
-  align-items: center;
-}
-
-.technicalLogColumns {
-  padding: 0 0.65rem 0.4rem;
-  font-family: var(--dusky-mono);
-  font-size: 0.48rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--dusky-ink-faint);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
 }
 
 .technicalLogEvents {
-  max-height: min(20rem, 46vh);
+  min-height: 0;
+  flex: 1;
   margin: 0;
   padding: 0;
   display: flex;
@@ -2741,8 +2759,9 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 }
 
 .technicalLogEvents li {
-  min-height: 2.85rem;
-  padding: 0.5rem 0.65rem;
+  flex: none;
+  min-height: 0;
+  padding: 0.55rem;
   border: 1px solid var(--dusky-hair-soft);
   border-radius: 12px;
   background: color-mix(in srgb, var(--dusky-surface) 72%, transparent);
@@ -2751,7 +2770,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 .technicalLogEvents li strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 0.73rem;
+  font-size: 0.68rem;
   font-weight: 450;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2798,7 +2817,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   min-width: 0;
   overflow: hidden;
   font-family: var(--dusky-mono);
-  font-size: 0.58rem;
+  font-size: 0.54rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -3105,7 +3124,11 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 .actionApproval {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.32rem;
+  padding: 0.16rem 0.36rem;
+  border: 1px solid color-mix(in srgb, var(--dusky-ok) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dusky-ok) 7%, transparent);
   font-family: var(--dusky-mono);
   font-size: 0.5rem;
   letter-spacing: 0.05em;
@@ -3121,6 +3144,8 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   background: currentColor;
 }
 .actionApproval[data-confirm] {
+  border-color: color-mix(in srgb, var(--dusky-warn) 22%, transparent);
+  background: color-mix(in srgb, var(--dusky-warn) 8%, transparent);
   color: var(--dusky-warn);
 }
 .actionList .actionEmpty {
@@ -3822,7 +3847,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 }
 
 .graphNodes {
-  top: 5.8rem;
+  top: 7.4rem;
   right: 2rem;
   bottom: 1.45rem;
   left: 2rem;
@@ -3839,9 +3864,9 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 }
 
 .browserRuntimeNode {
-  width: 8.5rem;
-  height: 9.5rem;
-  padding: 1.1rem 0.9rem;
+  width: 9rem;
+  height: 8.75rem;
+  padding: 1.35rem 0.8rem 0.85rem;
   border-color: color-mix(in srgb, var(--dusky-accent) 24%, var(--dusky-hair));
   border-radius: 18px;
   box-shadow: 0 14px 34px rgb(20 22 19 / 7%);
@@ -3850,10 +3875,6 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 .browserRuntimeNode p,
 .browserRuntimeNode > span:not(.runtimePort, .runtimeLogPort) {
   font-size: 0.62rem;
-}
-
-.browserRuntimeNode h2 {
-  font-size: 1.22rem;
 }
 
 .runtimePort,
@@ -3923,8 +3944,9 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
 
 .providerActionField {
   position: relative;
-  padding: 2.2rem 0 0.35rem;
+  padding: 1.35rem 0 0.35rem;
   gap: clamp(0.9rem, 2vh, 1.3rem);
+  overflow: visible;
 }
 
 .providerActionPair {
@@ -4115,7 +4137,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
     height: auto;
     min-height: 0;
     margin: 0;
-    padding: 7.4rem 1rem 1.5rem;
+    padding: 9.4rem 1rem 1.5rem;
     cursor: default;
   }
   .canvasMeta {
@@ -4124,7 +4146,7 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
     left: 1rem;
   }
   .canvasControls {
-    top: 4.7rem;
+    top: 6.7rem;
     right: 1rem;
     display: flex;
   }
@@ -4172,12 +4194,21 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   }
   .topologyCanvas[data-layout] .browserRuntimeColumn {
     width: 100%;
-    height: 10.5rem;
+    height: auto;
     min-height: 10.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.4rem;
   }
   .browserRuntimeNode {
-    width: 7.5rem;
-    height: 7.5rem;
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 10rem;
+    height: 6.25rem;
+    flex: none;
+    transform: none;
   }
   .topologyCanvas[data-layout] .runtimePort[data-side="in"] {
     top: -0.34rem;
@@ -4192,8 +4223,21 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
     transform: translateX(-50%) rotate(90deg);
   }
   .technicalLog {
-    top: calc(50% + 4.5rem);
+    position: relative;
+    top: auto;
+    left: auto;
     width: 9.75rem;
+    flex: none;
+    transform: none;
+  }
+
+  .technicalLog[data-open] {
+    width: min(20rem, calc(100vw - 3.5rem));
+    transform: none;
+  }
+
+  .technicalLogEvents {
+    max-height: min(18rem, 48svh);
   }
   .topologyCanvas[data-layout] .providerActionField {
     width: 100%;
@@ -4269,4 +4313,1134 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   .displayGraphNode[data-mode="glasses"] {
     transition: none;
   }
+}
+
+/* This label is deliberately declared after the retained topology generations
+ * above. It is the provider-name squircle beside, not around, the inspect
+ * control. A dedicated class avoids escalating the shared .nodePill selector. */
+fieldset.providerActionPair {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.providerNodeLabel {
+  position: static;
+  max-width: min(24rem, calc(100% - 2.55rem));
+  min-height: 2.05rem;
+  padding: 0.2rem 0.58rem;
+  gap: 0.45rem;
+  transform: none;
+}
+
+.providerNodeLabel > span:first-child {
+  flex: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.providerSurfaceLabel {
+  min-height: 1.35rem;
+  padding-inline: 0.38rem 0.08rem;
+}
+
+.runtimeHeading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  text-align: center;
+}
+
+.browserRuntimeNode {
+  width: 10rem;
+  height: 6.25rem;
+  padding: 0.75rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.runtimeHeading h2 {
+  max-width: none;
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--dusky-ink-strong);
+}
+
+.runtimeState,
+.technicalLogHead > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  font-family: var(--dusky-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dusky-ink-faint);
+}
+
+.technicalLog {
+  box-sizing: border-box;
+  height: auto;
+  max-height: 11rem;
+  padding: 0.7rem 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--dusky-warn) 52%, var(--dusky-hair));
+  border-radius: 0;
+  background: var(--dusky-surface);
+  box-shadow: none;
+  transform: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: none;
+}
+
+.technicalLog[data-empty] {
+  height: 3.1rem;
+}
+
+.technicalLog[data-empty] .technicalLogHead {
+  margin-bottom: 0;
+}
+
+.technicalLog[data-empty] .technicalLogEvents {
+  display: none;
+}
+
+.technicalLogHead {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.technicalLogEvents li {
+  display: grid;
+  grid-template-columns: 4.75rem minmax(7.5rem, 0.8fr) minmax(10rem, 1.2fr);
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.48rem 0.15rem;
+  border: 0;
+  border-top: 1px solid var(--dusky-hair-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.technicalLogEvents li:first-child {
+  border-top-color: var(--dusky-hair);
+}
+
+.technicalLogEvents {
+  flex: none;
+  max-height: calc(11rem - 3.1rem);
+}
+
+.eventLabel,
+.technicalLogEvents li[data-kind] .eventLabel {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Runtime status and its history are one compact evidence block. The runtime
+ * remains the topology node; activity begins immediately below it instead of
+ * floating at the bottom of an otherwise empty column. */
+.graphNodes {
+  grid-template-columns: 23rem minmax(13rem, 14rem) minmax(30rem, 1fr);
+}
+
+.browserRuntimeColumn {
+  min-height: 18rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+
+.runtimePanel {
+  position: relative;
+  width: 18rem;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--dusky-accent) 24%, var(--dusky-hair));
+  border-radius: 20px;
+  background: var(--dusky-surface);
+  box-shadow: 0 12px 28px rgb(20 22 19 / 6%);
+}
+
+.browserRuntimeNode {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 100%;
+  max-width: none;
+  max-height: 12rem;
+  height: auto;
+  min-height: 4.75rem;
+  padding: 0.85rem 1.05rem;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--dusky-hair);
+  transform: none;
+}
+
+.runtimeHeading {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.runtimeSummary {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
+  text-align: right;
+}
+
+.runtimeSummary strong {
+  flex: none;
+  font-size: 1.75rem;
+}
+
+.runtimeSummary span {
+  max-width: 7.5rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLog {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0.72rem 1.05rem 0.88rem;
+  flex: none;
+  border-top: 0;
+  background: transparent;
+}
+
+.technicalLog[data-empty] {
+  height: auto;
+  min-height: 3.9rem;
+}
+
+.technicalLogHead {
+  align-items: baseline;
+  margin-bottom: 0;
+}
+
+.technicalLogHead h2 {
+  font-size: 0.92rem;
+  font-weight: 520;
+  line-height: 1.25;
+}
+
+.technicalLogHead > span {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLog:not([data-empty]) .technicalLogHead {
+  margin-bottom: 0.55rem;
+}
+
+.technicalLogEmpty {
+  margin: 0.35rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLogEvents {
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.technicalLogEvents li {
+  min-height: 3rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+}
+
+.actionEventIdentity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.technicalLogEvents .actionEventIdentity strong {
+  font-size: 0.82rem;
+  font-weight: 450;
+}
+
+.actionEventIdentity > span {
+  overflow: hidden;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dusky-ink-dim);
+}
+
+.eventStatus {
+  font-family: var(--dusky-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--dusky-warn);
+}
+
+.technicalLogEvents li[data-status="completed"] .eventStatus {
+  color: var(--dusky-ok);
+}
+
+.technicalLogEvents li[data-status="failed"] .eventStatus {
+  color: var(--dusky-stop);
+}
+
+.technicalLogEvents li[data-status="unknown"] .eventStatus {
+  color: var(--dusky-warn);
+}
+
+@media (max-width: 1200px) and (min-width: 841px) {
+  .runtimePanel {
+    width: 14rem;
+  }
+
+  .runtimeSummary span {
+    max-width: 5.75rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .browserRuntimeColumn {
+    min-height: 0;
+    gap: 0;
+  }
+
+  .runtimePanel {
+    width: min(20rem, 100%);
+  }
+
+  .browserRuntimeNode,
+  .technicalLog {
+    width: 100%;
+  }
+
+  .technicalLogEvents li {
+    padding-block: 0.55rem;
+  }
+}
+
+@media (min-width: 841px) {
+  .topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
+    gap: 0;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .runtimePanel {
+    width: min(34rem, calc(100vw - 5rem));
+  }
+}
+
+/* A resting provider is an identity and an explicit site control, not a
+ * misleading crop of an arbitrary point inside the provider document. The
+ * iframe remains mounted for WebMCP discovery and becomes visible only when
+ * that site is opened. */
+body
+  .topologyCanvas[data-testid="topology-canvas"]
+  .providerActionPair
+  .providerNode:not([data-inspected]) {
+  width: 100%;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  display: block;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.providerNode:not([data-inspected]) .providerNodeControls {
+  top: 50%;
+  width: max-content;
+  max-width: 100%;
+  gap: 0.35rem;
+}
+
+/* The compact website is the name-and-control squircle group, not the
+ * transparent full-width provider row that keeps the topology aligned. Its
+ * connection anchors therefore belong to this visible group. Expanded pages
+ * keep their anchors on the full provider surface. */
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  .providerNodeControls
+  [data-compact-port][data-provider-origin] {
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="horizontal"]
+  .providerNodeControls
+  [data-compact-port][data-action-end="provider"] {
+  top: 50%;
+  right: 0;
+  bottom: auto;
+  left: auto;
+  transform: translateY(-50%);
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  .providerNodeControls
+  [data-compact-port][data-provider-origin] {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"][data-layout="vertical"]
+  .providerNodeControls
+  [data-compact-port][data-action-end="provider"] {
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.providerNode:not([data-inspected]) .providerViewport {
+  position: absolute;
+  inset: auto;
+  width: 1px;
+  height: 1px;
+  clip-path: none;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.providerNode:not([data-inspected]) .frame {
+  width: 1px;
+  height: 1px;
+  transform: none;
+  pointer-events: none;
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"]
+  .providerActionPair
+  .providerNode[data-inspected] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.providerNode[data-inspected] .providerViewport,
+.providerNode[data-inspected] .frame {
+  border-radius: inherit;
+}
+
+@media (min-width: 841px) {
+  .topologyCanvas[data-layout="horizontal"] .technicalLog {
+    top: auto;
+    right: 0;
+    bottom: 0.35rem;
+    left: auto;
+    width: min(34rem, calc(100% + 22rem));
+  }
+}
+
+@media (max-width: 840px) {
+  .topologyCanvas[data-layout] .providerActionField {
+    padding-top: 1.35rem;
+  }
+
+  .technicalLog {
+    width: min(20rem, 100%);
+    height: auto;
+    max-height: 18rem;
+  }
+
+  .technicalLogHead {
+    display: flex;
+  }
+
+  .technicalLogEvents {
+    max-height: calc(18rem - 3.1rem);
+  }
+
+  .technicalLogEvents li {
+    display: flex;
+    align-items: stretch;
+    gap: 0.28rem;
+  }
+
+  .topologyCanvas[data-layout] .providerActionPair:not(:has(.providerNode[data-inspected])) {
+    grid-template-rows: 2.75rem auto;
+  }
+}
+
+/* Open websites keep their own row and remain independent: opening another
+ * website never closes or replaces this one. On a wide canvas the page and
+ * its actions stay side by side; narrow and top-to-bottom layouts stack them. */
+.providerActionField:has(.providerNode[data-inspected]) {
+  max-height: none;
+  justify-content: flex-start;
+  overflow: visible;
+}
+
+.providerActionPair:has(.providerNode[data-inspected]) {
+  --provider-inspect-height: clamp(15rem, 32svh, 19rem);
+
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: var(--provider-inspect-height);
+  width: 100%;
+  max-width: none;
+  height: var(--provider-inspect-height);
+  min-height: var(--provider-inspect-height);
+  grid-template-columns: minmax(18rem, 1.25fr) minmax(14rem, 0.75fr);
+  grid-template-rows: var(--provider-inspect-height);
+  align-self: flex-start;
+  align-items: start;
+  gap: 2rem;
+  animation-fill-mode: none;
+  scale: none;
+  translate: none;
+  transition: none;
+}
+
+.providerActionPair:has(.providerNode[data-inspected]) > .providerNode {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  height: var(--provider-inspect-height);
+}
+
+body
+  .topologyCanvas[data-testid="topology-canvas"]
+  .providerActionPair
+  .providerNode[data-inspected] {
+  position: relative;
+  z-index: 10;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  border-color: color-mix(in srgb, var(--dusky-accent) 44%, var(--dusky-hair));
+  background: var(--dusky-surface);
+  box-shadow: 0 18px 42px rgb(20 22 19 / 12%);
+  cursor: default;
+  touch-action: auto;
+}
+
+.providerActionPair:has(.providerNode[data-inspected]) .actionNode {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+  align-self: start;
+}
+
+.providerActionPair:has(.providerNode[data-inspected]) .providerActionPort {
+  top: 50%;
+  right: -0.34rem;
+  bottom: auto;
+  left: auto;
+  transform: translateY(-50%);
+}
+
+.providerActionPair:has(.providerNode[data-inspected]) .actionPort {
+  top: 50%;
+  right: auto;
+  left: -0.34rem;
+  transform: translateY(-50%);
+}
+
+@media (max-width: 840px) {
+  .providerActionPair:has(.providerNode[data-inspected]) {
+    flex-basis: calc(var(--provider-inspect-height) + 13.25rem);
+    height: calc(var(--provider-inspect-height) + 13.25rem);
+    min-height: calc(var(--provider-inspect-height) + 13.25rem);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--provider-inspect-height) 10.75rem;
+    gap: 2.5rem;
+  }
+
+  .providerActionPair:has(.providerNode[data-inspected]) > .providerNode,
+  .providerActionPair:has(.providerNode[data-inspected]) .actionNode {
+    grid-column: 1;
+  }
+
+  .providerActionPair:has(.providerNode[data-inspected]) .actionNode {
+    grid-row: 2;
+  }
+
+  .providerActionPair:has(.providerNode[data-inspected]) .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .providerActionPair:has(.providerNode[data-inspected]) .actionPort {
+    top: -0.34rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+}
+
+@media (min-width: 841px) {
+  .activePage:has(.topologyCanvas[data-layout="vertical"]) {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+  }
+
+  .topologyCanvas[data-layout="vertical"] {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+    overflow: visible;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .graphPlane {
+    position: relative;
+    inset: auto;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .graphNodes {
+    position: relative;
+    inset: auto;
+    width: auto;
+    min-height: calc(100svh - 11.5rem);
+    margin: 7.4rem 2rem 1.45rem;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .activePage:has(.topologyCanvas[data-inspecting]) {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+  }
+
+  .topologyCanvas[data-inspecting] {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+    overflow: visible;
+    animation-fill-mode: none;
+    scale: none;
+    translate: none;
+  }
+
+  .topologyCanvas[data-inspecting] .graphPlane {
+    position: relative;
+    inset: auto;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-inspecting] .graphNodes {
+    --topology-rest-height: calc(100svh - 11.5rem);
+
+    position: relative;
+    inset: auto;
+    min-height: var(--topology-rest-height);
+    width: auto;
+    margin: 7.4rem 2rem 1.45rem;
+    align-items: start;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-inspecting] .displayGraphNode {
+    align-self: start;
+    margin-top: max(0px, calc((var(--topology-rest-height) - var(--dusky-live)) / 2));
+  }
+
+  .topologyCanvas[data-inspecting] .browserRuntimeColumn {
+    height: var(--topology-rest-height);
+    min-height: var(--topology-rest-height);
+    align-self: start;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .browserRuntimeColumn {
+    height: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .runtimePanel,
+  .topologyCanvas[data-layout="vertical"] .browserRuntimeNode,
+  .topologyCanvas[data-layout="vertical"] .technicalLog {
+    position: relative;
+    top: auto;
+    left: auto;
+    flex: none;
+    transform: none;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .runtimePanel {
+    width: min(34rem, calc(100vw - 5rem));
+  }
+
+  .topologyCanvas[data-layout="vertical"] .browserRuntimeNode,
+  .topologyCanvas[data-layout="vertical"] .technicalLog {
+    width: 100%;
+  }
+
+  .topologyCanvas[data-layout="vertical"] .providerActionField {
+    width: min(60rem, 100%);
+    max-height: none;
+    padding-inline: 0;
+    display: flex;
+    flex-direction: column;
+    justify-self: center;
+    align-items: stretch;
+    gap: 1.5rem;
+    overflow: visible;
+  }
+
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:not(:has(.providerNode[data-inspected])) {
+    grid-template-rows: 2.75rem minmax(9.5rem, auto);
+  }
+
+  .topologyCanvas[data-layout="vertical"] .providerActionPair:has(.providerNode[data-inspected]) {
+    flex-basis: calc(var(--provider-inspect-height) + 13.25rem);
+    height: calc(var(--provider-inspect-height) + 13.25rem);
+    min-height: calc(var(--provider-inspect-height) + 13.25rem);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--provider-inspect-height) 10.75rem;
+    gap: 2.5rem;
+  }
+
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:has(.providerNode[data-inspected])
+    > .providerNode,
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:has(.providerNode[data-inspected])
+    .actionNode {
+    grid-column: 1;
+  }
+
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:has(.providerNode[data-inspected])
+    .actionNode {
+    grid-row: 2;
+  }
+
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:has(.providerNode[data-inspected])
+    .providerActionPort {
+    top: auto;
+    right: auto;
+    bottom: -0.34rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+
+  .topologyCanvas[data-layout="vertical"]
+    .providerActionPair:has(.providerNode[data-inspected])
+    .actionPort {
+    top: -0.34rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) rotate(90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .providerActionPair:has(.providerNode[data-inspected]),
+  .technicalLog {
+    transition: none;
+  }
+}
+
+/* Horizontal and vertical views use the same document-flow geometry. This
+ * prevents hiding the final page from snapping the graph back to an absolute,
+ * viewport-sized composition. */
+@media (min-width: 841px) {
+  .activePage:has(.topologyCanvas[data-layout="horizontal"]) {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+  }
+
+  .topologyCanvas[data-layout="horizontal"] {
+    height: auto;
+    min-height: calc(100svh - 4.25rem);
+    overflow: visible;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .graphPlane {
+    position: relative;
+    inset: auto;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .graphNodes {
+    position: relative;
+    inset: auto;
+    width: auto;
+    min-height: calc(100svh - 11.5rem);
+    margin: 7.4rem 2rem 1.45rem;
+    grid-template-columns: 23rem minmax(18rem, 20rem) minmax(30rem, 1fr);
+    align-items: center;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .displayGraphNode {
+    align-self: center;
+    margin-top: 0;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .browserRuntimeColumn {
+    width: 100%;
+    height: auto;
+    min-height: 18rem;
+    align-self: center;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .runtimePanel {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-width: 20rem;
+    transform: none;
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .browserRuntimeNode,
+  .topologyCanvas[data-layout="horizontal"] .technicalLog {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-width: none;
+    transform: none;
+  }
+}
+
+@media (min-width: 1320px) and (max-width: 1399px) {
+  .topologyCanvas[data-layout="horizontal"] .graphNodes {
+    grid-template-columns: 23rem minmax(16rem, 18rem) minmax(30rem, 1fr);
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .runtimePanel {
+    max-width: 18rem;
+  }
+}
+
+.actionCountLabel,
+.actionApproval {
+  font-size: 0.72rem;
+  letter-spacing: 0.035em;
+}
+
+.canvasControls button:disabled {
+  cursor: default;
+  color: var(--dusky-ink-dim);
+  opacity: 1;
+}
+
+/* Runtime status and execution history are related, but they are not the same
+ * object. Keep them in one topology column while giving each its own readable
+ * surface and a real gap between them. */
+.runtimePanel {
+  position: relative;
+  inset: auto;
+  width: 18rem;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.browserRuntimeNode,
+.technicalLog {
+  box-sizing: border-box;
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--dusky-accent) 24%, var(--dusky-hair));
+  border-radius: 20px;
+  background: var(--dusky-surface);
+  box-shadow: 0 10px 24px rgb(20 22 19 / 5%);
+  transform: none;
+}
+
+.browserRuntimeNode {
+  z-index: 1;
+  min-height: 5.4rem;
+  height: auto;
+  max-height: none;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.runtimeHeading {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+}
+
+.runtimeHeading h2,
+.technicalLogHead h2 {
+  margin: 0;
+  font-family: var(--dusky-sans);
+  font-size: 0.95rem;
+  font-weight: 520;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--dusky-ink-strong);
+}
+
+.runtimeState {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-family: var(--dusky-sans);
+  font-size: 0.76rem;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dusky-ink-dim);
+}
+
+.runtimeState::before {
+  width: 0.38rem;
+  height: 0.38rem;
+  flex: none;
+  border-radius: 50%;
+  background: currentcolor;
+  content: "";
+}
+
+.runtimeState[data-state="open"] {
+  color: var(--dusky-ok);
+}
+
+.runtimeState[data-state="offline"],
+.runtimeState[data-state="superseded"] {
+  color: var(--dusky-stop);
+}
+
+.runtimeSummary {
+  width: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.42rem;
+  font-family: var(--dusky-sans);
+  line-height: 1.3;
+  text-align: left;
+  text-transform: none;
+}
+
+.runtimeSummary strong {
+  flex: none;
+  font-family: var(--dusky-sans);
+  font-size: 0.9rem;
+  font-weight: 520;
+  letter-spacing: -0.01em;
+  color: var(--dusky-ink-strong);
+}
+
+.runtimeSummary span {
+  max-width: none;
+  font-family: var(--dusky-sans);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: inherit;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLog {
+  z-index: 0;
+  width: calc(100% - 2rem);
+  margin: -0.75rem auto 0;
+  min-height: 4.6rem;
+  height: auto;
+  max-height: 11rem;
+  padding: 1.35rem 0.9rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--dusky-accent) 18%, var(--dusky-hair));
+  border-top: 0;
+  border-radius: 0 0 18px 18px;
+  box-shadow: none;
+  transition: none;
+}
+
+.technicalLog[data-empty] {
+  min-height: 4.6rem;
+  height: auto;
+}
+
+.technicalLogHead {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+}
+
+.technicalLogHead > span {
+  font-family: var(--dusky-sans);
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLog:not([data-empty]) .technicalLogHead {
+  margin-bottom: 0.55rem;
+}
+
+.technicalLogEmpty {
+  margin: 0.4rem 0 0;
+  font-family: var(--dusky-sans);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--dusky-ink-dim);
+}
+
+.technicalLogEvents {
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.technicalLogEvents .actionEventIdentity strong {
+  font-family: var(--dusky-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.actionEventIdentity > span,
+.eventStatus {
+  font-family: var(--dusky-sans);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+@media (max-width: 1200px) and (min-width: 841px) {
+  .runtimePanel {
+    width: 14rem;
+  }
+}
+
+@media (max-width: 840px) {
+  .browserRuntimeColumn {
+    gap: 0;
+  }
+
+  .runtimePanel {
+    width: min(20rem, 100%);
+  }
+}
+
+@media (min-width: 841px) {
+  .topologyCanvas[data-layout="vertical"] .runtimePanel {
+    width: min(34rem, calc(100vw - 5rem));
+  }
+
+  .topologyCanvas[data-layout="horizontal"] .runtimePanel {
+    width: 100%;
+    max-width: 20rem;
+  }
+}
+
+@media (min-width: 1320px) and (max-width: 1399px) {
+  .topologyCanvas[data-layout="horizontal"] .runtimePanel {
+    max-width: 18rem;
+  }
+}
+
+/* The Display has no trailing control while connected, so it must not inherit
+ * the provider pill's asymmetric control padding. Pin both content centers to
+ * the same point and use a controlled line box for optical vertical balance. */
+.displayNodeLabel {
+  box-sizing: border-box;
+  height: 2.05rem;
+  min-height: 2.05rem;
+  padding-block: 0;
+  padding-inline: 0.78rem;
+  justify-content: center;
+}
+
+.displayNodeLabel > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
 }

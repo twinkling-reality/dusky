@@ -27,6 +27,13 @@ import { duskyTools } from "./duskyTools.js";
  */
 export type LinkState = "connecting" | "open" | "reconnecting" | "offline" | "superseded";
 
+export interface RuntimeAction {
+  id: string;
+  origin: string;
+  toolName: string;
+  status: "running" | "completed" | "failed" | "unknown";
+}
+
 export interface ConsoleLink {
   link: LinkState;
   webmcp: boolean;
@@ -65,7 +72,8 @@ export interface ConsoleLink {
    * having offered anything.
    */
   problem: string | null;
-  activity: string[];
+  /** User-meaningful provider invocations, correlated by relay request id. */
+  recentActions: RuntimeAction[];
   /** Whether Dusky's own tools are registered for an agent in this browser. */
   provides: boolean;
 }
@@ -142,7 +150,7 @@ export function useConsoleLink(
     setQuiet(true);
     setProblem(reason);
   }, []);
-  const [activity, setActivity] = useState<string[]>([]);
+  const [recentActions, setRecentActions] = useState<RuntimeAction[]>([]);
   const webmcp = isWebMcpAvailable();
 
   const [provides, setProvides] = useState(false);
@@ -150,10 +158,6 @@ export function useConsoleLink(
   const ws = useRef<WebSocket | null>(null);
   /** Agent tool calls waiting on the relay, keyed by request id. */
   const waiting = useRef(new Map<string, (r: AgentReply) => void>());
-
-  const note = useCallback((line: string) => {
-    setActivity((a) => [...a.slice(-60), line]);
-  }, []);
 
   const origins = useMemo(() => sites.map((s) => s.origin), [sites]);
 
@@ -210,6 +214,7 @@ export function useConsoleLink(
     setTools([]);
     setQuiet(false);
     setProblem(null);
+    setRecentActions([]);
     clearTimeout(emptyFor.current);
 
     const connect = () => {
@@ -235,6 +240,8 @@ export function useConsoleLink(
 
       sock.onmessage = (ev) => {
         void (async () => {
+          const isCurrent = () => !disposed && ws.current === sock;
+          if (!isCurrent()) return;
           let msg: ServerToConsole;
           try {
             msg = JSON.parse(String(ev.data)) as ServerToConsole;
@@ -251,6 +258,13 @@ export function useConsoleLink(
           }
           if (msg.t === "cancelInvoke") {
             invocations.get(msg.requestId)?.abort();
+            setRecentActions((current) =>
+              current.map((action) =>
+                action.id === msg.requestId && action.status === "running"
+                  ? { ...action, status: "unknown" }
+                  : action,
+              ),
+            );
             return;
           }
 
@@ -260,22 +274,19 @@ export function useConsoleLink(
           if (msg.t === "discover") {
             try {
               const found = await b.discover();
+              if (!isCurrent()) return;
               setTools(found);
               sawDiscovery();
-              const from = new Set(found.map((t) => t.origin)).size;
-              note(
-                `getTools({fromOrigins}) -> ${found.length} tools from ${from} of ${origins.length}`,
-              );
               send({ t: "tools", requestId: msg.requestId, tools: found });
             } catch (err) {
-              // The reason used to go only into this panel's activity log,
-              // which is on a screen the wearer is not looking at, while the
-              // glasses were told the site had nothing to offer.
+              if (!isCurrent()) return;
+              // Discovery failures belong in the provider state, not in the
+              // action log. The wearer still needs the same reason on the
+              // glasses instead of an invented empty-site answer.
               const reason = errText(err);
-              // Answered, badly. Still an answer: the log and the lens both
-              // carry the reason, and the list must stop saying "checking".
+              // Answered, badly. Still an answer: the provider state and the
+              // lens both carry the reason, and the list must stop checking.
               gaveUp(reason);
-              note(reason);
               send({ t: "tools", requestId: msg.requestId, tools: [], error: reason });
             }
             return;
@@ -285,7 +296,15 @@ export function useConsoleLink(
             const args = (msg.args ?? {}) as Record<string, unknown>;
             const controller = new AbortController();
             invocations.set(msg.requestId, controller);
-            note(`executeTool(${msg.toolName}, ${JSON.stringify(args)})`);
+            setRecentActions((current) => [
+              ...current.filter((action) => action.id !== msg.requestId).slice(-19),
+              {
+                id: msg.requestId,
+                origin: msg.origin,
+                toolName: msg.toolName,
+                status: "running",
+              },
+            ]);
             try {
               const value = await b.invoke(
                 msg.origin,
@@ -294,10 +313,24 @@ export function useConsoleLink(
                 msg.expectedTool,
                 controller.signal,
               );
-              note(`  -> ${value.length > 120 ? `${value.slice(0, 117)}...` : value}`);
+              if (!isCurrent()) return;
+              setRecentActions((current) =>
+                current.map((action) =>
+                  action.id === msg.requestId && action.status === "running"
+                    ? { ...action, status: "completed" }
+                    : action,
+                ),
+              );
               send({ t: "invoked", requestId: msg.requestId, ok: true, value });
             } catch (err) {
-              note(`  -> failed: ${errText(err)}`);
+              if (!isCurrent()) return;
+              setRecentActions((current) =>
+                current.map((action) =>
+                  action.id === msg.requestId && action.status === "running"
+                    ? { ...action, status: "failed" }
+                    : action,
+                ),
+              );
               send({ t: "invoked", requestId: msg.requestId, ok: false, error: errText(err) });
             } finally {
               invocations.delete(msg.requestId);
@@ -345,7 +378,6 @@ export function useConsoleLink(
       if (settle !== undefined) clearTimeout(settle);
       settle = setTimeout(() => {
         settle = undefined;
-        note("ontoolchange settled, re-discovering");
         send({ t: "toolsChanged" });
       }, TOOLS_SETTLE_MS);
     });
@@ -361,7 +393,7 @@ export function useConsoleLink(
       ws.current?.close();
       ws.current = null;
     };
-  }, [relayUrl, sessionId, sites, origins, ready, note, send, sawDiscovery, gaveUp]);
+  }, [relayUrl, sessionId, sites, ready, send, sawDiscovery, gaveUp]);
 
   /**
    * Register Dusky's own tools, so an agent in this browser can drive the
@@ -381,21 +413,20 @@ export function useConsoleLink(
   useEffect(() => {
     if (!ready || !isWebMcpAvailable()) return;
     const lifetime = new AbortController();
-    registerTools(duskyTools({ ask, note }), { signal: lifetime.signal })
+    registerTools(duskyTools({ ask }), { signal: lifetime.signal })
       .then(() => {
         if (lifetime.signal.aborted) return;
         setProvides(true);
-        note("registered Dusky's own 4 tools for this browser's agent");
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (lifetime.signal.aborted) return;
-        note(`could not register Dusky's tools: ${errText(err)}`);
+        setProvides(false);
       });
     return () => {
       lifetime.abort();
       setProvides(false);
     };
-  }, [ready, ask, note]);
+  }, [ready, ask]);
 
   /**
    * A site has answered for itself, or discovery has stopped answering at all.
@@ -411,7 +442,7 @@ export function useConsoleLink(
     [quiet, tools],
   );
 
-  return { link, webmcp, tools, settled, problem, activity, provides };
+  return { link, webmcp, tools, settled, problem, recentActions, provides };
 }
 
 function errText(e: unknown): string {

@@ -31,6 +31,8 @@ export interface Source {
   url: string;
   /** Optional presentation URL for the console preview. It must keep the same origin as `url`. */
   previewUrl?: string;
+  /** Whether this source is a demo fixture rather than a user-supplied website. */
+  sample?: boolean;
   /** One line about what makes this site different, for the console UI. */
   blurb: string;
 }
@@ -47,6 +49,7 @@ export const SOURCES: readonly Source[] = [
     name: "Verdant Market",
     url: MARKET_URL,
     previewUrl: fixturePreview(MARKET_URL),
+    sample: true,
     blurb: "A shop. Four tools, every parameter a bare string, results about carts.",
   },
   {
@@ -54,6 +57,7 @@ export const SOURCES: readonly Source[] = [
     name: "Amber & Oak",
     url: RESERVATIONS_URL,
     previewUrl: fixturePreview(RESERVATIONS_URL),
+    sample: true,
     blurb: "A restaurant. Three tools, enums and a boolean, results about bookings.",
   },
   {
@@ -61,6 +65,7 @@ export const SOURCES: readonly Source[] = [
     name: "Northstar Dispatch",
     url: DISPATCH_URL,
     previewUrl: fixturePreview(DISPATCH_URL),
+    sample: true,
     blurb: "A communications desk. Four tools, contact lookups, drafts, and sent messages.",
   },
 ];

@@ -34,8 +34,6 @@ import type { ProvidedTool } from "@dusky/webmcp";
 export interface DuskyToolDeps {
   /** Forwards to the relay, which owns the session state and the rules. */
   ask: (request: AgentRequest) => Promise<AgentReply>;
-  /** Local activity log, so a human watching the console sees agent traffic. */
-  note: (line: string) => void;
 }
 
 /**
@@ -48,11 +46,9 @@ function reply(r: AgentReply): string {
   return JSON.stringify(r.ok ? { ok: true, ...r.value } : { ok: false, error: r.error });
 }
 
-export function duskyTools({ ask, note }: DuskyToolDeps): ProvidedTool[] {
+export function duskyTools({ ask }: DuskyToolDeps): ProvidedTool[] {
   const run = async (request: AgentRequest): Promise<string> => {
-    note(`agent -> ${request.op}${request.op === "task" ? `(${request.text})` : "()"}`);
     const r = await ask(request);
-    note(`  <- ${r.ok ? "ok" : `refused: ${r.error}`}`);
     return reply(r);
   };
 

@@ -39,6 +39,12 @@
   --dusky-warn: #86601d;
   --dusky-stop: #a8443a;
 
+  /* Scrollbars stay subordinate to the page they belong to. The transparent
+     track lets each surface supply its own ground instead of introducing the
+     browser's default white strip inside embedded provider pages. */
+  --dusky-scroll-thumb: color-mix(in srgb, var(--dusky-ink-faint) 58%, var(--dusky-surface));
+  --dusky-scroll-thumb-hover: color-mix(in srgb, var(--dusky-ink-dim) 68%, var(--dusky-surface));
+
   /* Display, never themed */
   --emit-ground: #000000;
   /*
@@ -140,4 +146,41 @@
   --dusky-ease: cubic-bezier(0.2, 0, 0, 1);
   --dusky-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
   --dusky-ease-route: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--dusky-scroll-thumb) transparent;
+}
+
+/* Chromium lets the pseudo-elements set an exact six-pixel measure. Its
+   standardized `thin` keyword is wider and overrides that measure, so retain
+   the standard properties as the Firefox fallback only. */
+@supports selector(*::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--dusky-scroll-thumb);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--dusky-scroll-thumb-hover);
+  background-clip: padding-box;
 }

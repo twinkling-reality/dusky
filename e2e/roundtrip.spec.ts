@@ -52,8 +52,10 @@ test("console discovers the partner site's tools cross-origin", async ({ page })
   const tools = discovered(page);
   await expect(tools.getByText("Search catalog")).toBeVisible();
   await expect(tools.getByText("Add to cart")).toBeVisible();
-  await page.getByRole("button", { name: "Technical log" }).click();
-  await expect(page.getByText("11 tools available").first()).toBeVisible();
+  await expect(tools.locator("li")).toHaveCount(11);
+  await expect(page.getByRole("region", { name: "Technical log" })).toBeVisible();
+  await expect(page.getByText("11 actions", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("across 3 websites", { exact: true }).first()).toBeVisible();
 });
 
 test("a genuinely new runtime provider works without a rebuild or adapter", async ({ browser }) => {
@@ -109,9 +111,9 @@ test("a genuinely new runtime provider works without a rebuild or adapter", asyn
 test("policy classifies discovered tools without any site-specific rule", async ({ page }) => {
   await pairConsole(page);
   const row = discovered(page).locator("li", { hasText: "Add to cart" }).first();
-  await expect(row.getByText("wearer confirms", { exact: true })).toBeVisible();
+  await expect(row.getByText("approval required", { exact: true })).toBeVisible();
   const readRow = discovered(page).locator("li", { hasText: "Search catalog" }).first();
-  await expect(readRow.getByText("runs directly", { exact: true })).toBeVisible();
+  await expect(readRow.getByText("no approval needed", { exact: true })).toBeVisible();
 });
 
 test("a gesture on the Display runs a real tool and changes the site", async ({ browser }) => {
@@ -162,6 +164,26 @@ test("a gesture on the Display runs a real tool and changes the site", async ({ 
   await expect(displayPage.getByText("Cart total")).toBeVisible();
   await expect(displayPage.getByText("$4.29")).toBeVisible();
 
+  // One browser invocation is one Technical log row. Settlement updates that
+  // row in place instead of appending a detached result, and the row keeps the
+  // provider origin that owns the live handle.
+  const technicalLog = consolePage.getByRole("region", { name: "Technical log" });
+  const logRows = technicalLog.getByRole("listitem");
+  await expect(logRows).toHaveCount(1);
+  await expect(logRows.first()).toHaveAttribute("data-status", "completed");
+  await expect(logRows.first()).toHaveAttribute("data-tool-name", "add_to_cart");
+  await expect(logRows.first()).toContainText("Add to cart");
+  await expect(logRows.first()).toContainText("Verdant Market");
+  await expect(logRows.first()).toContainText("Returned");
+  await expect(technicalLog.getByText("1 action", { exact: true })).toBeVisible();
+  await expect(technicalLog).not.toContainText(
+    /registry|discovery|tools changed|provider origins|localhost/i,
+  );
+
+  await consolePage.locator("[data-runtime-panel]").screenshot({
+    path: "test-results/console-runtime-log-component.png",
+  });
+  await consolePage.screenshot({ path: "test-results/console-runtime-log.png", fullPage: true });
   await displayPage.screenshot({ path: "test-results/display-result.png" });
 
   await ctx.close();
@@ -208,6 +230,14 @@ test("a second tool call sees what the first one did", async ({ browser }) => {
   // add_to_cart put there a moment ago.
   await expect(displayPage.getByText("Organic oat milk")).toBeVisible();
   await expect(displayPage.getByText("Total")).toBeVisible();
+
+  const logRows = consolePage.getByRole("region", { name: "Technical log" }).getByRole("listitem");
+  await expect(logRows).toHaveCount(2);
+  await expect(logRows.filter({ hasText: "Add to cart" })).toContainText("Returned");
+  await expect(logRows.filter({ hasText: "Review cart" })).toContainText("Returned");
+  await consolePage.locator("[data-runtime-panel]").screenshot({
+    path: "test-results/console-runtime-log-multiple.png",
+  });
 
   await ctx.close();
 });

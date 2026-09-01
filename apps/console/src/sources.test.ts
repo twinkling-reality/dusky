@@ -113,7 +113,7 @@ describe("which sites a window holds", () => {
    */
   it("tells Dusky nothing about a site beyond what to print and what to load", () => {
     for (const s of SOURCES) {
-      expect(Object.keys(s).sort()).toEqual(["blurb", "id", "name", "previewUrl", "url"]);
+      expect(Object.keys(s).sort()).toEqual(["blurb", "id", "name", "previewUrl", "sample", "url"]);
       expect(new URL(s.previewUrl ?? s.url).origin).toBe(originOf(s));
     }
   });
