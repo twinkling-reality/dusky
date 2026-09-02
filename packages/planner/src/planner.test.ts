@@ -505,16 +505,32 @@ describe("proposing a resolver, which runs with no human in front of it", () => 
     expect(plan).toEqual({ name: toolId(SEARCH), args: { query: "oat milk" } });
   });
 
-  it("refuses a resolver after filtering leaves a required argument missing", async () => {
+  /*
+   * Incomplete is not wrong. Discarding this proposal used to discard the plan
+   * that needed it, so a wearer lost the rest of a task they had said out loud
+   * because one argument of a LOOKUP was unstated. It survives as partial and
+   * the session collects the remainder from the person standing in front of it.
+   */
+  it("keeps a resolver whose required argument was never stated, marked partial", async () => {
     const answer = say("search_products", '{"query":{"nested":"not displayable"}}');
     const { client } = fakeClient({ fast: answer, careful: answer });
     const { events, onPlan } = record();
     const p = new ModelPlanner({ client, onPlan });
 
-    expect(await p.planResolver("product_id", ADD, [SEARCH], "add oat milk")).toBeNull();
-    expect(events).toContainEqual(
-      expect.objectContaining({ kind: "rejected", reason: "missing required arguments" }),
-    );
+    expect(await p.planResolver("product_id", ADD, [SEARCH], "add oat milk")).toEqual({
+      name: toolId(SEARCH),
+      args: {},
+    });
+    expect(events).toContainEqual(expect.objectContaining({ kind: "resolved", partial: true }));
+  });
+
+  it("does not mark a complete resolver partial", async () => {
+    const { client } = fakeClient({ fast: say("search_products", '{"query":"oat milk"}') });
+    const { events, onPlan } = record();
+    const p = new ModelPlanner({ client, onPlan });
+
+    await p.planResolver("product_id", ADD, [SEARCH], "add oat milk");
+    expect(events.some((e) => e.kind === "resolved" && !("partial" in e))).toBe(true);
   });
 
   it("refuses a consequential tool even when the caller listed it as read-only", async () => {

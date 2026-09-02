@@ -257,6 +257,17 @@ interface TaskOutcome {
 const MAX_TASK_STEPS = 4;
 
 /**
+ * How many lookups one task may promote into steps of its own.
+ *
+ * A promoted lookup is parameterised like any other tool, so it can reach the
+ * same branch that promoted it. One is what every observed shape needs: a
+ * booking that needs a slot, a cart that needs a product. Beyond that a wearer
+ * is answering questions for a task they no longer recognise, and abandoning
+ * the lookup for the ordinary parameter frame is the more honest failure.
+ */
+const MAX_RESOLVER_PROMOTIONS = 1;
+
+/**
  * A single wearer's task, as a state machine.
  *
  * `handle(choiceId)` is the only mutating entry point besides `start`, which
@@ -291,6 +302,15 @@ export class Session {
   private intent = "";
   /** Steps after the one currently on screen. */
   private queued: PlannedStep[] = [];
+  /**
+   * How many lookups this task has promoted to real steps.
+   *
+   * Bounded because a promoted resolver is itself parameterised, so it can
+   * reach this same branch and ask for a lookup of its own. One is enough for
+   * every shape the fixtures and the live providers produce, and an unbounded
+   * chain is a wearer answering questions for a task they no longer recognise.
+   */
+  private promotions = 0;
   private taskStep = 0;
   private taskTotal = 0;
   /** The only prior result material allowed to survive between task steps. */
@@ -1175,6 +1195,7 @@ export class Session {
     this.queued = [];
     this.taskStep = 0;
     this.taskTotal = 0;
+    this.promotions = 0;
     this.retained = [];
     this.transfer = null;
     this.outcomes = [];
@@ -1361,7 +1382,51 @@ export class Session {
             });
           } else if (resolver) {
             const args = declaredArgs(resolver, plan.args ?? {});
-            if (nextMissingParam(resolver, args)) {
+            const resolverMissing = nextMissingParam(resolver, args);
+            /*
+             * The lookup is sound but the wearer never stated one of ITS
+             * required arguments. This used to end the plan: the resolver was
+             * dropped, no candidates came back, and the wearer got a free-text
+             * field for an opaque id while the rest of their task disappeared
+             * without a word.
+             *
+             * They are standing in front of the panel and can answer in one
+             * press, so the lookup is promoted to an ordinary step. The tool
+             * being parameterised goes back on the queue ahead of everything
+             * else, the lookup takes its place, and its own arguments are
+             * collected on the same deterministic frames as any other
+             * parameter. An enum renders as buttons; nothing is invented.
+             *
+             * Two properties come free. A queue that is no longer empty means
+             * the lookup's result is RETAINED, so the argument that started
+             * all this is then offered as bounded projections rather than
+             * typed blind. And the one path that used to run with no human in
+             * front of it now has one.
+             */
+            if (resolverMissing && this.promotions < MAX_RESOLVER_PROMOTIONS) {
+              this.promotions += 1;
+              this.audit({
+                kind: "plan",
+                toolName: resolver.name,
+                origin: resolver.origin,
+                detail: {
+                  path: "planResolver",
+                  accepted: true,
+                  promoted: true,
+                  awaiting: resolverMissing.name,
+                  arguments: argumentAudit(args),
+                },
+              });
+              this.queued.unshift({
+                tool: p.tool,
+                version: descriptorKey(p.tool),
+                args: { ...p.args },
+              });
+              this.taskTotal += 1;
+              p.awaiting = undefined;
+              return this.startStep(resolver, args);
+            }
+            if (resolverMissing) {
               this.audit({
                 kind: "plan",
                 toolName: resolver.name,

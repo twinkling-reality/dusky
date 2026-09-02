@@ -2492,3 +2492,170 @@ describe("consented result transfer between task steps", () => {
     expect(written).toContain('"sourceField":"#field"');
   });
 });
+
+/**
+ * The failure this was written for, worn, on 2026-09-02.
+ *
+ * "Reserve a table for four, then send the reservation details to Dana" formed
+ * a plan, needed `slot_id`, correctly chose `find_times` to look it up, and
+ * threw the lookup away because the wearer had never said which day. What
+ * reached the lens was a free-text field for an opaque slot id, and the
+ * send-to-Dana half of their own sentence had gone without a word about it.
+ *
+ * A wearer who can answer in one press should be asked.
+ */
+describe("a lookup missing a required argument of its own", () => {
+  const TABLES = "https://tables.test";
+  const BOOK_SLOT = tool({
+    name: "book_table",
+    origin: TABLES,
+    description: "Hold a table under a booking.",
+    inputSchema: {
+      type: "object",
+      properties: { slot_id: { type: "string", description: "Which table?" } },
+      required: ["slot_id"],
+    },
+  });
+  const FIND_TIMES = tool({
+    name: "find_times",
+    origin: TABLES,
+    description: "Look up open tables on a given day. Holds nothing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          enum: ["today", "tomorrow"],
+          description: "Which day?",
+        },
+      },
+      required: ["date"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  const tableRunner = () => {
+    const calls: string[] = [];
+    return {
+      calls,
+      discover: async () => [FIND_TIMES, BOOK_SLOT],
+      invoke: async (_origin: string, name: string) => {
+        calls.push(name);
+        if (name === "find_times") {
+          return JSON.stringify({
+            results: [
+              { id: "ao-m-1800", name: "6:00 PM" },
+              { id: "ao-m-1930", name: "7:30 PM" },
+            ],
+          });
+        }
+        return JSON.stringify({ ok: true, reservation_id: "AO-1" });
+      },
+    } as unknown as ToolRunner & { calls: string[] };
+  };
+
+  const promoting = (): Planner => ({
+    pickTool: async () => ({ name: "book_table", args: {} }),
+    planResolver: async () => ({ name: "find_times", args: {} }),
+  });
+
+  it("asks the wearer for it rather than abandoning the plan", async () => {
+    const runner = tableRunner();
+    const s = new Session({ source: "Tables", runner, planner: promoting() });
+    await s.start();
+    const frame = await s.submitText("reserve a table for four");
+
+    // Nothing was invoked: the lookup cannot run until a person answers it.
+    expect(runner.calls).toEqual([]);
+    if (frame.kind !== "choose") throw new Error("expected the day to be asked");
+    // The day is an enum, so it is buttons. Not a composer, and above all not
+    // a free-text field for a slot id nobody could guess.
+    expect(frame.choices.map((c) => c.label)).toEqual(
+      expect.arrayContaining(["today", "tomorrow"]),
+    );
+    expect(frame.choices.map((c) => c.id)).not.toContain("__compose");
+  });
+
+  it("runs the lookup once answered and offers its results for the argument that needed it", async () => {
+    const runner = tableRunner();
+    const s = new Session({ source: "Tables", runner, planner: promoting() });
+    await s.start();
+    const asked = await s.submitText("reserve a table for four");
+    if (asked.kind !== "choose") throw new Error("expected the day to be asked");
+    const tomorrow = asked.choices.find((c) => c.label === "tomorrow");
+    if (!tomorrow) throw new Error("expected an enum choice for the day");
+
+    const found = await s.handle(tomorrow.id);
+
+    // The promoted lookup is an ordinary step, so it reports like one and the
+    // wearer advances to the action it was looking something up FOR.
+    expect(runner.calls).toEqual(["find_times"]);
+    if (found.kind !== "result") throw new Error("expected the lookup's own result");
+    expect(found.choices.map((c) => c.id)).toContain("__next");
+
+    const slots = await s.handle("__next");
+
+    // The argument that started all this is now a list of real slots, offered
+    // from the retained result. Nothing was invoked to redraw it, and nobody
+    // had to spell `ao-m-1930`.
+    expect(runner.calls).toEqual(["find_times"]);
+    if (slots.kind !== "choose") throw new Error("expected the slots as choices");
+    expect(slots.choices.map((c) => c.id)).not.toContain("__compose");
+    expect(JSON.stringify(slots.choices)).toContain("6:00 PM");
+  });
+
+  /*
+   * The half of the sentence that used to disappear.
+   *
+   * Promotion puts the lookup in FRONT of the queue rather than replacing it,
+   * so "then send the details to Dana" is still there to run. A wearer who
+   * asked for two things gets two things.
+   */
+  it("keeps the rest of the task the wearer asked for", async () => {
+    const MESSAGES = "https://messages.test";
+    const SEND = tool({
+      name: "send_message",
+      origin: MESSAGES,
+      description: "Send a message to a contact.",
+      inputSchema: {
+        type: "object",
+        properties: { body: { type: "string", description: "What should it say?" } },
+        required: ["body"],
+      },
+    });
+    const calls: string[] = [];
+    const runner = {
+      calls,
+      discover: async () => [FIND_TIMES, BOOK_SLOT, SEND],
+      invoke: async (_origin: string, name: string) => {
+        calls.push(name);
+        if (name === "find_times") {
+          return JSON.stringify({ results: [{ id: "ao-m-1800", name: "6:00 PM" }] });
+        }
+        return JSON.stringify({ ok: true });
+      },
+    } as unknown as ToolRunner & { calls: string[] };
+    const planner: Planner = {
+      pickTool: async () => ({ name: "book_table", args: {} }),
+      pickTools: async () => [
+        { name: "book_table", args: {} },
+        { name: "send_message", args: {} },
+      ],
+      planResolver: async () => ({ name: "find_times", args: {} }),
+    };
+
+    const s = new Session({ source: "Tables", runner, planner });
+    await s.start();
+    const asked = await s.submitText("reserve a table for four, then send the details to Dana");
+    if (asked.kind !== "choose") throw new Error("expected the day to be asked");
+    const day = asked.choices.find((c) => c.label === "tomorrow");
+    if (!day) throw new Error("expected an enum choice for the day");
+
+    const found = await s.handle(day.id);
+
+    // Two steps were planned and one lookup was promoted, so three remain
+    // accounted for. Before this, the send step went with the discarded plan.
+    if (found.kind !== "result") throw new Error("expected the lookup's own result");
+    expect(found.choices.map((c) => c.meta)).toContain("2/3");
+  });
+});

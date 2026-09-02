@@ -111,6 +111,11 @@ export type PlanEvent =
       droppedArgCount: number;
       step?: number;
       total?: number;
+      /**
+       * The proposal is sound but incomplete: a required argument was never
+       * stated, so a wearer has to supply it before this can run.
+       */
+      partial?: boolean;
       ms: number;
     }
   | {
@@ -743,17 +748,24 @@ export class ModelPlanner {
     }
 
     const { args, dropped } = readArgs(decision.arguments, check.tool);
-    if (path === "planResolver" && nextMissingParam(check.tool, args)) {
-      this.emit({
-        kind: "rejected",
-        path,
-        tier,
-        tool: check.tool.name,
-        reason: "missing required arguments",
-        ms,
-      });
-      return null;
-    }
+    /*
+     * A resolver missing a required argument used to be discarded, and the
+     * whole plan went with it. Worn, "reserve a table for four, then send the
+     * details to Dana" formed a plan, needed `slot_id`, correctly chose
+     * `find_times` to look it up, and threw that away because the wearer had
+     * not said which day. They landed in a free-text field for an opaque slot
+     * id, and the send-to-Dana half of their own sentence had silently gone.
+     *
+     * Incomplete is not the same as wrong. The proposal survives as PARTIAL
+     * and `packages/session` promotes it to an ordinary step, so the wearer
+     * answers the unstated argument on the same deterministic frames as any
+     * other parameter. That also puts a human in front of the one path that
+     * used to run without one.
+     *
+     * Nothing here fills the gap. An unstated argument stays unstated until a
+     * person supplies it, which is the whole point.
+     */
+    const partial = path === "planResolver" && nextMissingParam(check.tool, args) !== null;
     this.emit({
       kind: "resolved",
       path,
@@ -761,6 +773,7 @@ export class ModelPlanner {
       tool: check.tool.name,
       confidence: decision.confidence,
       droppedArgCount: dropped.length,
+      ...(partial ? { partial: true } : {}),
       ms,
     });
     return {
