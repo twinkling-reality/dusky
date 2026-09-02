@@ -322,7 +322,7 @@ describe("the resolver's budget covers deciding, not just looking up", () => {
     await s.start();
 
     const p = s.submitText("some oat milk");
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(10_500);
     const f = await p;
 
     // The composer, which is where they were always going to end up.
@@ -352,7 +352,7 @@ describe("the resolver's budget covers deciding, not just looking up", () => {
     });
     await s.start();
     const p = s.submitText("some oat milk");
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(10_500);
     await p;
 
     // A wearer sent to the composer because a model was slow must be
@@ -379,8 +379,8 @@ describe("the resolver's budget covers deciding, not just looking up", () => {
         return "{}";
       },
     });
-    // Deciding eats 2s of the 6s attempt, so the lookup must get about 4s,
-    // never a fresh 6s of its own.
+    // Deciding eats 2s of the 14s attempt, so the lookup must get about 12s,
+    // never a fresh 14s of its own.
     const dawdling: Planner = {
       pickTool: async () => ({ name: "add_to_cart", args: {} }),
       planResolver: () =>
@@ -391,10 +391,10 @@ describe("the resolver's budget covers deciding, not just looking up", () => {
     const s = new Session({ source: "Shop", runner, planner: dawdling });
     await s.start();
     const p = s.submitText("some oat milk");
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(16_000);
     await p;
 
-    expect(invokeBudgetSeen).toBeLessThanOrEqual(4_100);
+    expect(invokeBudgetSeen).toBeLessThanOrEqual(12_100);
     expect(invokeBudgetSeen).toBeGreaterThan(0);
     vi.useRealTimers();
   });

@@ -169,7 +169,7 @@ const UNHEARD = "Could not tell what that meant. Choose an action";
  * they were always going to get. Nearly five seconds, outside the budget whose
  * comment forbids exactly that, on the most common action in the product.
  */
-const RESOLVER_BUDGET_MS = 6_000;
+const RESOLVER_BUDGET_MS = 14_000;
 
 /**
  * How much of that a planner may spend DECIDING what to look up.
@@ -184,11 +184,33 @@ const RESOLVER_BUDGET_MS = 6_000;
  * watch, because the composer was always the fallback and every extra second
  * of shimmer is a second they could have been writing.
  *
- * `search_products` is the case that sets the number. Its parameter is a
- * search query, so no upstream tool can ever supply one, and no amount of
- * model time changes that. The first tier reached that answer in 1138ms.
+ * `search_products` was the case that set the old number, 2500ms. Its
+ * parameter is a search query, so no upstream tool can ever supply one, and no
+ * amount of model time changes that. The first tier reached that answer in
+ * 1138ms, and waiting longer bought nothing.
+ *
+ * That generalised one parameter to all of them, and it was wrong.
+ *
+ * For a query the composer IS the answer, so giving up early is a kindness.
+ * For an opaque identifier it is a dead end: nobody types `ao-m-1930` or a
+ * contact id from memory, so giving up early hands the wearer a field they
+ * cannot fill and calls it a fallback.
+ *
+ * Worse, 2500 was shorter than the fast tier's OWN ceiling of 3000, so a
+ * planner that used its allowance was guaranteed to lose a race this side had
+ * set up. Measured on hardware across three runs: the session recorded
+ * `undecided` at 2502ms, the fast tier timed out at 3001ms, and the careful
+ * tier answered correctly at 4485ms and 5334ms with nobody left to tell.
+ *
+ * So this now matches the planner's own budget. A session must not be stricter
+ * than the planner it is waiting on: every millisecond between the two is an
+ * answer that gets computed, paid for, and thrown away.
+ *
+ * The wearer does not usually pay this. A fast tier that answers is taken
+ * immediately and unescalated, which is the common case at roughly 1.5s. This
+ * ceiling is for the tail.
  */
-const RESOLVER_PLAN_BUDGET_MS = 2_500;
+const RESOLVER_PLAN_BUDGET_MS = 10_000;
 
 /* ------------------------------------------------------------------ state */
 
