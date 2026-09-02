@@ -30,10 +30,12 @@ services:
       - key: DUSKY_PLANNER
         value: "on"
       # Provider selection is explicit. Do not infer it from the keys present.
-      # The official deployment keeps its known-working Anthropic profile until
-      # an OpenAI credential is configured and verified there.
+      # The official deployment uses the OpenAI credential stored in Render.
       - key: DUSKY_MODEL_PROVIDER
-        value: anthropic
+        value: openai
       # Set in the dashboard, never in this file.
+      - key: OPENAI_API_KEY
+        sync: false
+      # Retained for an explicit provider rollback; its presence does not select it.
       - key: ANTHROPIC_API_KEY
         sync: false
