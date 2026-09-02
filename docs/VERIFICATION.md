@@ -1,5 +1,30 @@
 # Verification
 
+## OpenAI Render production verification on 2026-09-02
+
+Commits `021c589` and `ad38ffb` were pushed to `main`. The Render Blueprint now
+selects OpenAI explicitly, retains `OPENAI_API_KEY` as a dashboard-managed
+`sync: false` secret, and clears the obsolete paid-disk audit path. The final
+free-instance startup log reported `planner enabled with openai`, followed by
+the in-memory audit-store notice and the relay listener. No later disk
+permission warning appeared. The public health endpoint returned HTTP 200 with
+`{"ok":true,"sessions":1}`.
+
+After the final deployment settled, `pnpm test:prod` passed all 12 production
+Playwright tests in 46.9 seconds. The last test made one bounded live planner
+request through the newly selected OpenAI adapter and advanced the intended
+two-step Amber & Oak to Northstar Dispatch task to its first parameter screen.
+This validates the deployed credential and adapter path and may have incurred
+the ordinary API usage for that single request.
+
+GitHub Actions run `33626925747` passed at `ad38ffb`: the verification job
+completed lint, all package typechecks, all builds, and all deterministic
+tests; the round-trip job completed the full local Playwright suite.
+
+This deployment evidence does not resolve the separate physical-glasses
+WebSocket upgrade, focus, composer, reconnect, sleep, radio, or changing-light
+evidence boundary.
+
 ## Model-provider modularity local verification on 2026-09-01
 
 Implementation commit `fd61c38` added the OpenAI Responses adapter, retained
