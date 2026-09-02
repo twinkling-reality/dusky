@@ -75,9 +75,12 @@ A healthy relay returns an object containing:
 {"ok":true}
 ```
 
-The checked-in configuration mounts audit storage at `/var/data`. If the disk
-is removed, remove `DUSKY_AUDIT_DIR` so the deployment is explicitly
-memory-only. Avoid a relay plan that sleeps before a public demonstration.
+The checked-in configuration uses Render's Free plan and keeps the bounded
+audit trail in memory. Audit entries therefore disappear whenever the service
+restarts or sleeps. Free instances sleep when idle and may take about a minute
+to wake, so upgrade the relay before a time-sensitive public demonstration if
+that cold start is unacceptable. A self-hosted deployment that attaches
+persistent storage should set `DUSKY_AUDIT_DIR` to a directory on that storage.
 
 Read [Security](./SECURITY.md) before exposing a relay to the public internet.
 The current relay uses short pairing codes rather than accounts and does not
