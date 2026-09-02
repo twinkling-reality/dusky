@@ -237,7 +237,7 @@ export function CanopyProvider() {
               viewBox="0 0 280 280"
               aria-label={`${profile.shade}% shade`}
             >
-              <title>{profile.shade}% sustained canopy shade</title>
+              <title>{`${profile.shade}% sustained canopy shade`}</title>
               <circle className="dial-field" cx="140" cy="140" r="104" />
               <circle
                 className="dial-progress"
