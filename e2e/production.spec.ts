@@ -359,6 +359,27 @@ test("one spoken request becomes a two-step cross-site result-sharing task", asy
   await displayPage.goto(`${DISPLAY}/?session=${code}`);
   await expect(displayPage.getByRole("heading", { name: "Choose a site" })).toBeVisible();
 
+  // Eleven visible actions proves the registry is complete, but the relay also
+  // requires the browser's quiet-window signal before it will admit an agent
+  // task. Wait on that public contract instead of racing the final settle tick.
+  await expect
+    .poll(
+      async () =>
+        consolePage.evaluate(async () => {
+          const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
+          const tools = await mc.getTools();
+          const statusTool = tools.find((tool) => tool.name === "get_display_status");
+          if (!statusTool) return false;
+          const status = JSON.parse(await mc.executeTool(statusTool, JSON.stringify({}))) as Record<
+            string,
+            unknown
+          >;
+          return status["discovery_settled"] === true;
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+
   const sent = await consolePage.evaluate(async () => {
     const mc = (document as unknown as { modelContext: ModelContextLike }).modelContext;
     const tools = await mc.getTools();
