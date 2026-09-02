@@ -41,9 +41,19 @@ jobs:
       # is broken, whatever the unit tests say.
       - run: npx playwright install --with-deps chrome
       - run: pnpm test:e2e
+      # Always, not just on failure. A test that passes on retry is reported
+      # as flaky rather than failed, and its trace is the only way to find out
+      # why. Uploading only on failure threw exactly that evidence away.
+      #
+      # Both paths: the HTML report renders the run, and `test-results/` holds
+      # the traces and error contexts the report links to. Uploading only the
+      # former is what left four failed runs with no attachment at all.
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
+          if-no-files-found: ignore
