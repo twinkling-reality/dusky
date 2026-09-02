@@ -47,6 +47,43 @@ No production claim is made in this entry. Deployment and production evidence
 must name the subsequently deployed commit. The unresolved physical-glasses
 WebSocket upgrade issue remains a separate evidence boundary.
 
+## Model-provider modularity production verification on 2026-09-01
+
+Commits `fd61c38` and `84db5a2` were pushed to `main`. The relay deployment at
+`84db5a2` explicitly selected Anthropic through `DUSKY_MODEL_PROVIDER`, retained
+the existing secret configured through Render's `sync: false` environment
+entry, and restarted successfully. The public health endpoint returned HTTP
+200 with `{"ok":true}` after the restart. The Console and Amber & Oak Vercel
+deployments also completed successfully; the other public application sources
+were unchanged.
+
+After deployment settled, `pnpm test:prod` passed all 12 production Playwright
+tests in 34.5 seconds. The run proved that every official surface remained
+public, all three bundled providers were discovered, a deployed Display gesture
+changed a deployed provider, the public Canopy Lab provider connected and ran
+without a registry entry, the browser agent reached the paired session, and the
+live selected planner admitted the intended two-step Amber & Oak to Northstar
+Dispatch task and advanced to its first parameter screen.
+
+GitHub Actions run `33582595731` passed at `84db5a2`: the verification job
+completed lint, all package typechecks, all builds, and all 451 deterministic
+tests; the round-trip job completed all 49 local Playwright tests.
+
+The first production attempt overlapped the rolling relay restart and completed
+11 of 12 tests. Its retained trace showed the exact boundary: the HTTP health
+endpoint had recovered while WebSocket upgrades still returned HTTP 500. The
+console's retry connected with HTTP 101 just after the affected assertion's
+30-second deadline, and the trace's final page snapshot showed the expected
+three reservation actions. No product assertion failed after WebSocket service
+stabilized, and the complete clean rerun is the production result claimed here.
+
+This deployed verification exercises the retained live Anthropic configuration.
+No OpenAI credential was available, so it is not evidence of a live OpenAI API
+call. OpenAI request behavior is covered by the local stub and fallback tests in
+the preceding entry. As with every browser and hosted-service record, this does
+not resolve the physical-glasses WebSocket upgrade, focus, composer, reconnect,
+sleep, radio, or changing-light evidence boundary.
+
 ## Hackathon release verification on 2026-09-01
 
 Commit `653b0e2` was pushed to `main` and deployed to the official Console,
