@@ -13,6 +13,7 @@
     "@anthropic-ai/sdk": "^0.120.0",
     "@dusky/contracts": "workspace:*",
     "@dusky/frames": "workspace:*",
-    "@dusky/policy": "workspace:*"
+    "@dusky/policy": "workspace:*",
+    "openai": "^7.9.0"
   }
 }

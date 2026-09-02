@@ -68,7 +68,12 @@ const outputConfig = (): Record<string, unknown> =>
 
 describe("the request the adapter builds", () => {
   it("asks for the answer schema and keeps the output small", async () => {
-    answer({ tool: "search_products", arguments: '{"query":"oat milk"}', confidence: "high" });
+    answer({
+      tool: "search_products",
+      arguments: '{"query":"oat milk"}',
+      next: [],
+      confidence: "high",
+    });
     const d = await client().decide({
       tier: "fast",
       system: "SYSTEM",
@@ -101,7 +106,7 @@ describe("the request the adapter builds", () => {
   });
 
   it("sends the same schema for the careful tier, at its own model and effort", async () => {
-    answer({ tool: "", arguments: "{}", confidence: "low" });
+    answer({ tool: "", arguments: "{}", next: [], confidence: "low" });
     const fastSchema = (outputConfig()["format"] as Record<string, unknown>)["schema"];
 
     await client().decide({ tier: "careful", system: "S", user: "U", timeoutMs: 2_000 });
@@ -131,7 +136,7 @@ describe("the request the adapter builds", () => {
   });
 
   it("honours a tier override, so a deployment can run one model for both", async () => {
-    answer({ tool: "", arguments: "{}", confidence: "low" });
+    answer({ tool: "", arguments: "{}", next: [], confidence: "low" });
     const c = new AnthropicModelClient({
       client: new Anthropic({ apiKey: "stub-key", baseURL }),
       fast: { model: "claude-sonnet-5", effort: "medium", maxTokens: 256 },
@@ -148,10 +153,10 @@ describe("an answer the adapter cannot use", () => {
     expect(d).toEqual({ tool: "", arguments: "{}", next: [], confidence: "low" });
   });
 
-  it("never reads an unexpected confidence as high", async () => {
-    answer({ tool: "search_products", arguments: "{}", confidence: "certain" });
+  it("declines an answer with malformed structured fields", async () => {
+    answer({ tool: "search_products", arguments: "{}", next: [], confidence: "certain" });
     const d = await client().decide({ tier: "fast", system: "S", user: "U", timeoutMs: 2_000 });
-    expect(d.confidence).toBe("low");
+    expect(d).toEqual({ tool: "", arguments: "{}", next: [], confidence: "low" });
   });
 });
 

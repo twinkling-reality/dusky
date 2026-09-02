@@ -16,6 +16,13 @@ export {
   type TierConfig,
 } from "./anthropic.js";
 export { CardCache, cardKey, renderCard, safeText } from "./cards.js";
+export { DECISION_SCHEMA, declineDecision, normalizeDecision } from "./decision.js";
+export {
+  OpenAIModelClient,
+  type OpenAIModelClientOptions,
+  OpenAIResponseError,
+  type OpenAITierConfig,
+} from "./openai.js";
 export {
   accept,
   type Confidence,

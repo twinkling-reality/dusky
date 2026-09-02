@@ -1,7 +1,7 @@
 /**
- * The only file in Dusky that knows a model provider exists.
+ * Anthropic-specific implementation of the provider-neutral `ModelClient`.
  *
- * Everything above it works against the `ModelClient` port, so the planner's
+ * Everything above the adapters works against that port, so the planner's
  * behaviour, including every adversarial case, is tested without a network and
  * a different provider means a different file rather than a different design.
  *
@@ -39,54 +39,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
-import type { Confidence, Decision, ModelClient, ModelRequest, Tier } from "./planner.js";
-
-/**
- * The answer shape, identical for every planning path.
- *
- * `arguments` is a JSON object serialized as a string because structured
- * outputs cannot describe an object whose keys differ per request. WebMCP
- * itself passes arguments as a string in Chrome today for unrelated reasons,
- * so the parsing discipline was already required.
- */
-const DECISION_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["tool", "arguments", "next", "confidence"],
-  properties: {
-    tool: {
-      type: "string",
-      description:
-        'Exact origin-qualified identity of the first candidate tool, or "" to decline. A bare name is valid only when unique.',
-    },
-    arguments: {
-      type: "string",
-      description: 'A JSON object serialized as a string, for example {"query":"oat milk"}.',
-    },
-    next: {
-      type: "array",
-      maxItems: 3,
-      description: "Additional requested actions after the first, in order.",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["tool", "arguments"],
-        properties: {
-          tool: {
-            type: "string",
-            description:
-              "Exact origin-qualified candidate identity, or a bare name only when it is unique.",
-          },
-          arguments: { type: "string" },
-        },
-      },
-    },
-    confidence: {
-      type: "string",
-      enum: ["high", "medium", "low"],
-    },
-  },
-} as const;
+import { DECISION_SCHEMA, declineDecision, normalizeDecision } from "./decision.js";
+import type { Decision, ModelClient, ModelRequest, Tier } from "./planner.js";
 
 export interface TierConfig {
   model: string;
@@ -127,6 +81,9 @@ const CAREFUL: TierConfig = { model: "claude-sonnet-5", effort: "low", maxTokens
 export interface AnthropicModelClientOptions {
   /** Supply your own configured client, or let the SDK read the environment. */
   client?: Anthropic;
+  apiKey?: string;
+  fastModel?: string;
+  carefulModel?: string;
   fast?: TierConfig;
   careful?: TierConfig;
 }
@@ -137,8 +94,11 @@ export class AnthropicModelClient implements ModelClient {
   private readonly tiers: Record<Tier, TierConfig>;
 
   constructor(o: AnthropicModelClientOptions = {}) {
-    this.client = o.client ?? new Anthropic();
-    this.tiers = { fast: o.fast ?? FAST, careful: o.careful ?? CAREFUL };
+    this.client = o.client ?? new Anthropic(o.apiKey ? { apiKey: o.apiKey } : undefined);
+    this.tiers = {
+      fast: o.fast ?? { ...FAST, ...(o.fastModel ? { model: o.fastModel } : {}) },
+      careful: o.careful ?? { ...CAREFUL, ...(o.carefulModel ? { model: o.carefulModel } : {}) },
+    };
   }
 
   async decide(req: ModelRequest): Promise<Decision> {
@@ -162,26 +122,14 @@ export class AnthropicModelClient implements ModelClient {
 
       // A refusal or a truncated answer is an abstention, not a failure: the
       // wearer gets the menu, which they can already drive.
-      if (message.stop_reason === "refusal" || message.stop_reason === "max_tokens") return DECLINE;
+      if (message.stop_reason === "refusal" || message.stop_reason === "max_tokens") {
+        return declineDecision();
+      }
 
       const parsed = message.parsed_output;
-      if (!parsed) return DECLINE;
+      if (!parsed) return declineDecision();
 
-      return {
-        tool: typeof parsed.tool === "string" ? parsed.tool : "",
-        arguments: typeof parsed.arguments === "string" ? parsed.arguments : "{}",
-        next: Array.isArray(parsed.next)
-          ? parsed.next.flatMap((step) =>
-              typeof step === "object" &&
-              step !== null &&
-              typeof step.tool === "string" &&
-              typeof step.arguments === "string"
-                ? [{ tool: step.tool, arguments: step.arguments }]
-                : [],
-            )
-          : [],
-        confidence: asConfidence(parsed.confidence),
-      };
+      return normalizeDecision(parsed);
     } catch (err) {
       // Verified by running it against a stub: `messages.parse` THROWS when the
       // content does not satisfy the schema. It does not hand back a null
@@ -190,14 +138,7 @@ export class AnthropicModelClient implements ModelClient {
       // as an outage. A transport or quota failure genuinely is one, and is
       // rethrown so the planner records it and escalates.
       if (err instanceof Anthropic.APIError) throw err;
-      return DECLINE;
+      return declineDecision();
     }
   }
-}
-
-const DECLINE: Decision = { tool: "", arguments: "{}", next: [], confidence: "low" };
-
-/** The schema constrains this, but an unexpected value must not read as high. */
-function asConfidence(v: unknown): Confidence {
-  return v === "high" || v === "medium" ? v : "low";
 }

@@ -13,7 +13,14 @@
  */
 
 import type { AuditEntry } from "@dusky/contracts";
-import { AnthropicModelClient, CardCache, ModelPlanner, type PlanEvent } from "@dusky/planner";
+import {
+  AnthropicModelClient,
+  CardCache,
+  type ModelClient,
+  ModelPlanner,
+  OpenAIModelClient,
+  type PlanEvent,
+} from "@dusky/planner";
 import type { Planner } from "@dusky/session";
 
 type Record_ = (e: Omit<AuditEntry, "at" | "sessionId">) => void;
@@ -25,15 +32,71 @@ type Record_ = (e: Omit<AuditEntry, "at" | "sessionId">) => void;
  */
 export type PlannerFactory = (record: Record_) => Planner;
 
-export function plannerFactory(): PlannerFactory | undefined {
-  if (process.env["DUSKY_PLANNER"] !== "on") return undefined;
+export type ModelProvider = "openai" | "anthropic";
 
-  let client: AnthropicModelClient;
+type ConfiguredModelClient =
+  | { ok: true; provider: ModelProvider; client: ModelClient }
+  | { ok: false; reason: string };
+
+export interface PlannerFactoryOptions {
+  env?: NodeJS.ProcessEnv;
+  logger?: Pick<Console, "log" | "warn">;
+}
+
+/**
+ * Resolve one explicitly selected server-side adapter.
+ *
+ * A key's presence never selects its provider. Missing or invalid
+ * configuration returns a reason but no client, so startup can stay
+ * menu-driven without leaking a credential or discovering one by trial.
+ */
+export function modelClientFromEnvironment(env: NodeJS.ProcessEnv): ConfiguredModelClient {
+  const provider = env["DUSKY_MODEL_PROVIDER"]?.trim().toLowerCase();
+  if (provider !== "openai" && provider !== "anthropic") {
+    return {
+      ok: false,
+      reason: "DUSKY_MODEL_PROVIDER must be set to openai or anthropic",
+    };
+  }
+
+  if (provider === "openai") {
+    const apiKey = env["OPENAI_API_KEY"]?.trim();
+    if (!apiKey) return { ok: false, reason: "OPENAI_API_KEY is not set" };
+    return {
+      ok: true,
+      provider,
+      client: new OpenAIModelClient({
+        apiKey,
+        fastModel: nonempty(env["DUSKY_OPENAI_FAST_MODEL"]),
+        carefulModel: nonempty(env["DUSKY_OPENAI_CAREFUL_MODEL"]),
+      }),
+    };
+  }
+
+  const apiKey = env["ANTHROPIC_API_KEY"]?.trim();
+  if (!apiKey) return { ok: false, reason: "ANTHROPIC_API_KEY is not set" };
+  return {
+    ok: true,
+    provider,
+    client: new AnthropicModelClient({
+      apiKey,
+      fastModel: nonempty(env["DUSKY_ANTHROPIC_FAST_MODEL"]),
+      carefulModel: nonempty(env["DUSKY_ANTHROPIC_CAREFUL_MODEL"]),
+    }),
+  };
+}
+
+export function plannerFactory(options: PlannerFactoryOptions = {}): PlannerFactory | undefined {
+  const env = options.env ?? process.env;
+  const logger = options.logger ?? console;
+  if (env["DUSKY_PLANNER"] !== "on") return undefined;
+
+  let configured: ConfiguredModelClient;
   try {
-    client = new AnthropicModelClient();
+    configured = modelClientFromEnvironment(env);
   } catch (err) {
     // Say so once and carry on menu-driven rather than failing every task.
-    console.warn(
+    logger.warn(
       `dusky: DUSKY_PLANNER=on but no model client could be built, running menu-only (${
         err instanceof Error ? err.message : String(err)
       })`,
@@ -41,17 +104,23 @@ export function plannerFactory(): PlannerFactory | undefined {
     return undefined;
   }
 
-  // Deliberately NOT gated on ANTHROPIC_API_KEY being set. The SDK also
-  // resolves ANTHROPIC_AUTH_TOKEN and an `ant auth login` profile, so checking
-  // for the environment variable would refuse perfectly good credentials.
-  //
-  // Verified by running it: constructing the client with no credential at all
-  // does not throw, so a missing one is not caught here. It surfaces on the
-  // first request as an API error, the planner records the failure, and the
-  // wearer gets the menu. Wrong credentials cost latency, never a dead end.
+  if (!configured.ok) {
+    logger.warn(`dusky: DUSKY_PLANNER=on but ${configured.reason}, running menu-only`);
+    return undefined;
+  }
+
+  // A wrong, expired, or quota-limited credential surfaces on the first
+  // request. ModelPlanner records the failure and returns the wearer to the
+  // deterministic menu; no credential is logged or sent to another surface.
   const cache = new CardCache();
-  console.log("dusky: planner enabled (credentials are checked on first use)");
-  return (record) => new ModelPlanner({ client, cache, onPlan: (e) => record(toAudit(e)) });
+  logger.log(`dusky: planner enabled with ${configured.provider}`);
+  return (record) =>
+    new ModelPlanner({ client: configured.client, cache, onPlan: (e) => record(toAudit(e)) });
+}
+
+function nonempty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /**
