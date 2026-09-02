@@ -83,8 +83,10 @@ audit trail as sensitive metadata rather than as public telemetry.
 
 ## Optional model data egress
 
-The planner is off unless `DUSKY_PLANNER=on` and a model client can be used.
-With the current Anthropic adapter enabled, Dusky sends Anthropic:
+The planner is off unless `DUSKY_PLANNER=on`, `DUSKY_MODEL_PROVIDER` explicitly
+selects `openai` or `anthropic`, and the selected adapter has its matching
+server-side credential. Dusky never selects a provider merely because its key
+exists. The selected provider receives:
 
 - the wearer's typed or composed request, truncated for the prompt;
 - a bounded shortlist of provider-authored tool names, origins, titles,
@@ -101,10 +103,15 @@ including sensitive text, so operators must not treat that request as free of
 credentials. Tool metadata remains untrusted input even after it is flattened
 and bounded for the prompt.
 
-Enabling the planner creates a separate data relationship with Anthropic.
-Operators are responsible for reviewing the model provider's terms, retention,
-regional processing, access controls, and suitability for the data their users
-may put into requests. Leave the planner off when that egress is not acceptable.
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` remain in the relay process. They are
+not sent to the browser, Display, console, provider pages, prompts, frames,
+logs, or audit records.
+
+Enabling the planner creates a separate data relationship with the selected
+model provider. Operators are responsible for reviewing that provider's terms,
+retention, regional processing, access controls, and suitability for the data
+their users may put into requests. Leave the planner off when that egress is not
+acceptable.
 
 ## Enforced boundaries
 
@@ -125,6 +132,10 @@ more than one origin registered it.
 Planner output is untrusted. A proposed tool that was not offered is rejected.
 Dusky filters arguments to declared properties and checks the primitive types
 and enum values it supports before invocation.
+
+OpenAI and Anthropic are interchangeable only at the proposal port. Neither
+adapter executes WebMCP tools, approves an action, changes policy, or bypasses
+the transfer and confirmation state machine.
 
 This is not full JSON Schema validation. Dusky does not generally enforce
 constraints such as string patterns, lengths, numeric ranges, or formats.

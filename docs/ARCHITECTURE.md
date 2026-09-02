@@ -24,7 +24,7 @@ flowchart TB
 
   D["Display Web App<br/>one 600 x 600 frame"]
   PL["Optional planner<br/>rank and validate"]
-  M["Optional Anthropic API<br/>plan proposal only"]
+  M["Optional model API<br/>OpenAI or Anthropic proposal only"]
 
   C <-->|"descriptors, invocation, results"| A
   A <-->|"frames, input, liveness"| D
@@ -140,9 +140,22 @@ the content has not changed, so focus does not reset.
 
 ### Optional model provider
 
-The planner is disabled by default. When `DUSKY_PLANNER=on`, the relay sends
-the wearer's request and a ranked shortlist of bounded tool cards to the
-Anthropic API. Cards can contain the browser-supplied origin plus
+The planner is disabled by default. When `DUSKY_PLANNER=on`, the relay also
+requires `DUSKY_MODEL_PROVIDER=openai` or `anthropic` and the matching
+server-side credential. One server factory selects an `OpenAIModelClient` or
+`AnthropicModelClient`; it never infers a provider from whichever key happens
+to exist. Missing or invalid configuration produces one warning and leaves the
+relay menu-only.
+
+Both adapters implement the provider-neutral `ModelClient` port and request the
+same stable `Decision` schema. The OpenAI adapter uses the Responses API with
+strict Structured Outputs. The Anthropic adapter uses the Messages API with
+structured output. Both preserve the fast and careful planning tiers, accept
+operator model overrides, forward the planner's request deadline, and disable
+SDK retries beneath the planner's own escalation budget.
+
+The selected model API receives the wearer's request and a ranked shortlist of
+bounded tool cards. Cards can contain the browser-supplied origin plus
 provider-authored names, titles, descriptions, normalized parameter kinds and
 descriptions, enum values, and the untrusted-content flag. They also state the
 ceremony derived by Dusky policy.
@@ -152,6 +165,13 @@ bounds each provider-authored field before it enters the prompt. That prevents
 card-structure forgery, not persuasion. Planner output remains untrusted and
 cannot authorize an invocation or lower a policy gate.
 
+A provider refusal, incomplete or malformed structured answer, timeout, or
+outage returns the wearer to deterministic menus and parameters. Transport,
+authentication, quota, and service failures remain observable planner failures
+rather than being disguised as model declines. Credentials stay in the relay
+process and are never copied to the Display, console, provider documents,
+frames, logs, or audit records.
+
 ## Shared packages
 
 | Package | Responsibility |
@@ -160,7 +180,7 @@ cannot authorize an invocation or lower a policy gate.
 | `packages/webmcp` | Browser compatibility, discovery, filtering, argument-shape probing, and one-shot invocation |
 | `packages/frames` | Display-operable parameters, menus, paging, result facts, and projections |
 | `packages/policy` | Deterministic read, write, financial, and destructive classification |
-| `packages/planner` | Optional ranking and bounded plan proposals |
+| `packages/planner` | Optional ranking, provider-neutral decisions, and OpenAI/Anthropic model adapters |
 | `packages/session` | Task state, supported argument checks, gates, transfer consent, and completion |
 | `packages/audit` | Structured decision and outcome events |
 | `packages/lens` | Frame rendering and directional input translation |

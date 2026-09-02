@@ -49,6 +49,12 @@ actions. The planner can propose but cannot authorize. Dusky validates the plan
 against the tools the browser offered and rechecks each step against the live
 registry and schema before it begins.
 
+The optional planner supports OpenAI through the Responses API with Structured
+Outputs and Anthropic through the Messages API. Both produce the same stable
+proposal shape behind a provider-neutral interface. This is internal planning
+modularity, not the WebMCP mechanism and not a WebMCP Challenge compliance
+requirement.
+
 Cross-provider information transfer is a separate decision. Dusky retains only
 bounded primitive projections and a generic summary from an intermediate
 result. Before one value fills another provider's argument, the Display shows
@@ -74,6 +80,13 @@ compound coverage, and 3 of 3 compatible result handoffs. Recall means the
 expected tool reached the shortlist. It is not model accuracy.
 
 Source: <https://github.com/twinkling-reality/dusky>
+
+## Devpost Built with recommendation
+
+List **WebMCP**, **Meta Ray-Ban Display**, **OpenAI API**, **Responses API**,
+and **Anthropic Claude**. Describe OpenAI and Anthropic as optional planner
+adapters. Do not describe either model API as the provider integration layer;
+provider capabilities are discovered and invoked through WebMCP.
 
 ## Demo script, target 2:40
 

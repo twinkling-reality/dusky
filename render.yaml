@@ -40,6 +40,11 @@ services:
       # Leave it off and Dusky is menu-driven, which is fully usable.
       - key: DUSKY_PLANNER
         value: "on"
+      # Provider selection is explicit. Do not infer it from the keys present.
+      # The official deployment keeps its known-working Anthropic profile until
+      # an OpenAI credential is configured and verified there.
+      - key: DUSKY_MODEL_PROVIDER
+        value: anthropic
       # Set in the dashboard, never in this file.
       - key: ANTHROPIC_API_KEY
         sync: false

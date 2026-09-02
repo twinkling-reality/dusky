@@ -1,5 +1,52 @@
 # Verification
 
+## Model-provider modularity local verification on 2026-09-01
+
+Implementation commit `fd61c38` added the OpenAI Responses adapter, retained
+the Anthropic Messages adapter, moved their stable decision schema into a
+provider-neutral module, and made relay provider selection explicit. The
+operator documentation and deployment configuration were then updated in the
+following documentation commit.
+
+Current official OpenAI documentation was checked before implementation. It
+established the Responses API `text.format` strict JSON Schema shape, explicit
+refusal and incomplete-response states, and current Responses plus Structured
+Outputs support for the GPT-5.6 family. The adapter defaults to
+`gpt-5.6-luna` for the fast tier and `gpt-5.6-terra` for the careful tier.
+
+The complete local verification ran on macOS in Google Chrome 152 with
+WebMCP Testing enabled:
+
+- `pnpm test`: 451 of 451 unit and deterministic tests passed;
+- `pnpm typecheck`: all 15 package typechecks passed;
+- `pnpm lint`: no errors and the same five retained CSS specificity warnings;
+- `pnpm build`: all six build tasks passed;
+- `pnpm test:e2e`: all 49 local Playwright tests passed in 2.7 minutes; and
+- `pnpm exec playwright test e2e/roundtrip.spec.ts`: all 7 focused real-WebMCP
+  round-trip tests passed in 53.2 seconds.
+
+The focused planner, adapter, server factory, and executable genericity run
+passed 118 of 118 tests while iterating. OpenAI adapter coverage includes exact
+Structured Outputs request shape, tier models, overrides, ordered multi-step
+parsing, refusal, incomplete and malformed declines, observable authentication,
+transport and in-band service failures, zero SDK retries, and propagated
+timeouts. Server tests cover explicit OpenAI and Anthropic selection, missing
+and invalid provider configuration, missing credentials, menu-only operation,
+and the full session fallback through each adapter. Existing deterministic
+planner tests continue to cover unknown and ambiguous tools, undeclared or
+unsupported arguments, consequential actions, and hostile provider metadata.
+
+No OpenAI or Anthropic credential was present in the local environment. Both
+adapters were exercised against local HTTP stubs, and both complete
+session-fallback paths were exercised against unreachable local endpoints. This
+is adapter and wiring evidence, not a live OpenAI model call. After both browser
+runs, no listener remained on ports 7801 through 7806 or 7900 and no spawned
+Playwright, Chrome, Vite, or relay watcher remained.
+
+No production claim is made in this entry. Deployment and production evidence
+must name the subsequently deployed commit. The unresolved physical-glasses
+WebSocket upgrade issue remains a separate evidence boundary.
+
 ## Hackathon release verification on 2026-09-01
 
 Commit `653b0e2` was pushed to `main` and deployed to the official Console,

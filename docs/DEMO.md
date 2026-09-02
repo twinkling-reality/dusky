@@ -111,15 +111,33 @@ dictate the value, and choose **Done**.
 
 ## Live cross-provider task
 
-The reservation-to-message request requires the optional planner. Start the
-local relay with a credential that the Anthropic SDK can resolve, for example:
+The reservation-to-message request requires the optional planner. Select one
+model provider explicitly. For OpenAI's Responses API:
 
 ```bash
-DUSKY_PLANNER=on ANTHROPIC_API_KEY='replace-with-your-key' pnpm dev
+DUSKY_PLANNER=on \
+DUSKY_MODEL_PROVIDER=openai \
+OPENAI_API_KEY='replace-with-your-key' \
+pnpm dev
 ```
 
-This sends the wearer's request and bounded provider tool cards to Anthropic.
-See [Trust model](./TRUST-MODEL.md) for the exact data boundary.
+For Anthropic's Messages API:
+
+```bash
+DUSKY_PLANNER=on \
+DUSKY_MODEL_PROVIDER=anthropic \
+ANTHROPIC_API_KEY='replace-with-your-key' \
+pnpm dev
+```
+
+This sends the wearer's request and bounded provider tool cards to the selected
+model provider. The model proposes only; deterministic code still validates the
+complete bounded plan and owns policy, confirmation, transfer consent, and
+execution. See [Trust model](./TRUST-MODEL.md) for the exact data boundary.
+
+A missing provider setting or selected key keeps the demo menu-only. A refusal,
+malformed or incomplete answer, timeout, authentication error, quota error, or
+outage returns the wearer to the same deterministic menus and parameters.
 
 Submit:
 
@@ -186,4 +204,6 @@ See [Provider guide](./PROVIDER-GUIDE.md) for the full contract.
 - Cross-origin WebMCP support remains experimental.
 - The console must stay open while tools are available.
 - The optional planner can time out or decline a plan.
+- OpenAI or Anthropic planner support is internal orchestration; WebMCP remains
+  the browser capability and invocation mechanism required by the demo.
 - Desktop automation does not replace physical-glasses verification.

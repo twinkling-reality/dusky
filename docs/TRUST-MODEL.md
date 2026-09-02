@@ -64,7 +64,8 @@ One confirmation authorizes one invocation.
 
 ## Planner data and limits
 
-The planner is off by default. When enabled, the relay sends the Anthropic API:
+The planner is off by default. When enabled, an operator explicitly selects
+OpenAI or Anthropic. The relay sends only that selected model provider:
 
 - the wearer's request;
 - a ranked shortlist of tool cards;
@@ -97,8 +98,14 @@ Dusky does not implement full JSON Schema validation. It does not enforce
 constraints such as `minimum`, `pattern`, or `format`. Providers must validate
 all inputs before performing an action.
 
-Planner failure, timeout, malformed output, or refusal returns the wearer to
-deterministic menus and parameters.
+Both adapters request the same stable structured decision. Refusal, incomplete
+or malformed output, failure, or timeout returns the wearer to deterministic
+menus and parameters. Transport, authentication, quota, and service failures
+remain observable in the planner failure path; they still grant no authority.
+An unavailable planner can cost latency but cannot block menu navigation.
+
+Model credentials remain server-side. They are not included in prompts, tool
+cards, Display frames, console messages, provider pages, logs, or audit events.
 
 ## Automatic lookups
 

@@ -121,12 +121,49 @@ Set this on market, reservations, and communications:
 | --- | --- | --- |
 | `DUSKY_AUDIT_DIR` | With persistent audit storage | A persistent directory such as `/var/data/audit` |
 | `DUSKY_PLANNER` | No | `on` to enable interpreted and multi-step requests |
-| `ANTHROPIC_API_KEY` | When using the current Anthropic planner | Store as a host secret |
+| `DUSKY_MODEL_PROVIDER` | When the planner is on | Exactly `openai` or `anthropic` |
+| `OPENAI_API_KEY` | For the OpenAI adapter | Store as a host secret |
+| `ANTHROPIC_API_KEY` | For the Anthropic adapter | Store as a host secret |
+| `DUSKY_OPENAI_FAST_MODEL` | No | Override the OpenAI fast-tier model id |
+| `DUSKY_OPENAI_CAREFUL_MODEL` | No | Override the OpenAI careful-tier model id |
+| `DUSKY_ANTHROPIC_FAST_MODEL` | No | Override the Anthropic fast-tier model id |
+| `DUSKY_ANTHROPIC_CAREFUL_MODEL` | No | Override the Anthropic careful-tier model id |
 
-The planner is optional. Without it, Dusky remains menu-driven. Enabling the
-current planner sends the wearer's request and a bounded shortlist of
-provider-authored tool metadata to Anthropic. See [Security](./SECURITY.md) for
-the exact data boundary.
+The planner is optional. Without it, Dusky remains menu-driven. Provider
+selection is explicit and is never inferred from which key is present. A
+missing or invalid provider or missing selected key produces one startup
+warning and keeps the relay menu-only. A wrong, expired, quota-limited, or
+temporarily unusable credential may spend a bounded planner request but still
+returns the wearer to deterministic navigation.
+
+The OpenAI defaults are `gpt-5.6-luna` for the fast tier and
+`gpt-5.6-terra` for the careful tier. Both use the Responses API with strict
+Structured Outputs. The Anthropic defaults remain `claude-haiku-4-5` and
+`claude-sonnet-5`. Override model ids only after verifying that the replacement
+supports the adapter's current structured-output API and latency budget.
+
+For OpenAI:
+
+```bash
+DUSKY_PLANNER=on \
+DUSKY_MODEL_PROVIDER=openai \
+OPENAI_API_KEY='replace-with-your-key' \
+pnpm --filter @dusky/app-server start
+```
+
+For Anthropic:
+
+```bash
+DUSKY_PLANNER=on \
+DUSKY_MODEL_PROVIDER=anthropic \
+ANTHROPIC_API_KEY='replace-with-your-key' \
+pnpm --filter @dusky/app-server start
+```
+
+Both adapters receive the same bounded wearer request and provider-authored
+tool cards. The credential stays in the relay process and must never be put in
+a `VITE_*` variable, committed file, log, audit record, or browser-visible
+configuration. See [Security](./SECURITY.md) for the exact data boundary.
 
 ## Exact-origin authorization
 
@@ -213,10 +250,10 @@ Before claiming a production release works:
 equivalent suite at the self-hosted origins before making a self-hosted
 production claim.
 
-The official production suite also expects the official planner profile to be
-enabled and usable. It checks browser-agent status and sends a live two-step
-request. A menu-only deployment is supported by the application but cannot pass
-that unchanged official suite.
+The official production suite also expects the explicitly selected official
+planner profile to be enabled and usable. It checks browser-agent status and
+sends a live two-step request. A menu-only deployment is supported by the
+application but cannot pass that unchanged official suite.
 
 ## Historical production evidence
 
