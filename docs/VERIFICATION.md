@@ -1,5 +1,38 @@
 # Verification
 
+## Hackathon release verification on 2026-09-01
+
+Commit `653b0e2` was pushed to `main` and deployed to the official Console,
+relay, and public Canopy Lab origins. Canopy Lab version 5 replaced the
+internal provider-proof presentation with a public shade-planning interface
+without changing its generic `estimate_shade` contract.
+
+The final local release checks completed on macOS in Google Chrome 152 with
+WebMCP Testing enabled:
+
+- 432 of 432 unit and deterministic tests passed;
+- all 15 package typechecks passed;
+- lint completed with no errors and the same five retained CSS specificity
+  warnings;
+- all six build tasks passed;
+- all 49 local Playwright tests passed in 2.6 minutes; and
+- the rebuilt Canopy Lab passed its own lint and production build, loaded with
+  no React hydration error, and completed the focused real-WebMCP runtime
+  provider round trip.
+
+After the final deployments and relay restart, all 12 production Playwright
+tests passed in 35.8 seconds. The suite proved that every official surface was
+public, all three bundled providers were discovered, a deployed Display
+gesture changed a deployed provider, Canopy Lab connected and ran without a
+registry entry, the browser agent reached the paired session, and the live
+planner admitted the intended two-step cross-site task after discovery
+settled. GitHub Actions run `33578453761` passed both the verification and
+49-test round-trip jobs for the same commit.
+
+This release record does not replace a fresh physical-glasses preflight. The
+previous device-side WebSocket-upgrade failure, focus, composer, reconnect,
+sleep, and changing-light checks remain hardware evidence only.
+
 ## Public runtime provider verification on 2026-09-01
 
 Canopy Lab version 3 was published at
