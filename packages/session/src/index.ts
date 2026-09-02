@@ -228,6 +228,18 @@ interface Pending {
   candidates?: Choice[];
   /** Compatible retained projections offered for the current parameter. */
   transferOptions?: TransferOption[];
+  /**
+   * The label the wearer actually read, per parameter they chose it for.
+   *
+   * A choice carries an id the site uses and a label the site wrote for
+   * people. The id is what gets sent, so the confirmation used to print it,
+   * and a wearer who picked "6:00 PM" was asked to approve `ao-t-1800`. That
+   * is the same decision rendered in the one form they cannot check.
+   *
+   * Only ever set from a candidate the wearer was shown, so it cannot invent a
+   * friendlier name than the site's own.
+   */
+  chosenLabels?: Record<string, string>;
   /** When the confirmation frame was shown, for staleness checks. */
   confirmShownAt?: number;
   /** Human-readable target for the confirmation frame. */
@@ -937,6 +949,12 @@ export class Session {
     if (!p?.awaiting || !param) return false;
     const value = valueForParam(raw, param);
     if (value === undefined || value === null || value === "") return false;
+    // The row the wearer pressed, if this value came from one. Typed text has
+    // no label and needs none: they are already looking at what they wrote.
+    const chosen = p.candidates?.find((c) => c.id === raw);
+    if (chosen) {
+      p.chosenLabels = { ...p.chosenLabels, [p.awaiting]: chosen.label };
+    }
     p.args[p.awaiting] = value;
     p.awaiting = undefined;
     p.candidates = undefined;
@@ -1578,7 +1596,7 @@ export class Session {
        * `empty_cart`, which takes no arguments, read "Empty cart" above
        * "Empty cart". A tool with nothing to name gets no target line.
        */
-      const described = describeArgs(p.args);
+      const described = describeArgs(p.args, p.chosenLabels);
       if (described) p.targetLabel = described;
       // Declared on Pending since the gate was written, and never once
       // assigned, so every confirm frame carried `undefined` and the panel's
@@ -1986,8 +2004,36 @@ function declaredArgs(
  * guarantees the values are displayable scalars, and rendering all of them
  * means a future change to that cannot quietly reintroduce a hidden argument.
  */
-function describeArgs(args: Record<string, unknown>): string {
-  return Object.values(args).map(String).join(", ");
+/**
+ * The target line on the confirmation frame.
+ *
+ * This is the last thing a wearer reads before something happens, so it is
+ * worth more than `String(value)`. Worn, booking a table rendered as
+ * "ao-t-1800, 2, true": an opaque id, a bare number, and a raw boolean. Two of
+ * those three cannot be checked by the person being asked to approve them.
+ *
+ * `true` is simply wrong. The panel has said Yes and No everywhere else since
+ * `factValue` was written, and a confirmation is the worst place to start
+ * speaking JSON.
+ *
+ * The id is not wrong, it is unreadable, which on a waveguide amounts to the
+ * same thing. Where the wearer picked a row, its label is shown instead: the
+ * site's own name for the exact item behind the exact id being sent, never a
+ * friendlier one invented here.
+ */
+function describeArgs(
+  args: Record<string, unknown>,
+  chosenLabels: Record<string, string> = {},
+): string {
+  return Object.entries(args)
+    .map(([name, value]) => chosenLabels[name] ?? readableArg(value))
+    .join(", ");
+}
+
+/** One argument as words, for a panel that has never spoken JSON elsewhere. */
+function readableArg(value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
 }
 
 /**

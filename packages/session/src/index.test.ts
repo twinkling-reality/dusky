@@ -2667,3 +2667,85 @@ describe("a lookup missing a required argument of its own", () => {
     expect(found.choices.map((c) => c.meta)).toContain("2/3");
   });
 });
+
+/**
+ * What the last frame before an action actually says.
+ *
+ * Worn, 2026-09-02: approving a table read "ao-t-1800, 2, true". The id was
+ * the site's, the boolean was JSON, and neither is checkable by the person
+ * being asked to approve them. A confirmation the wearer cannot read is a
+ * confirmation in name only.
+ */
+describe("the confirmation names what the wearer chose", () => {
+  const TABLES = "https://tables.test";
+  const BOOK_SEAT = tool({
+    name: "book_table",
+    origin: TABLES,
+    description: "Hold a table under a booking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slot_id: { type: "string", description: "Which table?" },
+        outdoor_seating: { type: "boolean", description: "Sit outside?" },
+      },
+      required: ["slot_id", "outdoor_seating"],
+    },
+  });
+  const FIND_SEAT = tool({
+    name: "find_times",
+    origin: TABLES,
+    description: "Look up open tables. Holds nothing.",
+    inputSchema: {
+      type: "object",
+      properties: { date: { type: "string", enum: ["tomorrow"], description: "Which day?" } },
+      required: ["date"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  const seatRunner = () => {
+    const calls: string[] = [];
+    return {
+      calls,
+      discover: async () => [FIND_SEAT, BOOK_SEAT],
+      invoke: async (_origin: string, name: string) => {
+        calls.push(name);
+        if (name === "find_times") {
+          return JSON.stringify({ results: [{ id: "ao-t-1800", name: "6:00 PM" }] });
+        }
+        return JSON.stringify({ ok: true });
+      },
+    } as unknown as ToolRunner & { calls: string[] };
+  };
+
+  const pick = (frame: DisplayFrame, match: RegExp): string => {
+    if (frame.kind !== "choose") throw new Error(`expected choices, got ${frame.kind}`);
+    const hit = frame.choices.find((c) => match.test(c.label));
+    if (!hit)
+      throw new Error(`no choice matching ${String(match)} in ${JSON.stringify(frame.choices)}`);
+    return hit.id;
+  };
+
+  it("shows the label that was read and says No, not true", async () => {
+    const runner = seatRunner();
+    const planner: Planner = {
+      pickTool: async () => ({ name: "book_table", args: {} }),
+      planResolver: async () => ({ name: "find_times", args: {} }),
+    };
+    const s = new Session({ source: "Tables", runner, planner });
+    await s.start();
+
+    const day = await s.submitText("book me a table");
+    const found = await s.handle(pick(day, /tomorrow/));
+    if (found.kind !== "result") throw new Error("expected the lookup's result");
+    const slots = await s.handle("__next");
+    const outdoors = await s.handle(pick(slots, /6:00 PM/));
+    const confirm = await s.handle(pick(outdoors, /^No$/));
+
+    if (confirm.kind !== "confirm") throw new Error(`expected the gate, got ${confirm.kind}`);
+    // The time they read, not the id behind it, and words rather than JSON.
+    expect(confirm.target).toBe("6:00 PM, No");
+    expect(confirm.target).not.toContain("ao-t-1800");
+    expect(confirm.target).not.toContain("true");
+  });
+});
