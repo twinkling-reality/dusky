@@ -29,6 +29,9 @@ services:
       # Leave it off and Dusky is menu-driven, which is fully usable.
       - key: DUSKY_PLANNER
         value: "on"
+      # Override the old paid-disk path. An empty value selects memory storage.
+      - key: DUSKY_AUDIT_DIR
+        value: ""
       # Provider selection is explicit. Do not infer it from the keys present.
       # The official deployment uses the OpenAI credential stored in Render.
       - key: DUSKY_MODEL_PROVIDER
