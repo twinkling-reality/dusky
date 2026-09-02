@@ -224,6 +224,17 @@ interface RetainedResult {
   toolName: string;
   step: number;
   projections: ShareableProjection[];
+  /**
+   * The same result as ordinary choices, for filling a parameter on the site
+   * that produced it.
+   *
+   * Projections answer "which VALUE leaves this origin", so they are labelled
+   * by field, which is what the transfer frame needs. A wearer picking a table
+   * on the site they are already booking with needs the opposite: the items,
+   * labelled the way the site named them. Worn, the projection labels reached
+   * the lens as "Summary" and "id" where "6:00 PM" and "9:00 PM" belonged.
+   */
+  candidates: Choice[];
 }
 
 interface TransferOption {
@@ -1499,6 +1510,27 @@ export class Session {
         );
       }
 
+      /*
+       * A step that already ran on THIS site can name the wearer's options.
+       *
+       * Nothing crosses an origin here, so there is nothing to consent to and
+       * no reason to render field names: it is the same list the inline lookup
+       * path has always produced, from the same helper, reached by a different
+       * route. Promotion made that route ordinary, and without this a wearer
+       * who was asked one extra question got a worse screen for answering it.
+       */
+      if (missing.kind === "text") {
+        const local = [...this.retained]
+          .reverse()
+          .find((r) => r.origin === p.tool.origin && r.candidates.length > 0);
+        if (local) {
+          p.candidates = local.candidates;
+          return this.show(
+            paramFrame(this.siteOf(p.tool.origin), p.tool, missing, local.candidates, this.page),
+          );
+        }
+      }
+
       // A previous successful step can fill this argument, but only through a
       // bounded projection. The raw result is already gone. Cross-origin use
       // pauses again on the dedicated transfer frame; same-origin use follows
@@ -1731,6 +1763,7 @@ export class Session {
             toolName: p.tool.name,
             step: this.taskStep,
             projections: shareableProjectionsFromResult(outcome.raw),
+            candidates: candidatesFromResult(outcome.raw),
           });
         }
         this.pending = null;

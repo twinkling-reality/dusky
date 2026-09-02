@@ -2601,7 +2601,15 @@ describe("a lookup missing a required argument of its own", () => {
     expect(runner.calls).toEqual(["find_times"]);
     if (slots.kind !== "choose") throw new Error("expected the slots as choices");
     expect(slots.choices.map((c) => c.id)).not.toContain("__compose");
-    expect(JSON.stringify(slots.choices)).toContain("6:00 PM");
+    // LABELS, not merely somewhere in the frame. Asserting on the serialised
+    // choices passed while the wearer was reading "Summary" and "id", because
+    // the times were sitting in a preview string behind those field names.
+    expect(slots.choices.map((c) => c.label)).toEqual(
+      expect.arrayContaining(["6:00 PM", "7:30 PM"]),
+    );
+    // And the value carried is the site's own id, so the booking gets a real
+    // slot rather than the words the wearer read.
+    expect(slots.choices.map((c) => c.id)).toEqual(expect.arrayContaining(["ao-m-1800"]));
   });
 
   /*
