@@ -2785,6 +2785,23 @@ body .topologyCanvas[data-testid="topology-canvas"] .canvasFades {
   gap: 0.35rem;
   overflow: auto;
   list-style: none;
+
+  /*
+   * The scrollbar belongs on the card's edge, not floating a pad's width
+   * inside it.
+   *
+   * This list is the scrolling box, so the bar draws at ITS edge, and the card
+   * holds the inline padding, so that edge sat 0.9rem short of the panel. It
+   * read as a bar hanging in the middle of the card rather than as the side of
+   * the panel.
+   *
+   * Pulled out by exactly the padding and given it back as its own, so the
+   * rows do not move and only the scrollbar does. Through the variable rather
+   * than a number, because that padding is 0, 0.9rem or 1.05rem depending on
+   * the layout, and a literal here would be right in one of the three.
+   */
+  margin-right: calc(var(--log-pad-inline, 0rem) * -1);
+  padding-right: var(--log-pad-inline, 0rem);
 }
 
 .technicalLogEvents li {
@@ -4418,7 +4435,8 @@ fieldset.providerActionPair {
   box-sizing: border-box;
   height: auto;
   max-height: 11rem;
-  padding: 0.7rem 0 0;
+  --log-pad-inline: 0rem;
+  padding: 0.7rem var(--log-pad-inline) 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4564,7 +4582,8 @@ fieldset.providerActionPair {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 0.72rem 1.05rem 0.88rem;
+  --log-pad-inline: 1.05rem;
+  padding: 0.72rem var(--log-pad-inline) 0.88rem;
   flex: none;
   border-top: 0;
   background: transparent;
@@ -5355,7 +5374,8 @@ body
   min-height: 4.6rem;
   height: auto;
   max-height: 11rem;
-  padding: 1.35rem 0.9rem 0.9rem;
+  --log-pad-inline: 0.9rem;
+  padding: 1.35rem var(--log-pad-inline) 0.9rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
