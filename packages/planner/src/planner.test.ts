@@ -524,6 +524,25 @@ describe("proposing a resolver, which runs with no human in front of it", () => 
     expect(events).toContainEqual(expect.objectContaining({ kind: "resolved", partial: true }));
   });
 
+  /*
+   * Worn, 2026-09-02: the fast tier named the right lookup at 1216ms with low
+   * confidence, the session's 2500ms resolver budget expired at 2502ms while
+   * the careful tier was still thinking, and the careful tier agreed at 3549ms
+   * with nobody left listening. A valid answer was thrown away for a slower
+   * identical one, and the wearer got a free-text field for an opaque id.
+   */
+  it("does not spend a careful tier on a resolver the fast tier already picked", async () => {
+    // Any careful-tier request throws here, so reaching one fails this test.
+    const { client, seen } = fakeClient({ fast: say("search_products", '{"query":"oat"}', "low") });
+    const p = new ModelPlanner({ client });
+
+    expect(await p.planResolver("product_id", ADD, [SEARCH, REVIEW], "add oat milk")).toEqual({
+      name: toolId(SEARCH),
+      args: { query: "oat" },
+    });
+    expect(seen.map((r) => r.tier)).toEqual(["fast"]);
+  });
+
   it("does not mark a complete resolver partial", async () => {
     const { client } = fakeClient({ fast: say("search_products", '{"query":"oat milk"}') });
     const { events, onPlan } = record();

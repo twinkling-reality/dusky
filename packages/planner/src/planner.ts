@@ -573,7 +573,7 @@ export class ModelPlanner {
       Math.min(this.o.fastTimeoutMs ?? DEFAULTS.fastTimeoutMs, remaining()),
     );
 
-    if (fast && !this.needsSecondOpinion(fast)) return fast.proposal;
+    if (fast && !this.needsSecondOpinion(fast, path)) return fast.proposal;
 
     const careful = await this.ask(
       path,
@@ -593,7 +593,29 @@ export class ModelPlanner {
     return null;
   }
 
-  private needsSecondOpinion(a: Accepted): boolean {
+  private needsSecondOpinion(a: Accepted, path: PlanPath): boolean {
+    /*
+     * A resolver is the most constrained proposal this planner makes, and a
+     * second opinion on one is not worth what it costs.
+     *
+     * It is filtered to the target's own origin, to tools the policy package
+     * calls read, to what the display can drive, and to a shortlist; then the
+     * session re-checks every one of those independently. Hedged confidence
+     * adds nothing to that, and asking twice costs a whole careful tier.
+     *
+     * Measured, worn, on 2026-09-02: the fast tier proposed the correct lookup
+     * at 1216ms with low confidence, escalation was still running at 2502ms
+     * when the session's own resolver budget expired, and the careful tier
+     * agreed at 3549ms with nobody left to tell. A valid answer was discarded
+     * for a slower identical one. `RESOLVER_PLAN_BUDGET_MS` is 2500 and
+     * `carefulTimeoutMs` is 7000, so that race was never winnable.
+     *
+     * The stakes also changed when an incomplete lookup started being promoted
+     * to a real step: a wearer now answers its arguments and reads its result
+     * before anything is filled in from it, so a poor pick is visible and
+     * cancellable rather than quiet.
+     */
+    if (path === "planResolver") return false;
     if (a.confidence !== "high") return true;
     const escalateOnConsequential =
       this.o.escalateOnConsequential ?? DEFAULTS.escalateOnConsequential;
