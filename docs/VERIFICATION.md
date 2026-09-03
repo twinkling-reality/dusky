@@ -110,15 +110,18 @@ read succeeded, so it was either granted or never prompted; which of those
 happened was not observed. The ten second read timeout and the fifteen second
 watchdog were not exercised, because the fix returned promptly.
 
-`pnpm test:e2e` ran 53 local Playwright tests: 52 passed and one failed. The
-failure is `e2e/connections.spec.ts:110`, which asserts console copy that
-commit `c65947b` removed. It was reproduced on a clean checkout at `e26eef6`
-with every change stashed, so it predates this work and was left alone.
+`pnpm test:e2e` first ran 53 local Playwright tests with one failure at
+`e2e/connections.spec.ts:110`, which asserted console copy that commit
+`c65947b` had removed. That commit updated `e2e/frontdoor.spec.ts` and missed
+this line, so the suite had been failing on a clean checkout since 2026-09-02;
+it was reproduced at `e26eef6` with every local change stashed before being
+attributed. The stale assertion is now removed and the claim it made is left to
+the structural assertions around it. All 53 tests pass.
 
 One earlier run of the same suite also failed
-`e2e/frontdoor.spec.ts:108`. That run took 5.1 minutes against the usual 3.3
+`e2e/frontdoor.spec.ts:108`. That run took 5.1 minutes against the usual 3.0
 while another project's test process shared the machine, and the test passed
-alone and passed again in the clean run above. Recorded as an observed flake
+alone and has passed in every clean run since. Recorded as an observed flake
 under load rather than a result, because a test that passes on the second try
 is not a test that passed.
 

@@ -107,7 +107,13 @@ test("sample and added WebMCP websites can be selected into the live graph", asy
   await expect(page.locator('[data-node-id^="provider:"]')).toHaveCount(4);
   const canopy = page.locator(`[data-node-id="provider:${ADD_WEBSITE_ORIGIN}"]`);
   await expect(canopy).toContainText("Canopy Lab");
-  await expect(page.getByText(/3 samples and 1 added website supply/)).toBeVisible();
+  // The canvas used to narrate "3 samples and 1 added website supply the
+  // actions beside them" here, and this asserted it. Commit c65947b removed
+  // that permanent onboarding copy and updated e2e/frontdoor.spec.ts, which
+  // still guards it from coming back; this line was missed and has been
+  // failing on a clean checkout ever since. The claim it made is covered
+  // structurally by the four provider nodes above, the action count below,
+  // and the branch count after that, so it is gone rather than restated.
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(12);
   await expect(page.getByText("Estimate shade", { exact: true })).toBeVisible();
   await expect(page.locator("canvas[data-provider-branches]")).toHaveAttribute(
