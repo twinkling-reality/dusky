@@ -184,21 +184,9 @@ switch on a known provider, origin, tool name, or result key. See
 
 ## Verified locally
 
-- 451 unit and deterministic tests pass, including stub-backed OpenAI and
-  Anthropic adapter coverage that needs no live credential.
-- All 49 real-browser tests pass in Chrome with WebMCP enabled.
-- The isolated round-trip suite passes 7 of 7 tests.
-- The browser suite discovers eleven actions from three visible providers,
-  loads a fourth provider at runtime, invokes real WebMCP tools, and completes
-  the consented reservation-to-message transfer.
-- The transfer test uses a deterministic planner and real WebMCP tools, so it
-  exercises the cross-provider data and consent path without a model credential.
-- All 15 typechecks and six builds pass. Lint has no errors and retains the five
-  documented CSS specificity warnings.
-
-These are local results for the current tree. Historical deployment evidence
-and hardware gaps are recorded separately in
-[Verification](./docs/VERIFICATION.md).
+457 unit tests, 49 real-browser tests, and 15 typechecks pass on the current
+tree. See [Verification](./docs/VERIFICATION.md) for the full record and
+historical deployment evidence.
 
 ## Repository map
 
