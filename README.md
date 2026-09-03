@@ -192,8 +192,8 @@ switch on a known provider, origin, tool name, or result key. See
 
 ## Verified locally
 
-488 unit tests and 15 typechecks pass on the current tree. Of 52 real-browser
-tests, 51 pass; the one failure is a stale copy assertion in
+488 unit tests and 15 typechecks pass on the current tree. Of 53 real-browser
+tests, 52 pass; the one failure is a stale copy assertion in
 `e2e/connections.spec.ts` left by an earlier console change, and it reproduces
 on a clean checkout. See [Verification](./docs/VERIFICATION.md) for the full
 record and historical deployment evidence.

@@ -37,10 +37,17 @@ geolocation permission and an emulated position of 45.5152, -122.6784:
 That last result is the measurement the design depends on and is recorded in
 [WebMCP and display runtime](./WEBMCP-RUNTIME.md).
 
-`pnpm test:e2e` ran 52 local Playwright tests: 51 passed and one failed. The
+`pnpm test:e2e` ran 53 local Playwright tests: 52 passed and one failed. The
 failure is `e2e/connections.spec.ts:110`, which asserts console copy that
 commit `c65947b` removed. It was reproduced on a clean checkout at `e26eef6`
 with every change stashed, so it predates this work and was left alone.
+
+One earlier run of the same suite also failed
+`e2e/frontdoor.spec.ts:108`. That run took 5.1 minutes against the usual 3.3
+while another project's test process shared the machine, and the test passed
+alone and passed again in the clean run above. Recorded as an observed flake
+under load rather than a result, because a test that passes on the second try
+is not a test that passed.
 
 What this does not establish: nothing here has met a pair of glasses. Whether
 Meta's location permission prompt can be answered on a 600 by 600 waveguide
