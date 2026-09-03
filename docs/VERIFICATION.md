@@ -45,6 +45,31 @@ document recorded `45.5152, -122.6784`. That check used a throwaway spec
 against a server the suite does not manage, so it is evidence rather than a
 committed test.
 
+### Deployed on 2026-09-03
+
+`main` was fast-forwarded to `9f963a9` and pushed. The console, reservations
+and Render relay deploy from that push. `dusky-display` does not: it has no git
+connection and its production build was five days old, so it was deployed with
+the Vercel CLI and the served bundle confirmed to contain the position handler
+and `wss://dusky-relay.onrender.com`.
+
+A coordinate provider was published at <https://dusky-field.vercel.app> because
+Canopy Lab's `/field` page publishes through OpenAI Sites and had not been
+deployed. It declares `survey_point` with required `latitude` and `longitude`,
+authorizes the console origins, and is a separate static page with no build.
+
+The deployed system was then driven end to end in Chrome `152.0.7977.66` with
+`WebMCPTesting`, an emulated position, and a granted permission: the deployed
+console discovered the provider cross-origin, the deployed Display offered the
+location row, two separate transfer approvals filled `latitude` and
+`longitude`, the live tool ran in the provider document, and that document
+recorded `45.5152, -122.6784`. This exercises the deployed relay, which is the
+surface that builds the location row at all.
+
+Still not established: the glasses. This was emulated geolocation in a desktop
+browser against production, not a wearer answering a permission prompt on a
+waveguide.
+
 `pnpm test:e2e` ran 53 local Playwright tests: 52 passed and one failed. The
 failure is `e2e/connections.spec.ts:110`, which asserts console copy that
 commit `c65947b` removed. It was reproduced on a clean checkout at `e26eef6`

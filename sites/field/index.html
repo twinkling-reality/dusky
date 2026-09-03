@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meridian Field Survey</title>
+    <meta
+      name="description"
+      content="A WebMCP provider whose declared action takes a coordinate."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17382f;
+        --muted: #527266;
+        --line: #88a498;
+        --ground: #eef5e9;
+        --card: #f9fcf6;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--ground);
+        color: var(--ink);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+      main { max-width: 60rem; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font: 12px ui-monospace, SFMono-Regular, monospace;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      h1 { margin: 0.75rem 0 0.5rem; font-size: clamp(2rem, 5vw, 2.75rem); line-height: 1.1; }
+      .lede { max-width: 34rem; color: var(--muted); margin: 0 0 2.5rem; }
+      .grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 1.25rem 1.35rem;
+      }
+      .card h2 { margin: 0 0 0.6rem; font-size: 0.95rem; letter-spacing: 0.02em; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.93rem; }
+      code {
+        font: 13px ui-monospace, SFMono-Regular, monospace;
+        background: rgba(23, 56, 47, 0.07);
+        padding: 0.1em 0.4em;
+        border-radius: 5px;
+      }
+      .readout { margin-top: 2rem; }
+      .readout strong { display: block; font-size: 1.35rem; margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
+      footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Meridian · field instruments</p>
+      <h1>Shade at a point.</h1>
+      <p class="lede">
+        A survey that takes a coordinate rather than a named plot, so a surveyor
+        standing in a field can ask about the ground under their feet instead of
+        the nearest place with a name.
+      </p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Declared action</h2>
+          <p><code>survey_point</code> · read only · returns shade and canopy condition.</p>
+        </section>
+        <section class="card">
+          <h2>Declared input</h2>
+          <p><code>latitude</code> and <code>longitude</code>, WGS84 decimal degrees. No extensions.</p>
+        </section>
+        <section class="card">
+          <h2>Registration</h2>
+          <p id="registration">Registering one WebMCP action.</p>
+        </section>
+      </div>
+
+      <div class="card readout">
+        <h2>Latest survey</h2>
+        <strong id="last-survey" data-testid="last-survey">No survey has run.</strong>
+      </div>
+
+      <footer>
+        Meridian publishes one WebMCP action and authorizes the Dusky console
+        origin. It holds no account, reads no sensor, and stores nothing.
+      </footer>
+    </main>
+
+    <script type="module">
+      /*
+       * A provider that wants a coordinate.
+       *
+       * WebMCP has no ambient-context channel: executeTool receives the input
+       * this page declared and an AbortSignal, nothing else. So a position can
+       * only ever arrive as a parameter named here, and this page names it
+       * `latitude` and `longitude` because that is what those numbers are
+       * called. There is no Dusky-specific keyword in this schema, and nothing
+       * on this page knows how the value gets collected.
+       */
+      const DUSKY_ORIGINS = [
+        'https://dusky-console.vercel.app',
+        'http://localhost:7803',
+      ];
+
+      const registration = document.getElementById('registration');
+      const lastSurvey = document.getElementById('last-survey');
+      const lifetime = new AbortController();
+
+      function shadeAt(latitude, longitude) {
+        const spread = Math.abs(Math.sin(latitude * 1.7) + Math.cos(longitude * 1.3));
+        return Math.round(38 + spread * 26);
+      }
+
+      function coordinate(value, limit) {
+        const n = typeof value === 'number' ? value : Number(value);
+        if (!Number.isFinite(n) || n < -limit || n > limit) return null;
+        return n;
+      }
+
+      const context = document.modelContext;
+
+      if (!context) {
+        registration.textContent =
+          'WebMCP is not available in this browser. Enable chrome://flags/#enable-webmcp-testing.';
+      } else {
+        context
+          .registerTool(
+            {
+              name: 'survey_point',
+              title: 'Survey a point',
+              description:
+                'Report canopy shade at a coordinate without changing anything.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  latitude: { type: 'number', description: 'Latitude?' },
+                  longitude: { type: 'number', description: 'Longitude?' },
+                },
+                required: ['latitude', 'longitude'],
+              },
+              annotations: { readOnlyHint: true },
+              execute: async ({ latitude, longitude }) => {
+                // The site validates its own input. Dusky checks the primitive
+                // conversion it can see and enforces range for nobody.
+                const lat = coordinate(latitude, 90);
+                const lon = coordinate(longitude, 180);
+                if (lat === null || lon === null) {
+                  return JSON.stringify({
+                    ok: false,
+                    error: 'That is not a point on Earth.',
+                  });
+                }
+                const shade = shadeAt(lat, lon);
+                lastSurvey.textContent = `${lat}, ${lon}: ${shade}% shade, healthy`;
+                return JSON.stringify({
+                  survey_point: `${lat}, ${lon}`,
+                  shade_percent: shade,
+                  canopy_condition: 'healthy',
+                });
+              },
+            },
+            { exposedTo: DUSKY_ORIGINS, signal: lifetime.signal },
+          )
+          .then(() => {
+            registration.textContent = 'One WebMCP action is ready.';
+          })
+          .catch((error) => {
+            registration.textContent = String(error && error.message ? error.message : error);
+          });
+      }
+
+      addEventListener('pagehide', () => lifetime.abort(), { once: true });
+    </script>
+  </body>
+</html>
