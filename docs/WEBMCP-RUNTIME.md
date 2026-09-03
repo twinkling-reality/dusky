@@ -280,10 +280,14 @@ accuracy of 5 to 50 metres, a required wearer permission grant, and guidance
 that the permission request follow a user gesture.
 
 Dusky reads a position only from inside the Display's own keypress handler, on
-a parameter that named a coordinate, and never otherwise. Nothing here has met
-a real pair of glasses: whether that permission prompt is answerable on a
-600 by 600 waveguide with six keys is unmeasured, and the ten second read
-timeout is a guess of the same kind as the liveness intervals.
+a parameter that named a coordinate, and never otherwise.
+
+Measured on hardware 2026-09-03: the read works. A wearer pressed the location
+row on real glasses, the device returned a real fix, and the coordinate reached
+a provider through two transfer approvals. Whether a permission prompt appeared
+was not observed, so its answerability with six keys is still unmeasured rather
+than disproved, and the ten second read timeout was never reached because the
+fix returned promptly.
 
 Meta also documents `DeviceMotionEvent` and `DeviceOrientationEvent`. Dusky
 uses neither. The Display contract here excludes raw-gesture assumptions, and
@@ -305,5 +309,5 @@ Desktop Chrome verifies WebMCP behavior, frame geometry, and the keyboard form
 of the input contract.
 
 It does not verify physical-waveguide legibility, real Neural Band behavior,
-composer behavior on hardware, sleep recovery, device loading time, or whether
-a location permission prompt can be answered on the glasses.
+composer behavior on hardware, sleep recovery, or device loading time. The
+position path itself has been worn; see [Verification](./VERIFICATION.md).

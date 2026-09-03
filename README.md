@@ -235,8 +235,8 @@ record and historical deployment evidence.
   honestly.
 - Automated browser tests do not replace a final pass on physical glasses.
   Waveguide readability, Neural Band behavior, composer input, sleep recovery,
-  device load time, and whether a location permission prompt can be answered on
-  the waveguide all require hardware verification.
+  and device load time all require hardware verification. The wearer-position
+  path has been worn; see [Verification](./docs/VERIFICATION.md).
 - Dusky reads a position and never a heading. Head orientation is exposed by
   the platform and deliberately unused; the reasoning is in
   [Field notes](./FIELD-NOTES.md).

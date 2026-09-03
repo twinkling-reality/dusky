@@ -66,9 +66,49 @@ location row, two separate transfer approvals filled `latitude` and
 recorded `45.5152, -122.6784`. This exercises the deployed relay, which is the
 surface that builds the location row at all.
 
-Still not established: the glasses. This was emulated geolocation in a desktop
-browser against production, not a wearer answering a permission prompt on a
-waveguide.
+### Worn on 2026-09-03
+
+The position path then ran on real Meta Ray-Ban Display hardware, driven by
+Glendon, against the deployed console, relay and provider. The relay's own
+audit trail for that session is the evidence and is quoted here in full order,
+values omitted because it does not record them:
+
+```text
+20:07:38  discover   12 actions, 4 sites
+20:07:56  transfer   survey_point  latitude   approval_required
+20:12:17  transfer   survey_point  latitude   invalidated
+                     reason: stale destination tool or schema
+20:12:27  transfer   survey_point  latitude   approval_required
+20:12:29  transfer   survey_point  latitude   approved
+20:12:31  transfer   survey_point  longitude  approval_required
+20:12:32  transfer   survey_point  longitude  approved
+20:12:32  result     survey_point  ok: true
+```
+
+What that establishes on hardware:
+
+- the location row rendered on the waveguide and was operable with the
+  glasses' own input;
+- the device produced a real position, so `navigator.geolocation` works in a
+  Meta Ray-Ban Display Web App as the platform documentation states;
+- the transfer frame rendered the coordinate and Share applied it;
+- both coordinates were approved separately, and the live WebMCP tool ran in
+  the provider document and returned a real result, read back on the lens as
+  38 percent shade and a healthy canopy;
+- every entry carries `sourceOrigin: dusky:device` and `sourceField: #device`
+  and no coordinate, so the provenance-without-value rule holds in production.
+
+The invalidation at 20:12:17 was not staged. The first approval frame sat on
+the lens for four and a half minutes, which is past the 120 second limit in
+`isConfirmationFresh`, so the session refused the stale approval and required
+the wearer to choose again. A freshness guard firing unprompted on hardware,
+against a real reading, is better evidence than a clean first pass.
+
+Still not recorded: whether a location permission prompt appeared on the
+waveguide at all, and if it did, whether it was answered with the D-pad. The
+read succeeded, so it was either granted or never prompted; which of those
+happened was not observed. The ten second read timeout and the fifteen second
+watchdog were not exercised, because the fix returned promptly.
 
 `pnpm test:e2e` ran 53 local Playwright tests: 52 passed and one failed. The
 failure is `e2e/connections.spec.ts:110`, which asserts console copy that
@@ -82,9 +122,8 @@ alone and passed again in the clean run above. Recorded as an observed flake
 under load rather than a result, because a test that passes on the second try
 is not a test that passed.
 
-What this does not establish: this path has not been worn. Earlier entries
-record real hardware sessions for the composer, pairing, radio and sleep
-behaviour; the position row postdates the most recent one. Whether
+What this section does not establish on its own: the glasses. That is recorded
+separately below, under Worn on 2026-09-03. Whether
 Meta's location permission prompt can be answered on a 600 by 600 waveguide
 with six keys is unmeasured, as is the ten second read timeout against a fix
 that comes from a paired phone. Emulated geolocation in desktop Chrome proves

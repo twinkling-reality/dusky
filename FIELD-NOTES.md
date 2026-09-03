@@ -766,6 +766,24 @@ Worth listing separately: these were all live in a passing test suite.
 
 Honest gaps, not oversights.
 
+- ~~**Whether a wearer can read a position on the glasses.**~~ Answered
+  2026-09-03. The path was worn: the location row rendered, the device returned
+  a real fix, two transfer approvals filled `latitude` and `longitude`, and the
+  provider's tool ran and came back on the lens. `navigator.geolocation` works
+  in a Meta Ray-Ban Display Web App, as documented.
+
+  What was NOT observed, and is worth someone recording next time: whether a
+  permission prompt appeared at all. The read succeeded, so it was granted or
+  never asked, and nobody wrote down which. The prompt's answerability with six
+  keys is therefore still unmeasured rather than disproved.
+
+  One thing the session did settle by accident. The first approval frame sat on
+  the lens for four and a half minutes while the wearer was doing something
+  else. `isConfirmationFresh` caps an approval at 120 seconds, so the session
+  invalidated it and asked again rather than applying a coordinate agreed to
+  before the pause. That is the first time that guard has fired on hardware
+  against a real value, and it fired without anybody arranging it.
+
 - **Whether a wearer can answer a location permission prompt on the glasses.**
   Meta documents `navigator.geolocation` as standard, says the fix comes from
   the paired phone rather than from the glasses, quotes 5-50m accuracy, and
@@ -780,10 +798,8 @@ Honest gaps, not oversights.
   unmeasured. Verified in desktop Chrome with a granted permission and an
   emulated position, which proves the plumbing and not the device.
 
-  This is a gap in ONE path, not a statement about the product. Dusky has been
-  worn: the composer, the pairing code, the radio and the sleep behaviour were
-  all found by putting it on a pair of glasses, and those entries are above
-  with their dates. The position row is simply newer than the last session.
+  Superseded on 2026-09-03: the path has since been worn, and the entry above
+  records what that settled and what it did not.
 
   The mechanism refuses to hang while that stays unknown. `getCurrentPosition`
   starts its own timeout only AFTER permission is granted, per the Geolocation
