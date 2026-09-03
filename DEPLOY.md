@@ -207,7 +207,20 @@ The repository's public demo currently uses these stable origins:
 | Reservations fixture | <https://dusky-reservations.vercel.app> |
 | Communications fixture | <https://dusky-dispatch.vercel.app> |
 | Runtime provider | <https://dusky-canopy-lab.glendonchin.chatgpt.site> |
+| Coordinate provider | <https://dusky-field.vercel.app> |
 | Relay | <https://dusky-relay.onrender.com> |
+
+`dusky-display`, `dusky-market` and `dusky-dispatch` have no git connection and
+do not deploy on a push to `main`. Deploy the Display with, from the repository
+root:
+
+```bash
+vercel deploy --prod --local-config vercel/display.json --project dusky-display
+```
+
+`VITE_RELAY_URL` exists only on the Production environment, so a preview build
+silently falls back to `ws://localhost:7900`. Always deploy the Display with
+`--prod` and confirm the served bundle carries the `wss://` relay origin.
 
 These values are examples for the official deployment. Do not copy them into a
 self-hosted deployment unless the intention is to connect to the official

@@ -272,8 +272,13 @@ The deployed reference provider is
 default registry, explicitly authorizes the local and official console
 origins, and can be pasted into **Add Website** for a public demonstration.
 
-Its `/field` page declares a coordinate tool instead of a zone enum, and is the
-one to paste when demonstrating the wearer-position path.
+To demonstrate the wearer-position path, paste
+<https://dusky-field.vercel.app> instead. It declares `survey_point` with
+required `latitude` and `longitude`, authorizes the same console origins, and
+is the provider the path was proven against on real glasses.
+
+Canopy Lab carries an equivalent `/field` page in the repository, but that
+project publishes by hand through OpenAI Sites and the page is not live today.
 
 ```bash
 pnpm exec playwright test e2e/roundtrip.spec.ts

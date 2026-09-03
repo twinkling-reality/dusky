@@ -94,11 +94,16 @@ a runtime `site` parameter under the name Canopy Lab.
 The provider declares `Estimate shade`, a `zone` enum, and result fields for a
 survey zone, shade percentage, and canopy condition.
 
-A second page on that same origin, `/field`, declares `Survey a point` with
+A second page in that project, `/field`, declares `Survey a point` with
 required `latitude` and `longitude`. It is a separate page rather than a second
 tool on the home page so that the deployed round-trip proofs keep counting one
-action there, and it is what exercises the wearer-position path against a real
-deployment rather than a fixture.
+action there.
+
+That page is in the repository and is not currently published: Canopy Lab
+deploys through OpenAI Sites by hand, and `/field` returns 404 today. The
+published coordinate provider is <https://dusky-field.vercel.app>, one static
+page declaring the same action, and it is what the wearer-position path was
+proven against on real glasses.
 
 The browser test verifies that:
 
