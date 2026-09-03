@@ -2,30 +2,13 @@
 
 import { ArrowUpRight, Leaf, MapPin, SunMedium, Trees } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
-const DUSKY_ORIGINS = [
-  'https://dusky-console.vercel.app',
-  'http://localhost:7803',
-];
+import {
+  DUSKY_ORIGINS,
+  modelContext,
+  type RegistrationState,
+} from './dusky';
 
 type SurveyZone = 'courtyard' | 'terrace' | 'garden';
-type ToolInput = Record<string, unknown>;
-
-interface ModelContext {
-  registerTool(
-    tool: {
-      name: string;
-      title: string;
-      description: string;
-      inputSchema: object;
-      annotations: { readOnlyHint: boolean };
-      execute(input: ToolInput): Promise<string>;
-    },
-    options: { exposedTo: string[]; signal: AbortSignal },
-  ): Promise<void>;
-}
-
-type RegistrationState = 'registering' | 'ready' | 'unavailable' | 'error';
 
 type ZoneProfile = {
   label: string;
@@ -54,10 +37,6 @@ const ZONES: Record<SurveyZone, ZoneProfile> = {
     note: 'Deepest sustained cover',
   },
 };
-
-function modelContext(): ModelContext | undefined {
-  return (document as Document & { modelContext?: ModelContext }).modelContext;
-}
 
 function isSurveyZone(value: unknown): value is SurveyZone {
   return typeof value === 'string' && value in ZONES;

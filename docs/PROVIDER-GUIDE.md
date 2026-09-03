@@ -272,6 +272,9 @@ The deployed reference provider is
 default registry, explicitly authorizes the local and official console
 origins, and can be pasted into **Add Website** for a public demonstration.
 
+Its `/field` page declares a coordinate tool instead of a zone enum, and is the
+one to paste when demonstrating the wearer-position path.
+
 ```bash
 pnpm exec playwright test e2e/roundtrip.spec.ts
 ```

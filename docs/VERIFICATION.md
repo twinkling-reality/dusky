@@ -37,6 +37,14 @@ geolocation permission and an emulated position of 45.5152, -122.6784:
 That last result is the measurement the design depends on and is recorded in
 [WebMCP and display runtime](./WEBMCP-RUNTIME.md).
 
+The deployable provider was then driven through the same path, so the proof is
+not fixture-only. With the Canopy Lab site running from its own dev server, the
+console discovered exactly one action from `/field`, the Display collected both
+coordinates through two separate transfer approvals, and that page's own
+document recorded `45.5152, -122.6784`. That check used a throwaway spec
+against a server the suite does not manage, so it is evidence rather than a
+committed test.
+
 `pnpm test:e2e` ran 53 local Playwright tests: 52 passed and one failed. The
 failure is `e2e/connections.spec.ts:110`, which asserts console copy that
 commit `c65947b` removed. It was reproduced on a clean checkout at `e26eef6`

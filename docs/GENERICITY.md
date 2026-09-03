@@ -94,6 +94,12 @@ a runtime `site` parameter under the name Canopy Lab.
 The provider declares `Estimate shade`, a `zone` enum, and result fields for a
 survey zone, shade percentage, and canopy condition.
 
+A second page on that same origin, `/field`, declares `Survey a point` with
+required `latitude` and `longitude`. It is a separate page rather than a second
+tool on the home page so that the deployed round-trip proofs keep counting one
+action there, and it is what exercises the wearer-position path against a real
+deployment rather than a fixture.
+
 The browser test verifies that:
 
 1. the runtime provider replaces the default fixtures;
