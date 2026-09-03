@@ -170,7 +170,7 @@
             registration.textContent = 'One WebMCP action is ready.';
           })
           .catch((error) => {
-            registration.textContent = String(error && error.message ? error.message : error);
+            registration.textContent = String(error?.message ?? error);
           });
       }
 
