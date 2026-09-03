@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canopy Lab field survey</title>
+    <style>
+      :root {
+        color: #17382f;
+        background: #eef5e9;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        min-height: 100vh;
+        padding: 28px;
+        box-sizing: border-box;
+      }
+
+      .eyebrow {
+        color: #527266;
+        font: 12px ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 10px;
+        font-size: 32px;
+      }
+
+      p {
+        max-width: 34rem;
+        line-height: 1.5;
+      }
+
+      .result {
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid #88a498;
+        border-radius: 12px;
+        background: #f9fcf6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Test-only runtime provider</p>
+      <h1>Canopy Lab field survey</h1>
+      <p>
+        A second page on the same origin, declaring a tool whose required parameters are an
+        ordinary pair of coordinates. It knows nothing about Dusky beyond the console origin it
+        authorizes, and it declares no Dusky-specific extension: `latitude` and `longitude` are
+        simply what these two numbers are called.
+      </p>
+      <p id="registration">Registering one WebMCP tool.</p>
+      <p class="result" data-testid="last-survey">No survey has run.</p>
+      <p class="result" data-testid="site-geolocation">Geolocation not attempted.</p>
+    </main>
+    <script type="module" src="/nearby.ts"></script>
+  </body>
+</html>

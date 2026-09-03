@@ -1,4 +1,9 @@
-import { type DisplayFrame, SESSION_CODE_ALPHABET, SESSION_CODE_LENGTH } from "@dusky/contracts";
+import {
+  type DisplayFrame,
+  POSITION_CHOICE,
+  SESSION_CODE_ALPHABET,
+  SESSION_CODE_LENGTH,
+} from "@dusky/contracts";
 import { FrameView } from "@dusky/lens";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
@@ -47,9 +52,26 @@ export function App() {
     setPendingChoice(null);
   }, [relay.frameKey]);
 
+  /*
+   * One row is answered here rather than sent as a choice.
+   *
+   * `__position` asks the DEVICE for the value the frame is asking about, and
+   * the read has to happen inside this handler: Meta's guidance is that a
+   * location permission request follow a user gesture, and this call stack is
+   * the only place on the Display that has one. Everything else about the row
+   * is ordinary, including the local acknowledgement, because a wearer who
+   * presses it must see that it registered while the radio is still working.
+   *
+   * `relay.sendPosition` always answers, with a coordinate or with a reason,
+   * so this can never leave the panel pending forever.
+   */
   const choose = useCallback(
     (choiceId: string) => {
       setPendingChoice(choiceId);
+      if (choiceId === POSITION_CHOICE) {
+        relay.sendPosition();
+        return;
+      }
       relay.choose(choiceId);
     },
     [relay],

@@ -13,6 +13,7 @@
  */
 
 import type { Choice, DisplayFrame, Fact, JsonSchema, ToolDescriptor } from "@dusky/contracts";
+import { POSITION_CHOICE } from "@dusky/contracts";
 import { type Consequence, classify } from "@dusky/policy";
 
 /**
@@ -453,6 +454,63 @@ export function isOperable(tool: ToolDescriptor): boolean {
   return params.every((p) => !p.required || p.kind !== "unsupported");
 }
 
+/* ------------------------------------------------------ wearer coordinates */
+
+/**
+ * Parameter names that a coordinate can answer.
+ *
+ * This is a CONVENTION, in the same sense and for the same reason as `ID_KEYS`
+ * below: a conservative closed list of domain-neutral words, matched exactly,
+ * with the ordinary composer as the fallback when it does not match. It is not
+ * a branch on a provider. `latitude` and `longitude` are what the WGS84 datum,
+ * GeoJSON, ISO 6709 and `GeolocationCoordinates` itself all call these two
+ * numbers, so a site that already has a coordinate API needs no Dusky-specific
+ * schema extension and no knowledge that Dusky exists.
+ *
+ * Kept small on purpose. A name this does not recognise costs the wearer the
+ * composer they would have used anyway; a name it recognises WRONGLY offers to
+ * put the wearer's position into a field that meant something else. Those are
+ * not symmetric mistakes, so the list only holds words that have no second
+ * meaning.
+ */
+const LATITUDE_KEYS = new Set(["latitude", "lat"]);
+const LONGITUDE_KEYS = new Set(["longitude", "lng", "lon"]);
+
+/**
+ * Re-exported so a caller building or reading a parameter frame has one import.
+ *
+ * The row is reserved like `__compose` and `__site:`, and handled before any
+ * argument coercion so it can never reach a site as a value. Unlike those, it
+ * is answered on the Display itself: the wearer's press is the user gesture
+ * the platform wants around a location permission request.
+ */
+export { POSITION_CHOICE };
+
+export type CoordinateAxis = "latitude" | "longitude";
+
+/**
+ * Which half of a position this parameter is asking for, if either.
+ *
+ * Separators are folded so `Latitude`, `latitude` and `lat_` read alike, but
+ * nothing else is: `lat_1` folds to `lat1` and does not match, and neither
+ * does `platitude`, because the comparison is against the whole folded name
+ * rather than a substring of it.
+ *
+ * Enums are deliberately excluded even when named `latitude`. A declared enum
+ * already names every value the site accepts, and those choices are both more
+ * specific than a sensor reading and already operable on the Display.
+ */
+export function coordinateAxis(param: ParamSpec): CoordinateAxis | null {
+  if (param.kind !== "number" && param.kind !== "text") return null;
+  const folded = param.name
+    .trim()
+    .toLowerCase()
+    .replace(/[_\-\s]+/g, "");
+  if (LATITUDE_KEYS.has(folded)) return "latitude";
+  if (LONGITUDE_KEYS.has(folded)) return "longitude";
+  return null;
+}
+
 /* ----------------------------------------------------------- humanization */
 
 /** `add_to_cart` becomes `Add to cart`. Titles win when the site supplies one. */
@@ -854,6 +912,16 @@ export function paramFrame(
   param: ParamSpec,
   candidates: Choice[] = [],
   page = 0,
+  /**
+   * Replaces the composer's standing instruction, and only that one.
+   *
+   * Used to say why a device reading did not arrive, on the frame the wearer
+   * is already standing on, rather than throwing them to an error screen and
+   * losing the parameter. The enum, boolean and candidate shapes keep their
+   * note, because there it names the tool and that is not something a passing
+   * notice should overwrite.
+   */
+  note?: string,
 ): DisplayFrame {
   // The site wrote this question and it goes straight into the panel's largest
   // text. Measured at 600x600 with four choices, about 35 characters is one
@@ -915,12 +983,29 @@ export function paramFrame(
    * blur that was always supposed to commit. Selecting it is then a no-op that
    * the session ignores, because by then the value has already gone.
    */
+  /*
+   * A coordinate is the one value the device can answer better than the wearer.
+   *
+   * It goes first because it is the answer to the question on screen, and a
+   * wearer standing somewhere should not have to arrow past the composer to
+   * say so. Pressing it reads the device and nothing more: the reading becomes
+   * a transfer frame naming this site and this field, which is where the value
+   * is actually approved to leave. Fourth row still reserved for Back, so this
+   * remains a four-row frame with no page.
+   *
+   * The row is offered whenever the parameter names an axis, not when some
+   * capability handshake says the sensor exists. Permission is not knowable in
+   * advance, so a wearer who presses it and is refused reads why and writes the
+   * value instead, which is exactly where they would have started.
+   */
+  const axis = coordinateAxis(param);
   return {
     kind: "choose",
     source,
     title,
-    note: "Tap to write or speak, then Done",
+    note: note ?? (axis ? "Use where you are, or write it" : "Tap to write or speak, then Done"),
     choices: [
+      ...(axis ? [{ id: POSITION_CHOICE, label: "Use my location", meta: "enter" }] : []),
       { id: "__compose", label: "Enter a value", meta: "tap" },
       { id: "__submit", label: "Done", meta: "enter" },
       { id: "__cancel", label: "Back", meta: "cancel" },

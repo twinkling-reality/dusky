@@ -1,5 +1,11 @@
-import type { DisplayFrame, DisplayToServer, ServerToDisplay, TaskState } from "@dusky/contracts";
-import { CLOSE_NOT_A_CODE, CLOSE_SUPERSEDED } from "@dusky/contracts";
+import type {
+  DisplayFrame,
+  DisplayToServer,
+  PositionRefusal,
+  ServerToDisplay,
+  TaskState,
+} from "@dusky/contracts";
+import { CLOSE_NOT_A_CODE, CLOSE_SUPERSEDED, roundCoordinate } from "@dusky/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -34,9 +40,52 @@ export interface Relay {
   choose: (choiceId: string) => void;
   submitText: (value: string) => void;
   back: () => void;
+  /**
+   * Read where this device is and send it, or send why it could not.
+   *
+   * The read is deliberately here rather than at the relay's request. Meta's
+   * Web App guidance is to trigger a permission request from a user gesture,
+   * and a message arriving over a WebSocket has none: this is called straight
+   * out of the wearer's keypress handler, so the browser sees the activation
+   * that produced it.
+   *
+   * Always answers. A refusal is as much an answer as a fix, because the
+   * alternative is a wearer looking at an unchanged panel wondering whether
+   * their press registered, which is the failure this device makes worst.
+   */
+  sendPosition: () => void;
 }
 
 const RECONNECT_MS = [250, 500, 1000, 2000, 4000] as const;
+
+/**
+ * How long a wearer waits on a position before being told to write it.
+ *
+ * Meta reports 5-50m accuracy from the paired phone rather than from the
+ * glasses, so this crosses a radio link before it crosses ours. Ten seconds is
+ * long enough for a cold fix over that hop and short enough that the panel
+ * does not look hung, which on a cursorless display is the same as crashed.
+ * Unverified against real glasses; see FIELD-NOTES.
+ */
+const POSITION_TIMEOUT_MS = 10_000;
+
+/**
+ * The ceiling on the whole attempt, permission prompt included.
+ *
+ * Longer than the read timeout so the ordinary path always wins, and short
+ * enough that an unanswered prompt still returns the wearer to the composer
+ * rather than leaving them on a panel that looks hung.
+ */
+const POSITION_WATCHDOG_MS = 15_000;
+
+/**
+ * How old a cached browser fix may be and still answer.
+ *
+ * A tool wanting a coordinate wants both halves of one, and both halves should
+ * describe the same place. Letting the browser serve its own recent fix is
+ * what makes that true without Dusky storing a position anywhere.
+ */
+const POSITION_MAX_AGE_MS = 60_000;
 
 /**
  * Liveness, because a sleeping pair of glasses does not close its socket.
@@ -242,5 +291,73 @@ export function useRelay(url: string, sessionId: string): Relay {
       [send, frameKey],
     ),
     back: useCallback(() => send({ t: "cancel", frameId: frameKey }), [send, frameKey]),
+    sendPosition: useCallback(() => {
+      const id = frameKey;
+      if (!("geolocation" in navigator)) {
+        send({ t: "position", frameId: id, ok: false, reason: "unsupported" });
+        return;
+      }
+
+      /*
+       * Exactly one answer, from whichever of three things happens first.
+       *
+       * The watchdog is not redundant with the `timeout` option below, and the
+       * difference is the whole reason it is here. Per the Geolocation spec
+       * that interval starts AFTER permission is granted, so a wearer who is
+       * shown a permission prompt and never answers it gets no success
+       * callback and no error callback, forever. On this device that is the
+       * worst available outcome: the local gesture acknowledgement sweeps on a
+       * panel with no cursor, which a wearer reads as a crash. It has happened
+       * here before, on the pairing frame, and is written up in FIELD-NOTES.
+       */
+      let answered = false;
+      const answer = (message: DisplayToServer) => {
+        if (answered) return;
+        answered = true;
+        clearTimeout(watchdog);
+        send(message);
+      };
+      const watchdog = setTimeout(
+        () => answer({ t: "position", frameId: id, ok: false, reason: "timeout" }),
+        POSITION_WATCHDOG_MS,
+      );
+
+      navigator.geolocation.getCurrentPosition(
+        (fix) => {
+          // Rounded HERE, before anything leaves the device. The relay checks
+          // the same bound on arrival, but by then the precise value would
+          // already have been sent, and a bound applied after transmission is
+          // not a bound on what was transmitted.
+          answer({
+            t: "position",
+            frameId: id,
+            ok: true,
+            position: {
+              latitude: roundCoordinate(fix.coords.latitude),
+              longitude: roundCoordinate(fix.coords.longitude),
+            },
+          });
+        },
+        (err) => {
+          // A cross-origin frame without `allow="geolocation"` fails as
+          // PERMISSION_DENIED with no prompt, so this branch covers both a
+          // wearer saying no and an embedder never having asked.
+          const reason: PositionRefusal =
+            err.code === err.PERMISSION_DENIED
+              ? "denied"
+              : err.code === err.TIMEOUT
+                ? "timeout"
+                : "unavailable";
+          answer({ t: "position", frameId: id, ok: false, reason });
+        },
+        {
+          // `maximumAge` lets the second half of a coordinate reuse the fix the
+          // first half took, without this file keeping a copy of one.
+          enableHighAccuracy: false,
+          timeout: POSITION_TIMEOUT_MS,
+          maximumAge: POSITION_MAX_AGE_MS,
+        },
+      );
+    }, [send, frameKey]),
   };
 }

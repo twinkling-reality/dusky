@@ -484,6 +484,21 @@ export class SessionActor {
         this.publishActivity({ kind: "display_input", frameId: msg.frameId, input: "cancel" });
         await this.session.handle("__cancel");
         return;
+      /*
+       * A coordinate the Display read for itself, having been asked to.
+       *
+       * Nothing is requested from here and nothing is stored here. The reading
+       * arrives already bounded by the wire type, is range and precision
+       * checked again inside `Session`, and becomes a transfer frame rather
+       * than an argument: the relay holds it only for as long as the wearer is
+       * looking at the decision about it.
+       */
+      case "position":
+        this.publishActivity({ kind: "display_input", frameId: msg.frameId, input: "position" });
+        await this.session.submitPosition(
+          msg.ok ? { ok: true, position: msg.position } : { ok: false, reason: msg.reason },
+        );
+        return;
     }
   }
 

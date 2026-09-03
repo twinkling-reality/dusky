@@ -116,6 +116,39 @@ for cross-origin discovery. The Requirements panel names its tool-registration
 probe as page-level and directs the full provider path to the measured Chrome
 configuration. The actual ChatGPT desktop browser remains unmeasured.
 
+### `allow="tools"` delegates WebMCP and nothing else
+
+Measured on 2026-09-03 in Chrome 152 with `WebMCPTesting`.
+
+`tools` is one policy-controlled feature among several, and Permissions Policy
+defaults each of them to `self`. A provider mounted with `allow="tools"` alone
+therefore gets WebMCP and no other delegated capability.
+
+`e2e/position.spec.ts` measures the case Dusky depends on. With the browsing
+context holding a geolocation grant, and the top-level Display in that same
+context reading a position successfully, the provider document's own
+`getCurrentPosition` returns `PERMISSION_DENIED` with no prompt.
+
+Two consequences. A provider cannot read the wearer's position; it can only
+receive one the wearer sent. And the failure is indistinguishable from a wearer
+declining, so a provider must treat a missing coordinate as ordinary missing
+input rather than as a refusal.
+
+### No ambient-context channel exists
+
+Checked against the specification source on 2026-09-03.
+
+`executeTool` takes a registered tool, an input object, and an options bag
+whose only member is an `AbortSignal`. The execute callback receives the same
+two things. The draft contains no `_meta`, `clientContext`, elicitation,
+sampling, or roots surface, and MCP's `_meta` defines an extension point with
+no standard ambient key.
+
+Context therefore has to travel as a parameter the provider declared. Dusky
+recognizes the names sites already use for a coordinate rather than defining a
+schema extension nothing could be expected to adopt. See
+[Provider guide](./PROVIDER-GUIDE.md).
+
 ### Tool order
 
 The browser owns the order returned by `getTools`. Dusky applies a deterministic
@@ -239,6 +272,25 @@ The Web App supports WebSocket, Fetch, Service Worker, and local storage up to
 
 It does not receive camera, microphone, or notification access.
 
+### Location and sensors
+
+Meta documents `navigator.geolocation` as the standard API, with the fix
+supplied by the paired mobile device rather than by the glasses, an expected
+accuracy of 5 to 50 metres, a required wearer permission grant, and guidance
+that the permission request follow a user gesture.
+
+Dusky reads a position only from inside the Display's own keypress handler, on
+a parameter that named a coordinate, and never otherwise. Nothing here has met
+a real pair of glasses: whether that permission prompt is answerable on a
+600 by 600 waveguide with six keys is unmeasured, and the ten second read
+timeout is a guess of the same kind as the liveness intervals.
+
+Meta also documents `DeviceMotionEvent` and `DeviceOrientationEvent`. Dusky
+uses neither. The Display contract here excludes raw-gesture assumptions, and
+the published guidance contradicts its own sample over whether
+`DeviceOrientationEvent.requestPermission()` exists on the glasses runtime. The
+reasoning is recorded in [Field notes](../FIELD-NOTES.md).
+
 ### Documented delivery budget
 
 The target limits are under 3 seconds to load, under 500 KB of gzipped
@@ -253,4 +305,5 @@ Desktop Chrome verifies WebMCP behavior, frame geometry, and the keyboard form
 of the input contract.
 
 It does not verify physical-waveguide legibility, real Neural Band behavior,
-composer behavior on hardware, sleep recovery, or device loading time.
+composer behavior on hardware, sleep recovery, device loading time, or whether
+a location permission prompt can be answered on the glasses.

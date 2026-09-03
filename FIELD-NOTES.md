@@ -335,6 +335,95 @@ while a typed `APIError` is rethrown.
 Found by running the adapter against a stub that speaks the Messages API wire
 format, which is now a test that runs in CI without a credential.
 
+### `allow="tools"` grants WebMCP and nothing else
+
+Measured on 2026-09-03 in Chrome 152 with `WebMCPTesting`, while adding the
+wearer position path.
+
+Permissions Policy defaults every feature to `self`, and `tools` is one feature
+among several. A provider mounted in the console's `allow="tools"` frame can
+register and execute WebMCP tools and cannot read anything else about the
+device. `e2e/position.spec.ts` proves the specific case that matters: with the
+browsing context holding a geolocation grant, and the top-level Display in the
+same context reading `45.5152` successfully, the provider document's own
+`getCurrentPosition` returns `PERMISSION_DENIED` with no prompt at all.
+
+Two things follow, and the second one is the reason this is written down.
+
+The first is that a site cannot take a wearer's position. It can only receive
+one the wearer sent. That is the property the whole feature rests on, and it is
+enforced by the browser rather than by Dusky.
+
+The second is that the silent failure looks exactly like a wearer declining. A
+provider that wants a coordinate and never gets one has no way to distinguish
+"the embedder did not delegate the feature" from "the person said no", and
+neither does anyone reading its logs. This was worth measuring rather than
+reading, because the spec text and the observed failure are the same sentence
+from opposite ends.
+
+### WebMCP has nowhere to put ambient context, by construction
+
+Checked against the specification source on 2026-09-03, not inferred from a
+summary. `executeTool` takes a `RegisteredTool`, an `inputObject` and an
+options bag whose only member is an `AbortSignal`. The execute callback
+receives the same two things. Grepping the draft for `_meta`, `clientContext`,
+`elicitation`, `sampling`, `roots` and `ambient` returns nothing; the three
+hits for `environment` are bibliography entries for HTML's environment settings
+object. MCP's `_meta` is an extension point with no standard ambient key, and
+its elicitation flow runs server to user rather than client to server.
+
+So there is no channel for "here is where the wearer is" that is separate from
+the site's own parameters, and there is no reserved name that a site could be
+expected to already understand. Passing a coordinate means either recognising
+names that sites already publish, or inventing a Dusky-specific schema
+extension that every site would have to adopt.
+
+Dusky does the first. `coordinateAxis` in `packages/frames` matches a folded
+parameter name against a closed list, exactly the way `ID_KEYS` recognises an
+identifier in a result, and falls back to the composer when it does not match.
+That means a site with an ordinary `latitude`/`longitude` API works with no
+changes and no knowledge that Dusky exists, and a site that names them
+something else costs the wearer nothing they were not already going to pay.
+
+The temptation was to invent `x-dusky-context: location`. Nothing would have
+been able to consume it, because the only sites that could adopt it are sites
+already able to rename a parameter.
+
+### Head orientation was researched and deliberately not built
+
+The platform exposes `DeviceOrientationEvent`, and a head-worn device reporting
+its own orientation is genuinely tempting as an input channel: glance down to
+page a long list without a temple gesture.
+
+It was not built, and the reasons are worth recording so nobody re-derives
+them.
+
+The Display contract in this repository says no raw-gesture assumptions, and
+that is not a style preference. The OS translates Neural Band and temple input
+into six keys, and every one of Dusky's safety properties is expressed in terms
+of discrete, deliberate input: a frame id rejects delayed input, one
+confirmation authorizes one invocation, focus does not move on its own. Head
+movement is continuous and largely involuntary. An input channel that can shift
+focus while a wearer is walking, on a panel where one row may be an action that
+spends money, weakens the exact property the confirmation frames exist to
+protect. Adding a second input model to compete with the platform's own is a
+different product, not an increment on this one.
+
+The evidence is also worse than it looks. Meta's own documentation contradicts
+itself on whether `DeviceOrientationEvent.requestPermission()` exists on the
+glasses: the prose says to call it, and the comment in their own sample puts
+the glasses in the branch where it does not exist. Chrome's plain
+`deviceorientation` is relative rather than compass-referenced, so `alpha` is
+not a heading without `deviceorientationabsolute` and the magnetometer feature.
+Neither the event rate nor the absolute-orientation behaviour on the glasses is
+documented, and nothing here has met a real pair.
+
+Building a primary interaction on a sensor whose semantics we cannot verify,
+against a rule written to keep this device's decisions deliberate, would have
+been a feature that demos and does not hold. Position is different: it is one
+value, read once, on request, and it goes through a decision the wearer makes
+with the value in front of them.
+
 ---
 
 ## Running it with a planner on
@@ -675,6 +764,31 @@ Worth listing separately: these were all live in a passing test suite.
 ## Still unknown
 
 Honest gaps, not oversights.
+
+- **Whether a wearer can answer a location permission prompt on the glasses.**
+  Meta documents `navigator.geolocation` as standard, says the fix comes from
+  the paired phone rather than from the glasses, quotes 5-50m accuracy, and
+  says a wearer must grant permission and that the request should follow a user
+  gesture. It does not describe what that prompt looks like on a 600x600
+  additive waveguide with six keys, or whether it is answerable there at all.
+
+  The read is therefore triggered from inside the Display's own keypress
+  handler, which is the only place on that surface with a user activation, and
+  every refusal path returns the wearer to the composer with a sentence saying
+  why. That is the mechanism; whether the prompt itself is reachable is
+  unmeasured. Verified in desktop Chrome with a granted permission and an
+  emulated position, which proves the plumbing and not the device.
+
+  The mechanism refuses to hang while that stays unknown. `getCurrentPosition`
+  starts its own timeout only AFTER permission is granted, per the Geolocation
+  specification, so a prompt nobody answers produces no success callback and no
+  error callback at all. A separate fifteen second watchdog on the Display
+  answers `timeout` in that case, because a swept gesture acknowledgement on a
+  cursorless panel is the failure mode this repository refuses everywhere else.
+
+  Also unmeasured: the ten second timeout. A fix that crosses to a paired phone
+  and back has a different cost from one on the phone itself, and ten seconds
+  is a guess of the same kind the 15s and 30s liveness numbers were.
 
 - **WebSocket survival across display sleep and dim.** Partially answered,
   and the code no longer assumes the good case.

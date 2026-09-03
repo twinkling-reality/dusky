@@ -150,7 +150,57 @@ strings are not transferred as an argument.
 Cross-origin reuse always shows the exact bounded value to the wearer before it
 is applied. Same-origin lookup behavior remains separate.
 
-## 7. Describe consequences honestly
+## 7. Name a coordinate the way everyone else does
+
+WebMCP has no channel for ambient context. `executeTool` receives the input
+your schema declared and an `AbortSignal`, and nothing else, so a wearer's
+position can reach a tool only as a parameter you asked for.
+
+Dusky offers the wearer's device as an answer when a required parameter is
+named for one half of a coordinate:
+
+| Declared name | Offered as |
+| --- | --- |
+| `latitude`, `lat` | Latitude |
+| `longitude`, `lng`, `lon` | Longitude |
+
+Case and separators are folded, so `Latitude` and `lat_` match. Nothing else
+is: `lat_1` and `platitude` do not. The parameter must be a string or a number;
+a declared enum keeps its own choices, because those name every value you
+actually accept.
+
+This is a recognition rule, not a schema extension. There is nothing to adopt
+and no Dusky-specific keyword to add. A site that already publishes a
+coordinate API works unchanged, and a site that names these fields something
+else simply gets the ordinary text composer.
+
+```ts
+inputSchema: {
+  type: "object",
+  properties: {
+    latitude: { type: "number", description: "Latitude?" },
+    longitude: { type: "number", description: "Longitude?" },
+  },
+  required: ["latitude", "longitude"],
+}
+```
+
+What you receive is bounded and consented, twice over:
+
+- The wearer presses a row to read their device. Nothing is read otherwise,
+  there is no watch, and no position is stored anywhere in Dusky.
+- Each coordinate then gets its own transfer frame naming your site, the
+  destination field, and the exact value, and only Share applies it. A two
+  field tool asks twice, because sharing fills one argument.
+- Values arrive rounded to four decimal places, roughly eleven metres. Do not
+  design a tool that needs more precision than that.
+
+Your page cannot read the position itself. The console mounts providers with
+`allow="tools"`, and Permissions Policy defaults every other feature to `self`,
+so `navigator.geolocation` inside your frame fails with `PERMISSION_DENIED` and
+no prompt. Handle a missing coordinate as ordinary missing input.
+
+## 8. Describe consequences honestly
 
 Set `readOnlyHint: true` only when execution does not change state.
 
@@ -161,7 +211,7 @@ default to write.
 Provider code remains responsible for authorization, complete input
 validation, idempotency, and transaction behavior.
 
-## 8. Load the provider at runtime
+## 9. Load the provider at runtime
 
 For the product path, open **Websites** on the Dusky graph. Add an available
 known provider with **Reconnect**, or choose **Add Website** and enter the exact
@@ -201,7 +251,7 @@ Public providers must use HTTPS. Loopback HTTP is accepted for development.
 Embedded credentials, unsupported schemes, duplicate origins, and invalid
 values are rejected.
 
-## 9. Verify the complete path
+## 10. Verify the complete path
 
 Do not stop at discovery. Verify that a real browser can:
 

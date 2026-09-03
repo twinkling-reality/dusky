@@ -120,7 +120,7 @@ that declaration in the session and again against the browser's live handle
 immediately before invocation. A matching `(origin, name)` is not enough when
 the declaration changed.
 
-### 10. Cross-origin transfer requires exact consent
+### 10. Cross-origin transfer requires exact consent, and so does a position
 
 Retain only bounded projections with provenance. Do not retain the raw result as
 task state or return it to the planner.
@@ -133,6 +133,12 @@ before applying it. Transfer approval does not approve the destination action.
 
 Audit provenance and decisions, not transferred values or message bodies.
 
+The wearer's own position is the same kind of transfer and takes the same path.
+It is read only from a wearer press on a parameter that named a coordinate,
+never on a relay request and never as a watch. It is rounded on the device,
+range-checked on arrival, never retained, and never sent to the planner.
+Sharing fills one argument, so both halves of a coordinate are two decisions.
+
 ### 11. Push every visible transition
 
 Transports push from `onTransition`, not only after a session method returns.
@@ -142,9 +148,9 @@ the wearer when they happen.
 Reconnects replay an unchanged frame with the same frame identifier so focus
 does not reset.
 
-Reject choices, text, and cancellation whose frame identifier is no longer
-current. Replay the current frame without applying or acknowledging stale
-input.
+Reject choices, text, cancellation, and device readings whose frame identifier
+is no longer current. Replay the current frame without applying or
+acknowledging stale input.
 
 ### 12. Outside agents cannot replace a wearer decision
 
@@ -165,6 +171,7 @@ pending and future state but cannot recall an invocation already sent.
 - Navigation handled before argument coercion
 - Additive-display palette
 - No pointer, camera, microphone, notification, or raw-gesture assumptions
+- Head orientation is not an input channel. See FIELD-NOTES.md for why
 - Composer commits once on Enter or blur
 
 ## Browser and React traps

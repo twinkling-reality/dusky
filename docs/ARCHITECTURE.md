@@ -44,9 +44,14 @@ It renders one `DisplayFrame` and sends a small input vocabulary:
 - selected choice;
 - committed text;
 - cancellation;
+- a device position, when the wearer presses the row that asks for one;
 - liveness traffic.
 
-It does not discover tools, execute tools, apply policy, or own task state. The
+Every one of those is a wearer gesture carrying the id of the frame that
+produced it. The position is read by calling `navigator.geolocation` inside the
+keypress handler, rounded on the device, and sent once; the relay never asks
+for one and the Display never watches. It does not discover tools, execute
+tools, apply policy, or own task state. The
 device has a fixed 600 by 600 viewport with no scrolling or pointer, so Dusky
 limits a frame to four interactive rows. Parameter and projection screens keep
 a Back row. Provider submenus keep Back to sites.
@@ -130,7 +135,10 @@ hydrate real Display presence before processing live transitions and prevents
 reconnects or stale packets from fabricating activity.
 
 The `Session` owns task state, menus, parameter collection, policy gates,
-bounded result projections, transfer consent, and results. It never touches a
+bounded result projections, transfer consent, and results. A device position
+enters through that same transfer consent rather than through a path of its
+own, because a coordinate reaching a provider is a value crossing into an
+argument like any other. It never touches a
 DOM, WebSocket, or model provider directly.
 
 Discovery and invocation always return to the paired console. A console reload
@@ -178,7 +186,7 @@ frames, logs, or audit records.
 | --- | --- |
 | `packages/contracts` | Tool descriptors, frames, wire messages, audit events, and agent requests |
 | `packages/webmcp` | Browser compatibility, discovery, filtering, argument-shape probing, and one-shot invocation |
-| `packages/frames` | Display-operable parameters, menus, paging, result facts, and projections |
+| `packages/frames` | Display-operable parameters, menus, paging, result facts, projections, and the coordinate-parameter convention |
 | `packages/policy` | Deterministic read, write, financial, and destructive classification |
 | `packages/planner` | Optional ranking, provider-neutral decisions, and OpenAI/Anthropic model adapters |
 | `packages/session` | Task state, supported argument checks, gates, transfer consent, and completion |

@@ -2749,3 +2749,336 @@ describe("the confirmation names what the wearer chose", () => {
     expect(confirm.target).not.toContain("true");
   });
 });
+
+/**
+ * A coordinate the wearer's own device answered.
+ *
+ * WebMCP has no ambient-context channel, so this can only travel as a
+ * parameter the site itself declared. That makes it a value crossing from one
+ * party to another, which this codebase already has exactly one answer for:
+ * the transfer frame. There is no second consent path here, and deliberately
+ * no stored position anywhere.
+ */
+describe("a position the wearer pressed for", () => {
+  const NEARBY = "https://nearby.test";
+  const FIND = tool({
+    name: "find_nearby",
+    description: "List places near a point.",
+    origin: NEARBY,
+    inputSchema: {
+      type: "object",
+      properties: {
+        latitude: { type: "number", description: "Latitude?" },
+        longitude: { type: "number", description: "Longitude?" },
+      },
+      required: ["latitude", "longitude"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  const PORTLAND = { latitude: 45.5152, longitude: -122.6784 };
+
+  const started = async (over: Partial<ToolRunner> = {}) => {
+    const audits: Record<string, unknown>[] = [];
+    const runner = fakeRunner({
+      discover: async () => [FIND],
+      invoke: async (_origin, _name, args) => JSON.stringify({ ok: true, seen: args }),
+      ...over,
+    });
+    const session = new Session({
+      source: "Dusky",
+      siteName: (origin) => (origin === NEARBY ? "Nearby" : origin),
+      runner,
+      onAudit: (e) => audits.push({ kind: e.kind, ...e.detail }),
+    });
+    await session.start();
+    await session.handle("find_nearby");
+    return { session, runner, audits };
+  };
+
+  it("asks for latitude with a location row on the parameter frame", async () => {
+    const { session } = await started();
+    const frame = session.current();
+    if (frame.kind !== "choose") throw new Error("expected a parameter frame");
+    expect(frame.title).toBe("Latitude?");
+    expect(frame.choices.map((c) => c.id)).toEqual([
+      "__position",
+      "__compose",
+      "__submit",
+      "__cancel",
+    ]);
+  });
+
+  /**
+   * The row is answered on the Display, so if it ever arrives here as an
+   * ordinary choice the client could not do it. It must not become the value.
+   */
+  it("never lets the reserved row become the argument", async () => {
+    const { session } = await started();
+    const after = await session.handle("__position");
+    if (after.kind !== "choose") throw new Error("expected the parameter frame to stay");
+    expect(after.title).toBe("Latitude?");
+  });
+
+  it("shows the exact coordinate on a transfer frame rather than filling the argument", async () => {
+    const { session, audits } = await started();
+    const frame = await session.submitPosition({ ok: true, position: PORTLAND });
+
+    expect(frame).toMatchObject({
+      kind: "transfer",
+      from: "Your device",
+      to: "Nearby",
+      argument: "Latitude",
+      preview: "45.5152",
+    });
+    if (frame.kind !== "transfer") throw new Error("expected transfer frame");
+    expect(frame.choices.map((c) => c.id)).toEqual(["__share", "__cancel"]);
+
+    // Provenance without the value, in the trail that already records transfers.
+    expect(audits).toContainEqual(
+      expect.objectContaining({
+        kind: "transfer",
+        sourceOrigin: "dusky:device",
+        sourceField: "#device",
+        destinationOrigin: NEARBY,
+        destinationArgument: "latitude",
+        decision: "approval_required",
+      }),
+    );
+    for (const entry of audits) {
+      expect(JSON.stringify(entry)).not.toContain("45.5152");
+    }
+  });
+
+  it("applies one coordinate per approval and asks again for the second", async () => {
+    const { session } = await started();
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    const next = await session.handle("__share");
+
+    // Sharing filled latitude and nothing else. Longitude is its own decision.
+    if (next.kind !== "choose") throw new Error("expected the longitude parameter frame");
+    expect(next.title).toBe("Longitude?");
+    expect(next.choices.map((c) => c.id)).toContain("__position");
+
+    const second = await session.submitPosition({ ok: true, position: PORTLAND });
+    expect(second).toMatchObject({ kind: "transfer", argument: "Longitude", preview: "-122.6784" });
+  });
+
+  it("sends both approved coordinates to the site and nothing else", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const { session } = await started({
+      invoke: async (_origin, _name, args) => {
+        seen.push(args);
+        return JSON.stringify({ ok: true, places: 3 });
+      },
+    });
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    await session.handle("__share");
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    await session.handle("__share");
+
+    expect(seen).toEqual([{ latitude: 45.5152, longitude: -122.6784 }]);
+  });
+
+  it("keeps Cancel on the transfer frame from sharing anything", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const { session } = await started({
+      invoke: async (_origin, _name, args) => {
+        seen.push(args);
+        return JSON.stringify({ ok: true });
+      },
+    });
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    await session.handle("__cancel");
+    expect(seen).toEqual([]);
+    expect(session.current().kind).toBe("idle");
+  });
+
+  /** Only Share and Cancel are answerable while a transfer frame is up. */
+  it("refuses a second reading while one is already awaiting approval", async () => {
+    const { session } = await started();
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    const again = await session.submitPosition({
+      ok: true,
+      position: { latitude: 0, longitude: 0 },
+    });
+    expect(again).toMatchObject({ kind: "transfer", preview: "45.5152" });
+  });
+
+  it("refuses text while a position is awaiting approval", async () => {
+    const { session } = await started();
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    const after = await session.submitText("48.0");
+    expect(after).toMatchObject({ kind: "transfer", preview: "45.5152" });
+  });
+
+  /**
+   * A refusal is an answer. The wearer stays on the parameter they were
+   * answering and is told what to do instead, rather than being thrown to an
+   * error screen that loses the task.
+   */
+  it("returns the wearer to the composer when the device will not say", async () => {
+    for (const [reason, note] of [
+      ["denied", "Location is not allowed here. Write it instead"],
+      ["unsupported", "This device cannot report where it is. Write it instead"],
+      ["timeout", "Locating took too long. Write it instead"],
+      ["unavailable", "No position available right now. Write it instead"],
+    ] as const) {
+      const { session } = await started();
+      const frame = await session.submitPosition({ ok: false, reason });
+      if (frame.kind !== "choose") throw new Error("expected the parameter frame");
+      expect(frame.title).toBe("Latitude?");
+      expect(frame.note).toBe(note);
+      expect(frame.choices.map((c) => c.id)).toContain("__compose");
+    }
+  });
+
+  /**
+   * The client rounds before sending, so anything finer arrived from something
+   * that is not the shipped Display. A bound applied only on the client is a
+   * bound enforced in the layer an attacker is already standing in.
+   */
+  it("refuses a reading that is out of range or finer than the agreed precision", async () => {
+    for (const position of [
+      { latitude: 45.51523891, longitude: -122.6784 },
+      { latitude: 91, longitude: 0 },
+      { latitude: 0, longitude: -181 },
+      { latitude: Number.NaN, longitude: 0 },
+    ]) {
+      const { session } = await started();
+      const frame = await session.submitPosition({ ok: true, position });
+      expect(frame.kind).toBe("choose");
+      expect(frame.kind === "choose" && frame.note).toBe(
+        "No position available right now. Write it instead",
+      );
+    }
+  });
+
+  it("ignores a reading for a parameter that never asked for one", async () => {
+    const runner = fakeRunner();
+    const session = new Session({ source: "Dusky", runner });
+    await session.start();
+    await session.handle("add_to_cart");
+    const before = session.current();
+    const after = await session.submitPosition({ ok: true, position: PORTLAND });
+    expect(after).toEqual(before);
+  });
+
+  /**
+   * Nothing survives the task. A position is read, approved into exactly one
+   * argument, and gone; the next task starts with no position at all.
+   */
+  it("retains no position across a task", async () => {
+    const { session } = await started();
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    await session.handle("__cancel");
+    await session.handle("find_nearby");
+    const frame = session.current();
+    if (frame.kind !== "choose") throw new Error("expected the latitude parameter frame");
+    expect(frame.title).toBe("Latitude?");
+    expect(JSON.stringify(frame)).not.toContain("45.5152");
+  });
+
+  /**
+   * A planner may propose which tool runs. It may never be told where the
+   * wearer is, for the same reason it is never told a retained projection.
+   */
+  it("never puts a coordinate in front of a planner", async () => {
+    const offered: ToolDescriptor[][] = [];
+    const planner: Planner = {
+      pickTool: async (_intent, tools) => {
+        offered.push(tools);
+        return null;
+      },
+      pickTools: async (_intent, tools) => {
+        offered.push(tools);
+        return null;
+      },
+      planResolver: async () => null,
+    };
+    const runner = fakeRunner({ discover: async () => [FIND] });
+    const session = new Session({ source: "Dusky", runner, planner });
+    await session.start();
+    await session.handle("find_nearby");
+    await session.submitPosition({ ok: true, position: PORTLAND });
+    await session.handle("__share");
+    await session.submitIntent("what is near me");
+    // Not a vacuous pass: the planner really was asked, and what it was shown
+    // is what has to be free of the wearer's position.
+    expect(offered.length).toBeGreaterThan(0);
+    expect(JSON.stringify(offered)).not.toContain("45.5152");
+    expect(JSON.stringify(offered)).not.toContain("122.6784");
+  });
+});
+
+/**
+ * A value the wearer's own task produced still outranks a sensor reading.
+ *
+ * Not an oversight. A coordinate that came out of the previous step is more
+ * specific than "wherever you are standing", so the retained-projection offer
+ * keeps its place and the device row appears when there is nothing retained,
+ * which is every single-step task and every first step.
+ */
+describe("a coordinate parameter inside a longer task", () => {
+  const NEARBY = "https://nearby.test";
+  const LOOKUP = tool({
+    name: "find_marker",
+    description: "Look up a survey marker.",
+    origin: NEARBY,
+    inputSchema: { type: "object", properties: {}, required: [] },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+  const SURVEY = tool({
+    name: "survey_point",
+    description: "Report shade at a latitude.",
+    origin: NEARBY,
+    inputSchema: {
+      type: "object",
+      properties: { latitude: { type: "number", description: "Latitude?" } },
+      required: ["latitude"],
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  });
+
+  it("offers the earlier step's value and keeps the device out of that frame", async () => {
+    const runner = fakeRunner({
+      discover: async () => [LOOKUP, SURVEY],
+      invoke: async (_origin, name) =>
+        name === "find_marker"
+          ? JSON.stringify({ marker_latitude: 44.0521 })
+          : JSON.stringify({ ok: true }),
+    });
+    const planner: Planner = {
+      pickTool: async () => null,
+      pickTools: async () => [
+        { name: "find_marker", args: {} },
+        { name: "survey_point", args: {} },
+      ],
+      planResolver: async () => null,
+    };
+    const session = new Session({ source: "Dusky", runner, planner });
+    await session.start();
+    await session.submitIntent("survey the marker");
+    // Each step is separately approved, so the first one's result is a frame
+    // of its own before the second step asks for anything.
+    expect(session.current().kind).toBe("result");
+    await session.handle("__next");
+
+    const frame = session.current();
+    if (frame.kind !== "choose") throw new Error("expected the projection frame");
+    const ids = frame.choices.map((c) => c.id);
+    expect(ids.some((id) => id.startsWith("__projection:"))).toBe(true);
+    expect(ids).not.toContain("__position");
+  });
+
+  it("offers the device on a first step, where nothing has been retained", async () => {
+    const runner = fakeRunner({ discover: async () => [LOOKUP, SURVEY] });
+    const session = new Session({ source: "Dusky", runner });
+    await session.start();
+    await session.handle("survey_point");
+
+    const frame = session.current();
+    if (frame.kind !== "choose") throw new Error("expected the parameter frame");
+    expect(frame.choices.map((c) => c.id)).toContain("__position");
+  });
+});

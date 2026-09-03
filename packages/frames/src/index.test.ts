@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   candidatesFromResult,
   confirmFrame,
+  coordinateAxis,
   factsFromResult,
   idleFrame,
   isOperable,
@@ -13,6 +14,7 @@ import {
   MAX_RESULT_CHARS,
   nextMissingParam,
   outcomeFromResult,
+  POSITION_CHOICE,
   parameters,
   paramFrame,
   resultFrame,
@@ -1512,5 +1514,116 @@ describe("bounded shareable result projections", () => {
     });
     if (frame.kind !== "transfer") throw new Error("expected transfer frame");
     expect(frame.choices.map((choice) => choice.id)).toEqual(["__share", "__cancel"]);
+  });
+});
+
+/**
+ * The convention that lets a device answer a parameter, and its limits.
+ *
+ * WebMCP has no ambient-context channel: `executeTool` takes the site's own
+ * `inputObject` and an `AbortSignal`, and nothing else. So a coordinate can
+ * only ever arrive as a parameter the site already declared, and recognising
+ * one is a naming convention like `ID_KEYS`, with the composer as the fallback
+ * whenever it does not match.
+ */
+describe("a parameter a coordinate can answer", () => {
+  const at = (name: string, schema: Record<string, unknown>) => {
+    const [param] = parameters(
+      tool({
+        name: "find_nearby",
+        inputSchema: { type: "object", properties: { [name]: schema }, required: [name] },
+      }),
+    );
+    if (!param) throw new Error("expected one parameter");
+    return param;
+  };
+
+  const number = { type: "number" } as const;
+
+  it("recognizes the names a coordinate is actually published under", () => {
+    expect(coordinateAxis(at("latitude", number))).toBe("latitude");
+    expect(coordinateAxis(at("lat", number))).toBe("latitude");
+    expect(coordinateAxis(at("longitude", number))).toBe("longitude");
+    expect(coordinateAxis(at("lng", number))).toBe("longitude");
+    expect(coordinateAxis(at("lon", number))).toBe("longitude");
+  });
+
+  it("folds case and separators but not the rest of the name", () => {
+    expect(coordinateAxis(at("Latitude", number))).toBe("latitude");
+    expect(coordinateAxis(at("LAT", number))).toBe("latitude");
+    expect(coordinateAxis(at("lat_", number))).toBe("latitude");
+    // Folding a word rather than searching inside one. `lat_1` is a name of
+    // its own, and `platitude` merely contains the letters.
+    expect(coordinateAxis(at("lat_1", number))).toBeNull();
+    expect(coordinateAxis(at("platitude", { type: "string" }))).toBeNull();
+    expect(coordinateAxis(at("latency", number))).toBeNull();
+  });
+
+  it("takes a string coordinate, because sites publish them that way", () => {
+    expect(coordinateAxis(at("latitude", { type: "string" }))).toBe("latitude");
+  });
+
+  /**
+   * A declared enum already names every value the site accepts, and those are
+   * both more specific than a sensor reading and already operable here.
+   */
+  it("leaves a declared enum alone even when it is named for an axis", () => {
+    expect(coordinateAxis(at("latitude", { type: "string", enum: ["north", "south"] }))).toBeNull();
+  });
+
+  it("offers no location row for an ordinary free-text parameter", () => {
+    const t = tool({
+      name: "search_catalog",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    });
+    const param = at("query", { type: "string" });
+    const frame = paramFrame("Any site", t, param);
+    expect(frame.kind).toBe("choose");
+    if (frame.kind !== "choose") throw new Error("expected choose frame");
+    expect(frame.choices.map((c) => c.id)).toEqual(["__compose", "__submit", "__cancel"]);
+  });
+
+  it("offers the location row first and still fits four rows", () => {
+    const t = tool({
+      name: "find_nearby",
+      inputSchema: {
+        type: "object",
+        properties: { latitude: number },
+        required: ["latitude"],
+      },
+    });
+    const frame = paramFrame("Any site", t, at("latitude", number));
+    if (frame.kind !== "choose") throw new Error("expected choose frame");
+    expect(frame.choices.map((c) => c.id)).toEqual([
+      POSITION_CHOICE,
+      "__compose",
+      "__submit",
+      "__cancel",
+    ]);
+    expect(frame.choices.length).toBeLessThanOrEqual(MAX_CHOICES);
+    // Back survives, because parameter collection is always abandonable.
+    expect(frame.choices.at(-1)?.id).toBe("__cancel");
+  });
+
+  it("says why a reading did not arrive without losing the parameter", () => {
+    const t = tool({
+      name: "find_nearby",
+      inputSchema: { type: "object", properties: { latitude: number }, required: ["latitude"] },
+    });
+    const frame = paramFrame(
+      "Any site",
+      t,
+      at("latitude", number),
+      [],
+      0,
+      "Locating took too long",
+    );
+    if (frame.kind !== "choose") throw new Error("expected choose frame");
+    expect(frame.note).toBe("Locating took too long");
+    expect(frame.choices.map((c) => c.id)).toContain(POSITION_CHOICE);
   });
 });

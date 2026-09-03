@@ -15,18 +15,22 @@ import type {
   AgentAction,
   AuditEntry,
   Choice,
+  DevicePosition,
   DisplayFrame,
   Fact,
+  PositionRefusal,
   RuntimeToolRef,
   SessionOutcome,
   SessionPhase,
   SessionTaskRef,
   ToolDescriptor,
 } from "@dusky/contracts";
+import { DEVICE_ORIGIN, isDevicePosition } from "@dusky/contracts";
 import {
   busyFrame,
   candidatesFromResult,
   confirmFrame,
+  coordinateAxis,
   errorFrame,
   factsFromResult,
   idleFrame,
@@ -35,6 +39,7 @@ import {
   nextMissingParam,
   outcomeFromResult,
   type ParamSpec,
+  POSITION_CHOICE,
   PROJECTION_PREFIX,
   parameters,
   paramFrame,
@@ -279,8 +284,23 @@ interface TransferOption {
   value: string | number | boolean;
 }
 
+/**
+ * Where a value being shared came from.
+ *
+ * `RetainedResult` satisfies this structurally, which is the point: an earlier
+ * provider result and the wearer's own device produce the same audit shape and
+ * travel the same consent path. A device reading has no tool and no step, so
+ * it carries `DEVICE_ORIGIN` and zeroes, and every downstream check that
+ * compares this against a provider origin correctly never matches.
+ */
+interface TransferSource {
+  origin: string;
+  toolName: string;
+  step: number;
+}
+
 interface PendingTransfer {
-  source: RetainedResult;
+  source: TransferSource;
   projection: ShareableProjection;
   destinationOrigin: string;
   destinationTool: string;
@@ -311,6 +331,35 @@ const MAX_TASK_STEPS = 4;
  * the lookup for the ordinary parameter frame is the more honest failure.
  */
 const MAX_RESOLVER_PROMOTIONS = 1;
+
+/**
+ * What a wearer reads as the source of a position on the transfer frame.
+ *
+ * "Your device" rather than "your glasses", because the same build runs in a
+ * desktop browser and naming hardware it is not running on would be the same
+ * kind of confident wrong statement the pairing frame was fixed for.
+ */
+const DEVICE_LABEL = "Your device";
+
+/**
+ * The projection location for a device reading.
+ *
+ * Structural, like `#summary`, and deliberately not a JSON Pointer: there is
+ * no provider document for it to point into. It is what keeps the audit trail
+ * able to say a value came from the wearer without recording the value.
+ */
+const DEVICE_LOCATION = "#device";
+
+/** The audit's name for the reading itself, in the field that names a tool. */
+const DEVICE_TOOL = "position";
+
+/** Why a device reading did not become an answer, in words a wearer can act on. */
+const POSITION_NOTES: Record<PositionRefusal, string> = {
+  unsupported: "This device cannot report where it is. Write it instead",
+  denied: "Location is not allowed here. Write it instead",
+  unavailable: "No position available right now. Write it instead",
+  timeout: "Locating took too long. Write it instead",
+};
 
 /**
  * A single wearer's task, as a state machine.
@@ -888,6 +937,19 @@ export class Session {
     if (choiceId === "__compose" || choiceId === "__submit") return this.frame;
 
     /*
+     * The location row, arriving as an ordinary choice.
+     *
+     * It should not: the Display answers this one itself and sends a
+     * `position` instead, because the wearer's press is the user gesture a
+     * location permission request is supposed to have. If it arrives here
+     * anyway the client could not do it, and the honest response is to leave
+     * the wearer on the frame they are looking at, which still offers the
+     * composer. Handled above the parameter branch for the same reason
+     * `__submit` is: that branch coerces whatever id arrives into the answer.
+     */
+    if (choiceId === POSITION_CHOICE) return this.frame;
+
+    /*
      * Stepping into one site's actions.
      *
      * Checked HERE, above the parameter branch, for the reason `__compose` and
@@ -933,6 +995,113 @@ export class Session {
       return this.advance();
     }
     return this.submitIntent(value);
+  }
+
+  /**
+   * A position the Display read because the wearer pressed for it.
+   *
+   * This is the one argument value that comes from the wearer's own hardware
+   * rather than from a site or from something they typed, and it is treated
+   * exactly like a value crossing between two sites: it does not fill an
+   * argument here. It becomes a transfer frame naming the destination site,
+   * the destination field and the exact coordinate, and only Share applies it.
+   *
+   * Nothing is retained. There is no stored position, no watch and no reuse
+   * across arguments: the second half of a coordinate is a second press, a
+   * second reading and a second decision. That costs the wearer two more
+   * presses than a combined consent would, and buys a trail in which every
+   * coordinate that ever left this device has its own recorded approval.
+   */
+  async submitPosition(
+    reading: { ok: true; position: DevicePosition } | { ok: false; reason: PositionRefusal },
+  ): Promise<DisplayFrame> {
+    // A transfer frame has no location row, for the same reason it has no
+    // composer: only Share and Cancel may be answered while one is up.
+    if (this.transfer) return this.frame;
+    const p = this.pending;
+    const param = this.awaitingParam();
+    if (!p?.awaiting || !param) return this.frame;
+
+    // The parameter on screen must be the one that asked for a coordinate.
+    // Checked again here rather than trusted from the frame, because the
+    // declaration can have changed since it was drawn.
+    const axis = coordinateAxis(param);
+    if (!axis) return this.frame;
+
+    const refuse = (reason: PositionRefusal): DisplayFrame => {
+      this.audit({
+        kind: "transfer",
+        origin: p.tool.origin,
+        toolName: p.tool.name,
+        detail: {
+          sourceOrigin: DEVICE_ORIGIN,
+          sourceTool: DEVICE_TOOL,
+          sourceField: DEVICE_LOCATION,
+          destinationOrigin: p.tool.origin,
+          destinationArgument: param.name,
+          decision: "unavailable",
+          reason,
+        },
+      });
+      return this.show(
+        paramFrame(
+          this.siteOf(p.tool.origin),
+          p.tool,
+          param,
+          p.candidates ?? [],
+          this.page,
+          POSITION_NOTES[reason],
+        ),
+        { phase: "parameters", tool: p.tool },
+      );
+    };
+
+    if (!reading.ok) return refuse(reading.reason);
+    // Range, finiteness and the agreed precision, checked on arrival. A client
+    // side bound is a bound enforced in the layer an attacker already holds.
+    if (!isDevicePosition(reading.position)) return refuse("unavailable");
+
+    const value = transferValueForParam(reading.position[axis], param);
+    if (value === undefined) return refuse("unavailable");
+
+    const projection: ShareableProjection = {
+      location: DEVICE_LOCATION,
+      label: axis === "latitude" ? "Latitude" : "Longitude",
+      value,
+      valueType: typeof value === "number" ? "number" : "string",
+      kind: "field",
+    };
+    const preview = safeResultText(String(value));
+    this.transfer = {
+      source: { origin: DEVICE_ORIGIN, toolName: DEVICE_TOOL, step: 0 },
+      projection,
+      destinationOrigin: p.tool.origin,
+      destinationTool: p.tool.name,
+      destinationArgument: param.name,
+      schemaKey: schemaKey(param),
+      value,
+      preview,
+      shownAt: this.now(),
+    };
+    this.audit({
+      kind: "transfer",
+      origin: p.tool.origin,
+      toolName: p.tool.name,
+      detail: {
+        sourceOrigin: DEVICE_ORIGIN,
+        sourceTool: DEVICE_TOOL,
+        sourceStep: 0,
+        sourceField: DEVICE_LOCATION,
+        valueType: projection.valueType,
+        destinationOrigin: p.tool.origin,
+        destinationArgument: param.name,
+        decision: "approval_required",
+      },
+    });
+    return this.show(
+      transferFrame(this.o.source, DEVICE_LABEL, this.siteOf(p.tool.origin), param.name, preview),
+      { phase: "transfer", tool: p.tool },
+    );
   }
 
   /** The declared spec for the parameter currently on screen, if there is one. */
@@ -1942,6 +2111,8 @@ function transferAudit(
 
 /** Keep structural provenance without persisting provider-controlled JSON keys. */
 function projectionLocationAudit(projection: ShareableProjection): Record<string, unknown> {
+  if (projection.location === DEVICE_LOCATION)
+    return { sourceField: DEVICE_LOCATION, sourceDepth: 0 };
   if (projection.location === "#summary") return { sourceField: "#summary", sourceDepth: 0 };
   if (projection.location === "#value") return { sourceField: "#value", sourceDepth: 0 };
   const depth = projection.location.split("/").filter(Boolean).length;

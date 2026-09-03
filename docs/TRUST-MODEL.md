@@ -18,8 +18,8 @@ is cosmetic and is never used for authorization or invocation.
 A tool is identified by `(origin, name)`. A bare name resolves only when it is
 unique among the candidates actually offered.
 
-Every Display choice, text submission, and cancellation names the frame that
-produced it. `SessionActor` accepts it only when that id matches the current
+Every Display choice, text submission, cancellation, and device position names
+the frame that produced it. `SessionActor` accepts it only when that id matches the current
 frame. Delayed input is ignored and the current frame is replayed.
 
 A pending action is also bound to the exact tool declaration that produced its
@@ -174,6 +174,56 @@ destination then follows its own policy gate.
 
 Cancellation, replacement, failure, completion, or actor expiry clears
 retained projections and pending transfer state.
+
+## The wearer's own position
+
+WebMCP has no ambient-context channel. `executeTool` carries the input a site
+declared and an `AbortSignal`, so a coordinate can reach a provider only as an
+argument, which makes it the same kind of movement the transfer path already
+governs. It follows that path rather than a parallel one.
+
+Dusky recognizes a required parameter named `latitude`, `lat`, `longitude`,
+`lng`, or `lon` and offers the wearer's device as one way to answer it. The
+composer remains available for every one of them.
+
+Not on every screen, deliberately. Inside a multi-step task, a compatible value
+retained from an earlier step is still offered first, because a value the
+wearer's own task produced is more specific than a sensor reading. The device
+row appears when there is no such value, which is every single-step task and
+every first step.
+
+The read is a wearer gesture, not a relay request. Pressing the row calls
+`navigator.geolocation` inside the Display's own keypress handler, which is
+where the platform expects a location permission request to be. There is no
+watch, no ambient reading, and no read at any other moment.
+
+The value is bounded before it leaves the device. The Display rounds to four
+decimal places, roughly eleven metres, and the relay rejects a reading that is
+out of range or finer than that.
+
+Applying it is a separate decision from reading it. The reading becomes a
+transfer frame naming the wearer's device, the destination site, the
+destination argument, and the exact value, with Share and Cancel. Only Share
+applies it, and it fills exactly one argument: a tool needing both halves of a
+coordinate asks twice. Sharing does not approve the destination action, which
+then follows its own policy gate.
+
+Nothing is retained. Dusky stores no position: it exists as pending transfer
+state while the wearer is deciding, and is cleared by Share, Cancel, failure,
+completion, replacement, or actor expiry. It is never sent to the planner, for
+the same reason a retained projection is not.
+
+Audit entries record the device as the source, the destination origin and
+argument, and the decision. They do not record the coordinate.
+
+A provider cannot read a position for itself. Provider documents are mounted
+with `allow="tools"` alone, and Permissions Policy defaults every other feature
+to `self`, so `navigator.geolocation` inside a provider frame fails with
+`PERMISSION_DENIED` and no prompt. This is measured, not assumed; see
+[WebMCP and display runtime](./WEBMCP-RUNTIME.md).
+
+The relay is inside the trust boundary here, as it is for tool arguments
+generally. A reading crosses it between the press and the wearer's decision.
 
 ## Results, timeouts, cancellation, and retries
 

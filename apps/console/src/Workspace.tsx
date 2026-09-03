@@ -1220,10 +1220,28 @@ export function Workspace() {
 
                   {mode === "embedded" ? (
                     <div className={styles.stage}>
+                      {/*
+                        `geolocation` is delegated to DUSKY'S OWN Display and
+                        to nothing else.
+
+                        Permissions Policy defaults every feature to `self`, so
+                        a cross-origin child gets nothing it is not named for.
+                        The provider frames below carry `allow="tools"` alone
+                        and therefore cannot read a position at all, which is
+                        the property that lets a wearer's coordinate reach a
+                        site only as an argument they approved.
+
+                        This panel is the desk-bound stand-in for the glasses,
+                        where the Display is the top-level page and needs no
+                        delegation. Without this the demo would answer
+                        PERMISSION_DENIED with no prompt, which reads exactly
+                        like a wearer declining.
+                      */}
                       <iframe
                         ref={lens}
                         className={styles.lens}
                         title="Dusky on the glasses"
+                        allow="geolocation"
                         src={`${DISPLAY_URL}/?session=${session}`}
                       />
                     </div>

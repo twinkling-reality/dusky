@@ -191,7 +191,13 @@ export type SessionActivityEvent =
       kind: "display_input";
       revision: number;
       frameId: string;
-      input: "choice" | "text" | "cancel";
+      /**
+       * `position` is a wearer press like the others and is named separately
+       * because it is the only one whose value the wearer's own hardware
+       * produced. The stream still carries no value, only that the boundary
+       * was crossed.
+       */
+      input: "choice" | "text" | "cancel" | "position";
     }
   | {
       kind: "frame";
@@ -203,6 +209,85 @@ export type SessionActivityEvent =
       task?: SessionTaskRef;
       outcome?: SessionOutcome;
     };
+
+/* ------------------------------------------------------- wearer position */
+
+/**
+ * A position the Display device reported about itself.
+ *
+ * Deliberately two numbers and nothing else. `GeolocationCoordinates` also
+ * carries altitude, heading, speed and accuracy, and none of those answer the
+ * only question this feature exists to answer, which is "where is the wearer
+ * standing". Every field added here is a field that can end up in a provider's
+ * argument, so the type is the smallest one that works.
+ */
+/**
+ * The provenance marker for a value that came from the wearer's own hardware.
+ *
+ * Deliberately not a web origin. Every real provider identity is a browser
+ * supplied `scheme://host[:port]`, and `sources.ts` refuses any scheme but
+ * https and loopback http, so nothing a person can configure can ever collide
+ * with this. Audit entries carry it in the same field that carries a provider
+ * origin, which is what keeps one shared decision trail rather than two.
+ */
+export const DEVICE_ORIGIN = "dusky:device";
+
+export interface DevicePosition {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * How precise a position is allowed to be by the time anything can share it.
+ *
+ * Four decimal places is roughly eleven metres. That is enough to answer
+ * "what is near me" and not enough to say which doorway someone is standing
+ * in, and the difference matters because the value crosses an origin the
+ * wearer does not control.
+ *
+ * The rounding happens on the DEVICE, before the reading is sent anywhere, so
+ * the relay never holds precision the wearer has not been shown. The relay
+ * checks the arriving value against this anyway, because a check that only
+ * exists on the client is a check enforced in the layer an attacker is
+ * already standing in.
+ */
+export const POSITION_DECIMALS = 4;
+
+/** The one implementation of the rounding, because two would disagree. */
+export function roundCoordinate(value: number): number {
+  const factor = 10 ** POSITION_DECIMALS;
+  return Math.round(value * factor) / factor;
+}
+
+/** Whether an arriving reading is a real, in-range, already-rounded position. */
+export function isDevicePosition(value: unknown): value is DevicePosition {
+  if (value === null || typeof value !== "object") return false;
+  const { latitude, longitude } = value as Record<string, unknown>;
+  if (typeof latitude !== "number" || typeof longitude !== "number") return false;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return false;
+  return latitude === roundCoordinate(latitude) && longitude === roundCoordinate(longitude);
+}
+
+/**
+ * Why a device could not report where it is.
+ *
+ * Separate from "it said no" on purpose. A wearer who declined and a wearer
+ * whose hardware never answered are in different situations, and only one of
+ * them is worth asking again later. Neither of them dead-ends: every one of
+ * these returns the wearer to the ordinary composer.
+ */
+export type PositionRefusal = "unsupported" | "denied" | "unavailable" | "timeout";
+
+/**
+ * The reserved choice a wearer presses to answer a coordinate with the device.
+ *
+ * Here rather than in `@dusky/frames` because both ends have to agree and they
+ * must not answer differently: frames put the row on the panel, and the
+ * Display has to recognise it before `useDpad` turns the press into an
+ * ordinary `choose`. Same reason `isSessionCode` lives in this file.
+ */
+export const POSITION_CHOICE = "__position";
 
 /* ------------------------------------------------- display <-> server wire */
 
@@ -222,7 +307,22 @@ export type DisplayToServer =
    * Only traffic can tell the difference, so the Display sends these and
    * expects an answer.
    */
-  | { t: "ping" };
+  | { t: "ping" }
+  /**
+   * Where this device is, because the wearer pressed the row that asks.
+   *
+   * A wearer gesture like `choose` and `text`, and carrying a `frameId` for
+   * exactly that reason: the same staleness rule applies, and a reading that
+   * arrives after the frame has moved on must be discarded rather than
+   * applied to whatever is on screen now.
+   *
+   * The relay never asks for this. The read happens inside the Display's own
+   * keypress handler, which is where the platform wants a location permission
+   * request to be, and which means the reading cannot happen without a wearer
+   * asking for it first.
+   */
+  | { t: "position"; frameId: string; ok: true; position: DevicePosition }
+  | { t: "position"; frameId: string; ok: false; reason: PositionRefusal };
 
 export type ServerToDisplay =
   /** Sent within 150ms of a choose, before any work happens. */

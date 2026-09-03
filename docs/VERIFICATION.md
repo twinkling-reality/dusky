@@ -1,5 +1,53 @@
 # Verification
 
+## Wearer position local verification on 2026-09-03
+
+Implementation on branch `wearer-location`. No deployment, no device test, and
+no production run: everything below was measured on macOS in Google Chrome
+`152.0.7977.66` launched with `WebMCPTesting`, against local services.
+
+Deterministic results:
+
+- `pnpm test`: 488 of 488 tests passed across 22 files, up from 457 across 21;
+- `pnpm typecheck`: all 15 package typechecks passed;
+- `pnpm lint`: no errors and the same five retained CSS specificity warnings;
+- `pnpm build`: all six build tasks passed.
+
+The new deterministic coverage is 31 tests: the coordinate-name convention and
+the parameter frame in `packages/frames`, the precision bound and reading
+validation in `packages/contracts`, the transfer path, its refusals and its place in the
+existing offer order in `packages/session`, and the relay's frame-id and
+activity handling in `apps/server`.
+
+Browser results, in `e2e/position.spec.ts` with a Playwright-granted
+geolocation permission and an emulated position of 45.5152, -122.6784:
+
+- a runtime provider absent from the registry declared `latitude` and
+  `longitude`, the Display rendered a location row beside the composer,
+  pressing it produced a transfer frame reading Your device to Canopy Lab /
+  Latitude / 45.5152, and Share filled one argument and asked again for the
+  second;
+- the provider document recorded `45.5152, -122.6784: 57% shade`, so the live
+  WebMCP tool really ran with the approved values at the shown precision;
+- cancelling the transfer left the provider document at "No survey has run.";
+- in one browsing context holding the geolocation grant, the provider frame's
+  own `getCurrentPosition` returned `PERMISSION_DENIED` with no prompt while
+  the top-level Display in that same context read the position successfully.
+
+That last result is the measurement the design depends on and is recorded in
+[WebMCP and display runtime](./WEBMCP-RUNTIME.md).
+
+`pnpm test:e2e` ran 52 local Playwright tests: 51 passed and one failed. The
+failure is `e2e/connections.spec.ts:110`, which asserts console copy that
+commit `c65947b` removed. It was reproduced on a clean checkout at `e26eef6`
+with every change stashed, so it predates this work and was left alone.
+
+What this does not establish: nothing here has met a pair of glasses. Whether
+Meta's location permission prompt can be answered on a 600 by 600 waveguide
+with six keys is unmeasured, as is the ten second read timeout against a fix
+that comes from a paired phone. Emulated geolocation in desktop Chrome proves
+the plumbing and the consent path, not the device.
+
 ## OpenAI Render production verification on 2026-09-02
 
 Commits `021c589` and `ad38ffb` were pushed to `main`. The Render Blueprint now

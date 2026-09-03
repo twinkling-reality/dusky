@@ -116,6 +116,25 @@ deployed console, relay, Display, and public provider through the same action.
 This proves the production code path for that provider and schema. It does not
 prove universal WebMCP compatibility.
 
+## Recognition conventions
+
+Two places in shared code read a NAME rather than a provider.
+
+`candidatesFromResult` recognizes an identifier and a label key so a read-only
+lookup can become Display choices. `coordinateAxis` recognizes a parameter
+named for one half of a coordinate so the wearer's device can answer it.
+
+Both are closed lists of domain-neutral words, matched against a whole folded
+token rather than as a substring, with the ordinary composer as the fallback
+when they do not match. Neither is a branch on an origin, a brand, or a tool
+name, and neither asks a provider to adopt a Dusky-specific keyword: they
+recognize what sites already publish.
+
+The distinction that matters is what a wrong answer costs. A name these do not
+recognize costs a wearer the interaction they were going to have anyway. A name
+recognized wrongly puts a value somewhere it does not belong. That asymmetry is
+why the lists stay short and hold only words with no second meaning.
+
 ## Executable-source guard
 
 `packages/frames/src/genericity.test.ts` scans executable production TypeScript

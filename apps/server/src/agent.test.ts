@@ -1043,3 +1043,102 @@ describe("keeping the wearer's place", () => {
     ).toHaveLength(1);
   });
 });
+
+/**
+ * A coordinate is wearer input, and the relay treats it like the rest.
+ *
+ * It arrives with a frame id rather than a request id because the relay never
+ * asks for it: the Display reads it inside the wearer's own keypress, which is
+ * where the platform wants a location permission request. That makes the
+ * existing stale-frame rule the right one, and these tests are here to prove
+ * the new message did not quietly get an exemption from it.
+ */
+describe("a position arriving from the glasses", () => {
+  const NEARBY: ToolDescriptor[] = [
+    {
+      name: "find_nearby",
+      title: "Find nearby",
+      description: "List places near a point.",
+      origin: "https://nearby.test",
+      inputSchema: {
+        type: "object",
+        properties: {
+          latitude: { type: "number", description: "Latitude?" },
+          longitude: { type: "number", description: "Longitude?" },
+        },
+        required: ["latitude", "longitude"],
+      },
+      annotations: { readOnlyHint: true, untrustedContentHint: false },
+    },
+  ];
+
+  const atLatitude = async () => {
+    const built = await paired({ tools: NEARBY, sites: [{ origin: "https://nearby.test" }] });
+    await built.a.onDisplayMessage({
+      t: "choose",
+      frameId: currentFrameId(built.display),
+      choiceId: "https://nearby.test find_nearby",
+    });
+    return built;
+  };
+
+  it("turns a reading into a transfer decision rather than an argument", async () => {
+    const { a, display } = await atLatitude();
+    await a.onDisplayMessage({
+      t: "position",
+      frameId: currentFrameId(display),
+      ok: true,
+      position: { latitude: 45.5152, longitude: -122.6784 },
+    });
+    expect(a.current()).toMatchObject({ kind: "transfer", argument: "Latitude" });
+  });
+
+  it("discards a reading for a frame the wearer has already left", async () => {
+    const { a, display } = await atLatitude();
+    const staleId = currentFrameId(display);
+    await a.onDisplayMessage({ t: "cancel", frameId: staleId });
+    expect(a.current().kind).toBe("idle");
+
+    await a.onDisplayMessage({
+      t: "position",
+      frameId: staleId,
+      ok: true,
+      position: { latitude: 45.5152, longitude: -122.6784 },
+    });
+    expect(a.current().kind, "a stale reading opened a transfer frame").toBe("idle");
+  });
+
+  it("tells the console a boundary was crossed without saying where", async () => {
+    const { a, consoleSock, display } = await atLatitude();
+    consoleSock.sent.length = 0;
+    await a.onDisplayMessage({
+      t: "position",
+      frameId: currentFrameId(display),
+      ok: true,
+      position: { latitude: 45.5152, longitude: -122.6784 },
+    });
+
+    const events = sessionWireMessages(consoleSock)
+      .filter((m) => m.t === "sessionActivity")
+      .map((m) => m.event);
+    expect(events).toContainEqual(
+      expect.objectContaining({ kind: "display_input", input: "position" }),
+    );
+    expect(JSON.stringify(events)).not.toContain("45.5152");
+    expect(JSON.stringify(events)).not.toContain("122.6784");
+  });
+
+  it("keeps the wearer on the parameter when the device refuses", async () => {
+    const { a, display } = await atLatitude();
+    await a.onDisplayMessage({
+      t: "position",
+      frameId: currentFrameId(display),
+      ok: false,
+      reason: "denied",
+    });
+    expect(a.current()).toMatchObject({
+      kind: "choose",
+      note: "Location is not allowed here. Write it instead",
+    });
+  });
+});

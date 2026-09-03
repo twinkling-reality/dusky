@@ -124,6 +124,14 @@ There is no provider-specific execution branch in the shared runtime. The
 market, reservation service, communications desk, and a fourth provider loaded
 only during the browser test use different tool and result vocabularies.
 
+When a provider asks for a coordinate, the glasses can answer it. WebMCP has no
+channel for ambient context, so a position can only travel as a parameter the
+provider declared, and Dusky recognizes the names sites already use for one
+rather than asking anybody to adopt a Dusky keyword. The wearer presses a row
+to read their device, sees the exact value beside the provider that will
+receive it, and shares one argument at a time. Nothing is stored, nothing is
+watched, and a provider page cannot read a position for itself.
+
 ## Try it without glasses
 
 Use Node.js 22 or newer, pnpm 10, and Chrome with
@@ -184,9 +192,11 @@ switch on a known provider, origin, tool name, or result key. See
 
 ## Verified locally
 
-457 unit tests, 49 real-browser tests, and 15 typechecks pass on the current
-tree. See [Verification](./docs/VERIFICATION.md) for the full record and
-historical deployment evidence.
+488 unit tests and 15 typechecks pass on the current tree. Of 52 real-browser
+tests, 51 pass; the one failure is a stale copy assertion in
+`e2e/connections.spec.ts` left by an earlier console change, and it reproduces
+on a clean checkout. See [Verification](./docs/VERIFICATION.md) for the full
+record and historical deployment evidence.
 
 ## Repository map
 
@@ -225,7 +235,11 @@ historical deployment evidence.
   honestly.
 - Automated browser tests do not replace a final pass on physical glasses.
   Waveguide readability, Neural Band behavior, composer input, sleep recovery,
-  and device load time require hardware verification.
+  device load time, and whether a location permission prompt can be answered on
+  the waveguide all require hardware verification.
+- Dusky reads a position and never a heading. Head orientation is exposed by
+  the platform and deliberately unused; the reasoning is in
+  [Field notes](./FIELD-NOTES.md).
 
 ## License
 
