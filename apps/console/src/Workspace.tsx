@@ -511,9 +511,6 @@ export function Workspace() {
    */
   const sites = useMemo(() => sitesFromQuery(params.toString()), [params]);
   const topologyOrigins = useMemo(() => sites.map(originOf), [sites]);
-  const sampleWebsites = sites.every((site) => site.sample === true);
-  const sampleWebsiteCount = sites.filter((site) => site.sample === true).length;
-  const addedWebsiteCount = sites.length - sampleWebsiteCount;
   const [openOrigins, setOpenOrigins] = useState<string[]>([]);
   const allWebsitesOpen = topologyOrigins.every((origin) => openOrigins.includes(origin));
   const effectiveCanvasLayout = wideTopology ? canvasLayout : "vertical";
@@ -1147,24 +1144,13 @@ export function Workspace() {
             onPointerUp={panCanvasEnd}
             onPointerCancel={panCanvasEnd}
           >
-            <div className={styles.canvasMeta} data-motion-item="" data-motion-order="1">
-              <div>
-                <p className={styles.canvasEyebrow}>
-                  {mode === "embedded" ? "Browser demo" : "Glasses session"}
+            {link.link !== "open" && (
+              <div className={styles.canvasMeta} data-motion-item="" data-motion-order="1">
+                <p className={styles.canvasProblem} role="status">
+                  {linkLabel}
                 </p>
-                <h1 className={styles.canvasTitle}>Connected websites and their actions</h1>
-                <p className={styles.canvasDescription}>
-                  {sampleWebsites
-                    ? "These sample websites supply the actions beside them. Open a page only when you want to inspect it; hidden pages stay connected."
-                    : `${sampleWebsiteCount} ${sampleWebsiteCount === 1 ? "sample" : "samples"} and ${addedWebsiteCount} added ${addedWebsiteCount === 1 ? "website" : "websites"} supply the actions beside them. Hidden pages stay connected.`}
-                </p>
-                {link.link !== "open" && (
-                  <p className={styles.canvasProblem} role="status">
-                    {linkLabel}
-                  </p>
-                )}
               </div>
-            </div>
+            )}
 
             <div
               ref={graphPlane}

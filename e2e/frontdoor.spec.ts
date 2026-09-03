@@ -548,12 +548,17 @@ test("the demo says what you are looking at, when asked", async ({ page }) => {
   // better here, except that the count IS the claim on this page: the list is
   // one list, not one list per business.
   await expect(page.getByTestId("actions").locator("li")).toHaveCount(11);
+  // Canvas chrome used to narrate samples / hidden pages here. That belongs
+  // behind What is this?, not as permanent onboarding on the graph.
   await expect(
     page.getByText(
       "These sample websites supply the actions beside them. Open a page only when you want to inspect it; hidden pages stay connected.",
       { exact: true },
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Connected websites and their actions" }),
+  ).toHaveCount(0);
 
   // Shut by default. The explanation is available to a cold visitor without
   // turning the canvas into a permanent onboarding page.
