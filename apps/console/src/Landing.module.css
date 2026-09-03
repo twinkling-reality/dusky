@@ -257,8 +257,7 @@
    * asset is in here renders at its own best size, and the field is the room
    * left around it.
    */
-  padding: clamp(1.5rem, 3.5vw, 3rem) clamp(1.25rem, 3vw, 2.75rem)
-    clamp(2.25rem, 5vw, 3.75rem);
+  padding: clamp(1.5rem, 3.5vw, 3rem) clamp(1.25rem, 3vw, 2.75rem) clamp(2.25rem, 5vw, 3.75rem);
   height: clamp(17rem, 55vh, 32rem);
   /*
    * Do not `overflow: clip` the stage. The ambient mesh is blurred, and a clip
@@ -288,20 +287,8 @@
    * met the page. Stretching the dissolve past the blur radius keeps the edge
    * soft.
    */
-  --stage-fade-x: linear-gradient(
-    to right,
-    transparent 0%,
-    #000 18%,
-    #000 82%,
-    transparent 100%
-  );
-  --stage-fade-y: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 20%,
-    #000 78%,
-    transparent 100%
-  );
+  --stage-fade-x: linear-gradient(to right, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  --stage-fade-y: linear-gradient(to bottom, transparent 0%, #000 20%, #000 78%, transparent 100%);
 }
 
 /*
