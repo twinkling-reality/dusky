@@ -15,7 +15,12 @@
   flex-direction: column;
   gap: var(--dusky-s6);
   padding-top: clamp(2rem, 6vh, 4rem);
-  padding-bottom: var(--dusky-s4);
+  /*
+   * Extra bottom room so the stage wash can finish dissolving below the
+   * picture. A short page pad left the soft fringe flush with the viewport
+   * edge, which read as a hard shelf under the media.
+   */
+  padding-bottom: clamp(3.5rem, 10vh, 6.5rem);
 }
 
 /*
@@ -252,19 +257,18 @@
    * asset is in here renders at its own best size, and the field is the room
    * left around it.
    */
-  padding: clamp(1.25rem, 3vw, 2.75rem);
+  padding: clamp(1.5rem, 3.5vw, 3rem) clamp(1.25rem, 3vw, 2.75rem)
+    clamp(2.25rem, 5vw, 3.75rem);
   height: clamp(17rem, 55vh, 32rem);
   /*
-   * Clipped at its own edge, and nothing is lost by it: the fade has already
-   * taken the field to zero there.
-   *
-   * The field was briefly allowed to bloom past this box with a wide
-   * `overflow-clip-margin` instead. Chrome counts that margin as scrollable
-   * overflow, so the page grew about fifty pixels for a decoration and the
-   * margin rules, which are as long as the document's body, stopped short of
-   * the new bottom.
+   * Do not `overflow: clip` the stage. The ambient mesh is blurred, and a clip
+   * rectangle cuts that blur into a hard seam (especially along the bottom).
+   * An earlier `overflow-clip-margin` bloom also grew the page scroll box; a
+   * plain visible overflow lets the masked field dissolve without either
+   * failure. The mask still drives opacity to zero at the rim, so the bloom
+   * does not read as a second frame.
    */
-  overflow: clip;
+  overflow: visible;
   /*
    * The fade, used by the mesh and by the grain over it. Declared here so the
    * two layers cannot drift apart and leave a seam.
@@ -277,10 +281,27 @@
    * top and bottom edges is the tail of the falloff, which is why it kept
    * reading as "barely there" however hard the colour was pushed. Two linears
    * hold full strength across the whole middle and spend their fade only in the
-   * outer tenth, where there is nothing to hide behind them.
+   * outer band, where there is nothing to hide behind them.
+   *
+   * The outer band is longer than a tenth on purpose: with a 45px blur, a short
+   * mask still leaves a visible step where the clipped (or nearly opaque) rim
+   * met the page. Stretching the dissolve past the blur radius keeps the edge
+   * soft.
    */
-  --stage-fade-x: linear-gradient(to right, transparent, #000 11%, #000 89%, transparent);
-  --stage-fade-y: linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent);
+  --stage-fade-x: linear-gradient(
+    to right,
+    transparent 0%,
+    #000 18%,
+    #000 82%,
+    transparent 100%
+  );
+  --stage-fade-y: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 20%,
+    #000 78%,
+    transparent 100%
+  );
 }
 
 /*
@@ -297,7 +318,12 @@
   content: "";
   position: absolute;
   z-index: 0;
-  inset: 0;
+  /*
+   * Grow past the stage box by about the blur radius so the soft fringe is not
+   * invented at the rim. The mask still extinguishes the field before the
+   * grown edge, so this does not draw a hard rectangle.
+   */
+  inset: -2.75rem;
   background-image:
     radial-gradient(
       52% 58% at 14% 10%,
@@ -367,8 +393,8 @@
   content: "";
   position: absolute;
   z-index: 0;
-  /* The same box as the mesh, so one fade fits both. */
-  inset: 0;
+  /* Match the mesh box so grain and wash share one dissolve. */
+  inset: -2.75rem;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: var(--dusky-grain);
   mix-blend-mode: overlay;
