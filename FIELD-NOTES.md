@@ -416,7 +416,8 @@ the glasses in the branch where it does not exist. Chrome's plain
 `deviceorientation` is relative rather than compass-referenced, so `alpha` is
 not a heading without `deviceorientationabsolute` and the magnetometer feature.
 Neither the event rate nor the absolute-orientation behaviour on the glasses is
-documented, and nothing here has met a real pair.
+documented, and no orientation code has ever been put in front of a pair to
+find out.
 
 Building a primary interaction on a sensor whose semantics we cannot verify,
 against a rule written to keep this device's decisions deliberate, would have
@@ -778,6 +779,11 @@ Honest gaps, not oversights.
   why. That is the mechanism; whether the prompt itself is reachable is
   unmeasured. Verified in desktop Chrome with a granted permission and an
   emulated position, which proves the plumbing and not the device.
+
+  This is a gap in ONE path, not a statement about the product. Dusky has been
+  worn: the composer, the pairing code, the radio and the sleep behaviour were
+  all found by putting it on a pair of glasses, and those entries are above
+  with their dates. The position row is simply newer than the last session.
 
   The mechanism refuses to hang while that stays unknown. `getCurrentPosition`
   starts its own timeout only AFTER permission is granted, per the Geolocation

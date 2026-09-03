@@ -49,7 +49,9 @@ alone and passed again in the clean run above. Recorded as an observed flake
 under load rather than a result, because a test that passes on the second try
 is not a test that passed.
 
-What this does not establish: nothing here has met a pair of glasses. Whether
+What this does not establish: this path has not been worn. Earlier entries
+record real hardware sessions for the composer, pairing, radio and sleep
+behaviour; the position row postdates the most recent one. Whether
 Meta's location permission prompt can be answered on a 600 by 600 waveguide
 with six keys is unmeasured, as is the ten second read timeout against a fix
 that comes from a paired phone. Emulated geolocation in desktop Chrome proves
