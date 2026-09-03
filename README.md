@@ -21,7 +21,7 @@ The tool still runs inside the site's own browser page. Dusky supplies the
 interface, task flow, and wearer confirmation. Providers do not design a
 separate glasses UI, and Dusky does not need a custom adapter for each one.
 
-![Dusky running beside three WebMCP provider pages](./apps/console/public/stage.png)
+![Dusky on Ray-Ban Display beside the console topology](./apps/console/public/stage.gif)
 
 ## Why WebMCP and display glasses fit together
 

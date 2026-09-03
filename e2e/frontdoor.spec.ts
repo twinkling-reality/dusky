@@ -152,9 +152,10 @@ test("the front door carries the product, not a demonstration of it", async ({ p
   await expect(page.locator("div[data-kind]")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Method" })).toHaveCount(0);
   // The real YouTube embed is enabled only by a deployed build-time URL. Until
-  // one exists, the product image remains the stage and no placeholder player
-  // or invented destination is rendered.
+  // one exists, the stage is the local product loop (or its still under reduced
+  // motion), not an invented third-party player.
   await expect(page.locator("[data-demo-video]")).toHaveCount(0);
+  await expect(page.locator("[data-stage-loop], img[src='/stage.png']")).toHaveCount(1);
 
   // A page arguing that six keys are enough cannot need a mouse at its door.
   const open = page.getByRole("link", { name: /Open Dusky/ });

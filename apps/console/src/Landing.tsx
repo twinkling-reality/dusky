@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Link } from "react-router";
 import styles from "./Landing.module.css";
 import { RequirementsButton, RequirementsPanel, useRequirements } from "./Requirements.js";
@@ -9,14 +9,26 @@ const REPO = "https://github.com/twinkling-reality/dusky";
 const DEMO_VIDEO_EMBED_URL = import.meta.env["VITE_DEMO_VIDEO_EMBED_URL"]?.trim() || null;
 
 const STAGE_ALT =
-  "Dusky running: on the left the glasses view, headed Verdant Market, confirm, reading Add to " +
-  "cart, oat-1, this spends money, and offering Confirm on enter or Cancel on escape. On the " +
-  "right three unrelated businesses live in the same browser tab: a shop, a restaurant, and a " +
-  "communications desk.";
+  "Dusky on Meta Ray-Ban Display beside the console: glasses choosing an Amber & Oak " +
+  "reservation step while the browser topology shows the paired Display, runtime, and " +
+  "provider actions succeeding.";
+
+function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+      query.addEventListener("change", onStoreChange);
+      return () => query.removeEventListener("change", onStoreChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => true,
+  );
+}
 
 export function Landing() {
   const probe = useRequirements();
   const [reqOpen, setReqOpen] = useState(false);
+  const reduceMotion = usePrefersReducedMotion();
 
   return (
     <>
@@ -78,14 +90,29 @@ export function Landing() {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             />
-          ) : (
+          ) : reduceMotion ? (
             <img
               className={styles.shot}
               data-squircle=""
               src="/stage.png"
               alt={STAGE_ALT}
-              width={2784}
-              height={864}
+              width={1496}
+              height={650}
+            />
+          ) : (
+            <video
+              className={styles.shot}
+              data-squircle=""
+              data-stage-loop=""
+              src="/stage.mp4"
+              poster="/stage.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-label={STAGE_ALT}
+              width={1496}
+              height={650}
             />
           )}
         </div>
