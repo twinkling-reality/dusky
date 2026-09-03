@@ -282,12 +282,16 @@ that the permission request follow a user gesture.
 Dusky reads a position only from inside the Display's own keypress handler, on
 a parameter that named a coordinate, and never otherwise.
 
-Measured on hardware 2026-09-03: the read works. A wearer pressed the location
-row on real glasses, the device returned a real fix, and the coordinate reached
-a provider through two transfer approvals. Whether a permission prompt appeared
-was not observed, so its answerability with six keys is still unmeasured rather
-than disproved, and the ten second read timeout was never reached because the
-fix returned promptly.
+Measured on hardware 2026-09-03: the read works, and so does the prompt. A
+wearer pressed the location row on real glasses, answered the ordinary Allow
+once and Allow always grant on the waveguide, and the device returned a real
+fix that reached a provider through two transfer approvals.
+
+Meta documents the permission requirement and the user-gesture guidance but not
+what the prompt looks like on a 600 by 600 additive display. It is a standard
+two-option grant and it is operable there. The ten second read timeout was
+never reached because the fix returned promptly, and how long a grant survives
+across launches is unmeasured.
 
 Meta also documents `DeviceMotionEvent` and `DeviceOrientationEvent`. Dusky
 uses neither. The Display contract here excludes raw-gesture assumptions, and

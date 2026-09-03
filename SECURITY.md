@@ -50,6 +50,24 @@ The current relay:
 
 Use `wss://` so codes and session traffic are encrypted in transit. Do not post
 codes, place them in screenshots, or reuse them as authorization elsewhere.
+
+A code does not rotate. The Display mints one on first launch, stores it in
+`localStorage`, and nothing in the codebase ever clears it, so a code that has
+been shown once identifies that device until its site data is cleared. This is
+deliberate, because it is what lets a wearer relaunch the web app without
+re-pairing the console, but it means a code in a recording or a screenshot
+stays valid.
+
+To demonstrate or record with a throwaway code, open the Display with an
+explicit one:
+
+```text
+https://your-dusky-display.example/?session=ABCDEF
+```
+
+A `session` query value takes precedence and is deliberately not written back
+to storage, so the device keeps its own code. Draw the six characters from
+`ABCDEFGHJKMNPQRSTUVWXYZ`.
 The public demo relay should not carry sensitive or production tasks. A
 deployment that needs stronger isolation must add appropriate authentication,
 rate limiting, Origin policy, network controls, and diagnostics access control.

@@ -104,11 +104,19 @@ the lens for four and a half minutes, which is past the 120 second limit in
 the wearer to choose again. A freshness guard firing unprompted on hardware,
 against a real reading, is better evidence than a clean first pass.
 
-Still not recorded: whether a location permission prompt appeared on the
-waveguide at all, and if it did, whether it was answered with the D-pad. The
-read succeeded, so it was either granted or never prompted; which of those
-happened was not observed. The ten second read timeout and the fifteen second
-watchdog were not exercised, because the fix returned promptly.
+A location permission prompt did appear on the waveguide, and it was
+answerable. The wearer reported the ordinary two-option grant, Allow once and
+Allow always, and answered it with the glasses' own input; the read then
+succeeded. That closes the one question this feature was designed around, and
+it is the reason the read is triggered from inside the Display's keypress
+handler rather than at the relay's request: the platform guidance is that a
+permission request follow a user gesture, and that call stack is the only place
+on the Display that has one.
+
+The ten second read timeout and the fifteen second watchdog were not exercised,
+because the fix returned promptly. Which of the two grant options was chosen
+was not recorded, so nothing here establishes how long a grant persists across
+launches.
 
 `pnpm test:e2e` first ran 53 local Playwright tests with one failure at
 `e2e/connections.spec.ts:110`, which asserted console copy that commit

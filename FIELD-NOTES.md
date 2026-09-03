@@ -772,10 +772,15 @@ Honest gaps, not oversights.
   provider's tool ran and came back on the lens. `navigator.geolocation` works
   in a Meta Ray-Ban Display Web App, as documented.
 
-  What was NOT observed, and is worth someone recording next time: whether a
-  permission prompt appeared at all. The read succeeded, so it was granted or
-  never asked, and nobody wrote down which. The prompt's answerability with six
-  keys is therefore still unmeasured rather than disproved.
+  The permission prompt appeared and was answerable. It was the ordinary
+  two-option grant, Allow once and Allow always, and the wearer answered it on
+  the glasses before the read returned. That was the whole open question, and
+  it is why the read is triggered inside the Display's own keypress handler:
+  Meta's guidance is that a permission request follow a user gesture, and a
+  relay-initiated read would have had none to offer.
+
+  Not recorded: which option was chosen, so nothing here says how long a grant
+  survives across launches of the web app.
 
   One thing the session did settle by accident. The first approval frame sat on
   the lens for four and a half minutes while the wearer was doing something
@@ -784,12 +789,12 @@ Honest gaps, not oversights.
   before the pause. That is the first time that guard has fired on hardware
   against a real value, and it fired without anybody arranging it.
 
-- **Whether a wearer can answer a location permission prompt on the glasses.**
-  Meta documents `navigator.geolocation` as standard, says the fix comes from
-  the paired phone rather than from the glasses, quotes 5-50m accuracy, and
-  says a wearer must grant permission and that the request should follow a user
-  gesture. It does not describe what that prompt looks like on a 600x600
-  additive waveguide with six keys, or whether it is answerable there at all.
+- ~~**Whether a wearer can answer a location permission prompt on the
+  glasses.**~~ Answered 2026-09-03. It appears, it offers Allow once and Allow
+  always, and it can be answered with the glasses' own input. Meta's
+  documentation describes the permission requirement and the user-gesture
+  guidance but never says what the prompt looks like on a 600x600 additive
+  waveguide; now there is an observation rather than an assumption.
 
   The read is therefore triggered from inside the Display's own keypress
   handler, which is the only place on that surface with a user activation, and
